@@ -19,6 +19,9 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 * **Dynamic Info Card**: The sidebar and playback panel instantly fetch and display the current track's cover/jacket, song title, band name, and difficulty level.
 * **Offset Adjustment**: A dedicated panel for fine-tuning offset values.
 
+### Disclaimer
+This program was heavily developed with the assistance of AI. Please use it at your own discretion and feel free to report any unexpected bugs or issues.
+
 ---
 
 ## 📜 License & Credits
