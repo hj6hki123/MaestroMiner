@@ -8,27 +8,27 @@
 
 This project is an extended branch based on the core architecture of [kvarenzn/ssm](https://github.com/kvarenzn/ssm).
 Given that the original author has stopped development (I think?), I've adapted its core architecture, using AI to quickly and easily introduce a GUI interface for greater ease of use. Since my HID is unusable, I've only tested the ADB functionality. There are still a few bugs to fix, but overall, the operation is smoother.
-
-## Interface Features
 ![Interface Features](/imgs/page.png "page")
-### 🎵 Smart Song Search & Setup
-* **Keyword Search**: Added a dynamic search bar supporting real-time track retrieval using Chinese, Japanese, or English keywords, complete with a dropdown menu for quick selection.
+##  What's new
+
+
+### 🎵 Smart Song Search
 ![Keyword Search](/imgs/retrival.png "retrival")
-* **Visual Difficulty Selection**: Dedicated buttons for each difficulty level.
-* **Custom Chart Support**: In addition to the built-in library, it retains the ability to manually input a Song ID or a custom `.txt` chart path.
+- Real-time search across the full Bestdori library
+- One-click difficulty selection (EASY → SPECIAL)
+- Still supports manual Song ID and custom `.txt` chart paths for the power users
 
-### ▶️ Integrated Playback Control Panel
+### ▶️ Playback Control Panel
 ![Control Panel](/imgs/paly_page.png "Control Panel")
-* **Dynamic Info Card**: The sidebar and playback panel instantly fetch and display the current track's cover/jacket, song title, band name, and difficulty level.
-* **Offset Adjustment**: A dedicated panel for fine-tuning offset values.
+- **Now Playing card** — jacket art, song title, band, difficulty, all in one glance
+- **Interrupt & restart instantly** — hit Stop, then Start again without re-loading anything
+- **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
-### Disclaimer
+## Disclaimer
 This program was heavily developed with the assistance of AI. Please use it at your own discretion and feel free to report any unexpected bugs or issues.
 
 
-## Known bugs
-* Bug 1: The button remains in the "Start/Restart" state after interruption.
-* Bug 2: ADB cannot play songs correctly after changing songs.
+
 ---
 
 ## 📜 License & Credits
