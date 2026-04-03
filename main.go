@@ -74,15 +74,39 @@ const (
 // ─────────────────────────────────────────────
 // GUI 模式主流程
 // ─────────────────────────────────────────────
-
 func runGUI(conf *config.Config) {
 	srv := gui.NewServer(guiPort, conf)
 
-	// 注入「執行一次播放」的 callback，讓 GUI 的 POST /api/run 呼叫
-	srv.OnRunRequest = func(req gui.RunRequest) {
-		// 在 goroutine 裡跑，避免 block HTTP handler
+	// 確保每次只有一個播放 goroutine 在跑
+	var (
+		runMu         sync.Mutex
+		currentCancel context.CancelFunc
+		doneCh        chan struct{}
+	)
+
+	runOnce := func(req gui.RunRequest) {
+		// 取消舊的，等它結束（含 scrcpy.Close）
+		runMu.Lock()
+		if currentCancel != nil {
+			currentCancel()
+			old := doneCh
+			runMu.Unlock()
+			<-old
+			runMu.Lock()
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		currentCancel = cancel
+		thisDone := make(chan struct{})
+		doneCh = thisDone
+		runMu.Unlock()
+
 		go func() {
-			// 設定全域 flag（借用原有邏輯）
+			defer func() {
+				cancel()
+				close(thisDone)
+			}()
+
 			backend = req.Backend
 			songID = req.SongID
 			difficulty = req.Diff
@@ -91,7 +115,6 @@ func runGUI(conf *config.Config) {
 			deviceSerial = req.DeviceSerial
 			pjskMode = req.Mode == "pjsk"
 
-			// 讀取譜面
 			var chartText []byte
 			var err error
 			if chartPath == "" {
@@ -116,7 +139,6 @@ func runGUI(conf *config.Config) {
 				return
 			}
 
-			// 解析譜面
 			var chart scores.Chart
 			if pjskMode {
 				chart, err = scores.ParseSUS(string(chartText))
@@ -141,10 +163,6 @@ func runGUI(conf *config.Config) {
 				genConfig.FlickDuration = 20
 			}
 			rawEvents := scores.GenerateTouchEvent(genConfig, chart)
-
-			// 初始化 controller
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
 
 			var ctrl controllers.Controller
 			var events []common.ViscousEventItem
@@ -204,7 +222,6 @@ func runGUI(conf *config.Config) {
 				ctrl = hidCtrl
 			}
 
-			// 組 NowPlaying 資訊（包含封面 URL）
 			np := gui.NowPlaying{
 				SongID:    req.SongID,
 				Diff:      req.Diff,
@@ -215,15 +232,12 @@ func runGUI(conf *config.Config) {
 				JacketURL: req.NowPlaying.JacketURL,
 			}
 
-			// 告知 GUI 就緒
 			srv.SetReady(ctrl, events, np)
 
-			// 等使用者按「開始」
 			if !srv.WaitForStart(ctx) {
 				return
 			}
 
-			// 自動播放
 			start := time.Now().Add(-time.Duration(events[0].Timestamp) * time.Millisecond)
 			srv.Autoplay(ctx, start)
 
@@ -231,7 +245,10 @@ func runGUI(conf *config.Config) {
 		}()
 	}
 
-	// 注入解包 callback
+	srv.OnRunRequest = func(req gui.RunRequest) {
+		runOnce(req)
+	}
+
 	srv.OnExtractRequest = func(path string) error {
 		_, err := Extract(path, func(p string) bool {
 			if strings.HasSuffix(p, ".acb.bytes") || !strings.Contains(p, "startapp") {
@@ -252,10 +269,8 @@ func runGUI(conf *config.Config) {
 	fmt.Printf("\n★  SSM GUI 已啟動\n")
 	fmt.Printf("   請用瀏覽器開啟：%s\n\n", addr)
 
-	// 嘗試自動開啟瀏覽器（Windows）
 	openBrowser(addr)
 
-	// 等待 Ctrl-C
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh

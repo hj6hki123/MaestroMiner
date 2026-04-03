@@ -426,7 +426,15 @@ var S={
 var DN=['easy','normal','hard','expert','special'];
 var DL_BANG=['EASY','NORMAL','HARD','EXPERT','SPECIAL'];
 var DL_PJSK=['EASY','NORMAL','HARD','EXPERT','MASTER'];
-var STATE_NAME={0:'閒置',1:'就緒，等待開始',2:'播放中',3:'播放完畢',4:'發生錯誤'};
+
+// ── Bug fix: state=5 已移除，中斷後統一回到 StateDone(3) 可重開始 ──
+var STATE_NAME={
+  0:'閒置',
+  1:'就緒，等待開始',
+  2:'播放中',
+  3:'播放完畢',
+  4:'發生錯誤'
+};
 var DOT_CLS={1:'ready',2:'playing',3:'done',4:'error'};
 
 // ══ 導航 ══════════════════════════════════════════════════
@@ -614,42 +622,58 @@ es.onmessage=function(e){
 };
 
 function updateUI(d){
-  // sidebar dot & text
-  var dotCls=DOT_CLS[d.state]||'';
-  document.getElementById('np-dot').className='dot '+dotCls;
-  document.getElementById('np-state-txt').textContent=STATE_NAME[d.state]||'閒置';
-  document.getElementById('pn-dot').className='dot '+dotCls;
-  document.getElementById('pn-state-label').textContent=STATE_NAME[d.state]||'閒置';
+  var st=d.state;
 
-  // offset display
+  // ── dot 顏色 ──
+  var dotCls=DOT_CLS[st]||'';
+  document.getElementById('np-dot').className='dot '+dotCls;
+  document.getElementById('pn-dot').className='dot '+dotCls;
+
+  // ── 狀態文字 ──
+  var stateText=STATE_NAME[st]||'閒置';
+  document.getElementById('np-state-txt').textContent=stateText;
+  document.getElementById('pn-state-label').textContent=stateText;
+
+  // ── offset display ──
   document.getElementById('ov').textContent=d.offset||0;
 
-  // start button
-  var canStart=d.state===1||d.state===3; // Ready OR Done(可重播)
+  // ── Bug fix: 開始按鈕邏輯 ──
+  // state=1(Ready) → 啟用，顯示「▶ 開始」+ 脈動
+  // state=3(Done)  → 啟用，顯示「↺ 重播」，無脈動
+  // state=5(Stopped) 或其他 → 禁用，顯示「▶ 開始」，無脈動
   var btn=document.getElementById('btn-start');
-  btn.disabled=!canStart;
-  btn.classList.toggle('rdy',canStart);
-  btn.textContent=d.state===3?'↺ 重播':'▶ 開始';
+  if(st===1){
+    // StateReady：可以按開始（首次 or 中斷後皆是此狀態）
+    btn.disabled=false;
+    btn.classList.add('rdy');
+    btn.textContent='▶ 開始';
+  } else {
+    // 其他狀態（Idle/Playing/Done/Error）一律 disabled
+    btn.disabled=true;
+    btn.classList.remove('rdy');
+    btn.textContent='▶ 開始';
+  }
 
-  // now playing info
+  // ── now playing info ──
   if(d.nowPlaying&&(d.nowPlaying.songId>0||d.nowPlaying.title)){
     var np=d.nowPlaying;
     showNP(np);
-    // 若在播放控制頁也更新大卡
-    updatePlayCard(np,d.state);
+    updatePlayCard(np,st);
   }
 
-  // log
-  if(d.state===1) log('play-log','就緒！進入遊戲曲目後按「開始」','info');
-  if(d.state===2) log('play-log','播放中...','info');
-  if(d.state===3) log('play-log','播放完畢 ✓ — 可按「重播」再來一次','ok');
-  if(d.state===4&&d.error) log('play-log','錯誤：'+d.error,'err');
+  // ── log 訊息（避免重複：用 lastLogState 追蹤）──
+  if(st!==S._lastLogState){
+    S._lastLogState=st;
+    if(st===1) log('play-log','就緒！進入遊戲曲目後按「開始」','info');
+    if(st===2) log('play-log','播放中...','info');
+    if(st===3) log('play-log','播放完畢 ✓','ok');
+    if(st===4&&d.error) log('play-log','錯誤：'+d.error,'err');
+  }
 }
 
 function showNP(np){
   var card=document.getElementById('np-card');
   card.style.display='block';
-  // jacket
   if(np.jacketUrl){
     var img=document.getElementById('np-img');
     var no=document.getElementById('np-no');
@@ -668,7 +692,6 @@ function showNP(np){
 function updatePlayCard(np,state){
   document.getElementById('pn-none').style.display='none';
   document.getElementById('pn-loaded').style.display='block';
-  // jacket
   var pimg=document.getElementById('pn-img');
   var pno=document.getElementById('pn-no');
   if(np.jacketUrl){
@@ -700,27 +723,15 @@ function buildNowPlaying(){
   var np={songId:S.songId,diff:DN[S.diff],mode:S.mode,title:'',artist:'',diffLevel:0,jacketUrl:''};
   if(S.songData){
     np.title=pickName(S.songData.musicTitle)||'';
-    
-    // 取得數字難度
     var di=S.songData.difficulty;
     if(di&&di[S.diff]) np.diffLevel=di[S.diff].playLevel||0;
-    
-    // 處理 BanG Dream 圖片路徑 
-    var ji = S.songData.jacketImage;
-    if (ji && ji[0]) {
-      var jiName = ji[0]; // 可能拿到 "489_mayoiuta" 或 "dont_be_afraid"
-      
-      var folderNo = Math.ceil(S.songId / 10) * 10;
-      
-      
-      if (folderNo === 0) folderNo = 10;
-      
-      
-      np.jacketUrl = 'https://bestdori.com/assets/jp/musicjacket/musicjacket' + folderNo + '_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket' + folderNo + '-' + jiName + '-jacket.png';
+    var ji=S.songData.jacketImage;
+    if(ji&&ji[0]){
+      var jiName=ji[0];
+      var folderNo=Math.ceil(S.songId/10)*10;
+      if(folderNo===0) folderNo=10;
+      np.jacketUrl='https://bestdori.com/assets/jp/musicjacket/musicjacket'+folderNo+'_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket'+folderNo+'-'+jiName+'-jacket.png';
     }
-    
-
-    // 取得樂團名稱作為 Artist
     if(S.db&&S.db.bands&&S.songData.bandId){
       var band=S.db.bands[S.songData.bandId];
       if(band&&band.bandName) np.artist=pickName(band.bandName);
@@ -728,8 +739,6 @@ function buildNowPlaying(){
   }
   return np;
 }
-
-
 
 function submitRun(){
   var sid=parseInt(document.getElementById('song-id').value)||S.songId||0;
@@ -750,7 +759,7 @@ function submitRun(){
 }
 
 function apiStart(){
-  if(S.state!==1&&S.state!==3)return;
+  if(S.state!==1)return;
   fetch('/api/start',{method:'POST'})
     .catch(function(e){log('play-log','連線失敗：'+e,'err');});
 }

@@ -30,22 +30,20 @@ const (
 	StateIdle    PlayState = iota // 0 閒置
 	StateReady                    // 1 就緒等待開始
 	StatePlaying                  // 2 播放中
-	StateDone                     // 3 播放完畢（保留資料，可重播）
+	StateDone                     // 3 播放完畢
 	StateError                    // 4 錯誤
 )
 
-// NowPlaying 儲存目前載入的歌曲資訊，供前端顯示
 type NowPlaying struct {
 	SongID    int    `json:"songId"`
 	Title     string `json:"title"`
 	Artist    string `json:"artist"`
-	Diff      string `json:"diff"`      // "expert"
-	DiffLevel int    `json:"diffLevel"` // 數字難度，例如 29
-	JacketURL string `json:"jacketUrl"` // CDN URL
-	Mode      string `json:"mode"`      // "bang" | "pjsk"
+	Diff      string `json:"diff"`
+	DiffLevel int    `json:"diffLevel"`
+	JacketURL string `json:"jacketUrl"`
+	Mode      string `json:"mode"`
 }
 
-// RunRequest 是前端 POST /api/run 送過來的 JSON
 type RunRequest struct {
 	Mode         string     `json:"mode"`
 	Backend      string     `json:"backend"`
@@ -54,7 +52,7 @@ type RunRequest struct {
 	SongID       int        `json:"songId"`
 	ChartPath    string     `json:"chartPath"`
 	DeviceSerial string     `json:"deviceSerial"`
-	NowPlaying   NowPlaying `json:"nowPlaying"` // 前端帶過來的顯示資訊
+	NowPlaying   NowPlaying `json:"nowPlaying"`
 }
 
 type Server struct {
@@ -65,34 +63,34 @@ type Server struct {
 	state      PlayState
 	offset     int
 	errMsg     string
-	nowPlaying NowPlaying // 持久保存，中斷後依然可見
+	nowPlaying NowPlaying
+	lastRunReq RunRequest // 儲存最後一次的請求，供中斷重打使用
 
-	// 播放控制（重播時會重新建立）
 	startCh  chan struct{}
 	offsetCh chan int
-	stopCh   chan struct{}
+	stopCh   chan struct{} // close() 此 channel 來停止播放
 
 	controller controllers.Controller
 	events     []common.ViscousEventItem
 
-	// SSE clients
 	clientsMu sync.Mutex
 	clients   map[chan string]struct{}
 
-	// 注入的 callback
 	OnRunRequest     func(req RunRequest)
 	OnExtractRequest func(path string) error
 }
 
 func NewServer(port int, conf *config.Config) *Server {
-	return &Server{
+	s := &Server{
 		port:    port,
 		conf:    conf,
 		state:   StateIdle,
-		startCh: make(chan struct{}, 1),
-		stopCh:  make(chan struct{}, 1),
 		clients: make(map[chan string]struct{}),
 	}
+	s.startCh = make(chan struct{}, 1)
+	s.stopCh = make(chan struct{})
+	s.offsetCh = make(chan int, 32)
+	return s
 }
 
 // ─── SSE ───────────────────────────────────────
@@ -182,14 +180,17 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	// 儲存這次請求，供中斷後重打使用
+	s.mu.Lock()
+	s.lastRunReq = req
+	s.mu.Unlock()
+
 	if s.OnRunRequest != nil {
 		s.OnRunRequest(req)
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-// handleStart — 按下「開始」
-// 在 StateReady 或 StateDone 時都允許觸發（StateDone 表示可重播）
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -197,35 +198,15 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	st := s.state
+	ch := s.startCh
 	s.mu.Unlock()
 
-	if st != StateReady && st != StateDone {
+	if st != StateReady {
 		http.Error(w, "not ready", http.StatusConflict)
 		return
 	}
-
-	// StateDone → 重置為 Ready 再觸發（讓 Autoplay goroutine 重新跑）
-	if st == StateDone {
-		s.mu.Lock()
-		s.state = StateReady
-		// 清空舊 channel，建新的
-		s.startCh = make(chan struct{}, 1)
-		s.stopCh = make(chan struct{}, 1)
-		s.offsetCh = make(chan int, 32)
-		s.mu.Unlock()
-		s.broadcastState()
-
-		// 通知 main.go 重新跑一次 autoplay
-		if s.OnRunRequest != nil {
-			s.mu.Lock()
-			// 用 nowPlaying 重建 RunRequest（不需要重新載入譜面，直接重播）
-			// 這裡只是觸發信號，實際重播邏輯由 WaitForStart 控制
-			s.mu.Unlock()
-		}
-	}
-
 	select {
-	case s.startCh <- struct{}{}:
+	case ch <- struct{}{}:
 	default:
 	}
 	w.WriteHeader(http.StatusOK)
@@ -244,24 +225,56 @@ func (s *Server) handleOffset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	if s.offsetCh != nil {
-		select {
-		case s.offsetCh <- body.Delta:
-		default:
-		}
-	}
-	// 閒置時也更新 offset（讓下次播放生效）
 	s.offset += body.Delta
+	ch := s.offsetCh
 	s.mu.Unlock()
+	select {
+	case ch <- body.Delta:
+	default:
+	}
 	s.broadcastState()
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
-	select {
-	case s.stopCh <- struct{}{}:
-	default:
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
+
+	s.mu.Lock()
+	st := s.state
+	req := s.lastRunReq
+	s.mu.Unlock()
+
+	if st != StatePlaying {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// 1. 關閉 stopCh，讓 autoplayInner 立刻退出（sleep 也會中斷）
+	s.mu.Lock()
+	oldStop := s.stopCh
+	s.mu.Unlock()
+	select {
+	case <-oldStop:
+		// 已關閉，不重複
+	default:
+		close(oldStop)
+	}
+
+	// 2. 先把狀態設成 Idle，讓前端知道正在重新初始化
+	s.mu.Lock()
+	s.state = StateIdle
+	s.mu.Unlock()
+	s.broadcastState()
+
+	// 3. 重新觸發 OnRunRequest（用相同的歌曲資料 + 重新建連線）
+	//    main.go 的 goroutine 會跑完整的連線流程，最後呼叫 SetReady 回到 Ready 狀態
+	if s.OnRunRequest != nil {
+		go s.OnRunRequest(req)
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -299,8 +312,6 @@ func (s *Server) handleDevice(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleSongDB — proxy Bestdori / Sekai World，快取到本地
-// GET /api/songdb?mode=bang|pjsk
 func (s *Server) handleSongDB(w http.ResponseWriter, r *http.Request) {
 	mode := r.URL.Query().Get("mode")
 	if mode != "pjsk" {
@@ -372,18 +383,23 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 
 // ─── 播放狀態控制 ───────────────────────────────
 
-// SetReady 載入完成，設定為就緒狀態，並記錄 NowPlaying 資訊
 func (s *Server) SetReady(ctrl controllers.Controller, events []common.ViscousEventItem, np NowPlaying) {
 	s.mu.Lock()
+	// 關閉舊 stopCh，中斷任何殘留的等待
+	select {
+	case <-s.stopCh:
+	default:
+		close(s.stopCh)
+	}
 	s.controller = ctrl
 	s.events = events
 	s.state = StateReady
 	s.offset = 0
 	s.errMsg = ""
 	s.nowPlaying = np
-	s.offsetCh = make(chan int, 32)
 	s.startCh = make(chan struct{}, 1)
-	s.stopCh = make(chan struct{}, 1)
+	s.stopCh = make(chan struct{})
+	s.offsetCh = make(chan int, 32)
 	s.mu.Unlock()
 	s.broadcastState()
 }
@@ -396,10 +412,15 @@ func (s *Server) SetError(msg string) {
 	s.broadcastState()
 }
 
-// WaitForStart 阻塞直到前端按「開始」
+// WaitForStart 阻塞直到前端按「開始」或被取消
 func (s *Server) WaitForStart(ctx context.Context) bool {
+	s.mu.Lock()
+	startCh := s.startCh
+	stopCh := s.stopCh
+	s.mu.Unlock()
+
 	select {
-	case <-s.startCh:
+	case <-startCh:
 		s.mu.Lock()
 		s.state = StatePlaying
 		s.mu.Unlock()
@@ -407,26 +428,34 @@ func (s *Server) WaitForStart(ctx context.Context) bool {
 		return true
 	case <-ctx.Done():
 		return false
+	case <-stopCh:
+		return false
 	}
 }
 
 // Autoplay 播放主迴圈
 func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	s.mu.Lock()
+	stopCh := s.stopCh
 	events := s.events
 	offsetCh := s.offsetCh
-	stopCh := s.stopCh
 	s.mu.Unlock()
 
 	n := len(events)
 	current := 0
 
 	for current < n {
+		// 停止或換歌
 		select {
-		case <-ctx.Done():
-			goto done
 		case <-stopCh:
 			goto done
+		case <-ctx.Done():
+			goto done
+		default:
+		}
+
+		// offset 調整
+		select {
 		case delta := <-offsetCh:
 			s.mu.Lock()
 			s.offset += delta
@@ -445,19 +474,31 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 			current++
 			continue
 		}
+
+		// sleep 期間也能響應 stop/ctx
 		if remaining > 10 {
-			time.Sleep(time.Duration(remaining-5) * time.Millisecond)
+			select {
+			case <-stopCh:
+				goto done
+			case <-ctx.Done():
+				goto done
+			case <-time.After(time.Duration(remaining-5) * time.Millisecond):
+			}
 		} else if remaining > 4 {
 			time.Sleep(1 * time.Millisecond)
 		}
 	}
 
 done:
-	// StateDone：保留 nowPlaying / events / controller，可重播
 	s.mu.Lock()
-	s.state = StateDone
-	s.mu.Unlock()
-	s.broadcastState()
+	// 正常播完才設 Done；被 stop/ctx 中斷時狀態已由外部設好，不覆蓋
+	if s.state == StatePlaying {
+		s.state = StateDone
+		s.mu.Unlock()
+		s.broadcastState()
+	} else {
+		s.mu.Unlock()
+	}
 }
 
 // ─── 啟動 ──────────────────────────────────────
