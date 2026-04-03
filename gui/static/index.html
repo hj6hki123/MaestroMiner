@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -30,15 +30,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 /* ── sidebar ── */
 .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:1rem .75rem;gap:.25rem}
-.logo{font-size:16px;font-weight:700;padding:4px 8px;margin-bottom:.5rem;letter-spacing:-.3px}
+.sidebar-top{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;margin-bottom:.5rem}
+.logo{font-size:16px;font-weight:700;letter-spacing:-.3px}
 .logo em{color:var(--blue);font-style:normal}
+
+/* ── lang toggle ── */
+.lang-toggle{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex-shrink:0}
+.lt{padding:3px 7px;font-size:10px;font-weight:700;border:none;background:none;color:var(--hint);cursor:pointer;font-family:inherit;transition:all .12s;letter-spacing:.02em}
+.lt.active{background:var(--blue-bg);color:var(--blue)}
+.lt:first-child{border-right:1px solid var(--border)}
+
 .nav-sec{font-size:10px;font-weight:600;color:var(--hint);letter-spacing:.08em;text-transform:uppercase;padding:8px 8px 3px;margin-top:.25rem}
 .nav-btn{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r);font-size:13px;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .12s}
 .nav-btn:hover{background:var(--blue-bg);color:var(--blue)}
 .nav-btn.active{background:var(--blue-bg);color:var(--blue);font-weight:500}
 .nav-btn .ico{font-size:13px;width:18px;text-align:center;flex-shrink:0}
 
-/* ── now playing card in sidebar ── */
+/* ── now playing card ── */
 .np-card{margin-top:auto;border-radius:var(--rl);overflow:hidden;border:1px solid var(--border);background:var(--surface);flex-shrink:0}
 .np-jacket{width:100%;aspect-ratio:1;background:var(--bg);position:relative;overflow:hidden}
 .np-jacket img{width:100%;height:100%;object-fit:cover;display:block}
@@ -66,8 +74,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .main{flex:1;overflow-y:auto;padding:1.75rem 2rem}
 .pane{display:none}.pane.active{display:block}
 .pg-title{font-size:18px;font-weight:700;margin-bottom:1.25rem}
-
-/* ── card ── */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1rem 1.125rem;margin-bottom:.875rem}
 .ct{font-size:11px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
 .field{display:flex;flex-direction:column;gap:3px;margin-bottom:9px}
@@ -172,13 +178,12 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
 
 /* ── log ── */
 .log{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:8px 11px;font-family:'Courier New',monospace;font-size:11px;color:var(--muted);min-height:40px;max-height:100px;overflow-y:auto;line-height:1.6;margin-top:.875rem}
-.ll{}.ll.info{color:var(--blue)}.ll.ok{color:var(--green)}.ll.err{color:var(--red)}
+.ll.info{color:var(--blue)}.ll.ok{color:var(--green)}.ll.err{color:var(--red)}
 
 .step{display:flex;gap:9px;align-items:flex-start;margin-bottom:9px}
 .sn{width:19px;height:19px;border-radius:50%;background:var(--blue-bg);color:var(--blue);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
 .st{font-size:12px;color:var(--text);line-height:1.65}
 .st code{font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);padding:1px 4px;border-radius:3px}
-.dvr{height:1px;background:var(--border);margin:9px 0}
 .dev-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
 .dev-row:last-child{border-bottom:none}
 .dev-s{font-family:monospace;font-size:11px;color:var(--muted)}
@@ -190,13 +195,19 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
 
 <!-- ══ sidebar ══ -->
 <div class="sidebar">
-  <div class="logo"><em>★</em> SSM</div>
+  <div class="sidebar-top">
+    <div class="logo"><em>★</em> SSM</div>
+    <div class="lang-toggle">
+      <button class="lt active" id="lt-en" onclick="setLang('en')">EN</button>
+      <button class="lt" id="lt-zh" onclick="setLang('zh')">中</button>
+    </div>
+  </div>
 
-  <div class="nav-sec">主選單</div>
-  <button class="nav-btn active" id="nav-song" onclick="nav('song')"><span class="ico">♪</span>歌曲設定</button>
-  <button class="nav-btn" id="nav-play" onclick="nav('play')"><span class="ico">▶</span>播放控制</button>
-  <button class="nav-btn" id="nav-device" onclick="nav('device')"><span class="ico">📱</span>裝置設定</button>
-  <button class="nav-btn" id="nav-extract" onclick="nav('extract')"><span class="ico">📦</span>解包素材</button>
+  <div class="nav-sec" data-i18n="nav.menu">Menu</div>
+  <button class="nav-btn active" id="nav-song" onclick="nav('song')"><span class="ico">♪</span><span data-i18n="nav.song">Song Setup</span></button>
+  <button class="nav-btn" id="nav-play" onclick="nav('play')"><span class="ico">▶</span><span data-i18n="nav.play">Play Control</span></button>
+  <button class="nav-btn" id="nav-device" onclick="nav('device')"><span class="ico">📱</span><span data-i18n="nav.device">Device</span></button>
+  <button class="nav-btn" id="nav-extract" onclick="nav('extract')"><span class="ico">📦</span><span data-i18n="nav.extract">Extract Assets</span></button>
 
   <!-- Now Playing mini card -->
   <div class="np-card" id="np-card" style="display:none">
@@ -212,7 +223,7 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
         <span class="np-lv" id="np-lv"></span>
         <span class="np-state">
           <span class="dot" id="np-dot"></span>
-          <span id="np-state-txt">閒置</span>
+          <span id="np-state-txt">Idle</span>
         </span>
       </div>
     </div>
@@ -222,40 +233,43 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
 <!-- ══ main ══ -->
 <div class="main">
 
-<!-- 歌曲設定 -->
+<!-- Song Setup -->
 <div class="pane active" id="pane-song">
-  <div class="pg-title">歌曲設定</div>
+  <div class="pg-title" data-i18n="nav.song">Song Setup</div>
 
   <div class="card">
-    <div class="ct">遊戲模式</div>
+    <div class="ct" data-i18n="song.mode">Game Mode</div>
     <div class="bg">
-      <div class="bc active" id="mode-bang" onclick="setMode('bang')"><div class="bcn">BanG Dream!</div><div class="bcs">少女樂團派對</div></div>
-      <!-- <div class="bc" id="mode-pjsk" onclick="setMode('pjsk')"><div class="bcn">Project Sekai</div><div class="bcs">彩色舞台</div></div> -->
+      <div class="bc active" id="mode-bang" onclick="setMode('bang')">
+        <div class="bcn">BanG Dream!</div>
+        <div class="bcs" data-i18n="song.mode.bang">Girls Band Party</div>
+      </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="ct">歌曲搜尋</div>
+    <div class="ct" data-i18n="song.search">Song Search</div>
     <div class="sel-bar" id="sel-bar">
       <span class="sb-id" id="sb-id"></span>
       <span class="sb-title" id="sb-title"></span>
       <button class="sb-x" onclick="clearSong()">✕</button>
     </div>
     <div class="field">
-      <label>輸入歌名搜尋（中日英皆可）</label>
+      <label data-i18n="song.search.label">Search by name (EN / JP / ZH)</label>
       <div class="sw">
-        <input type="text" id="q" placeholder="例：EXIST、六兆年と一夜物語、Daylight"
+        <input type="text" id="q" data-i18n-placeholder="song.search.placeholder"
+          placeholder="e.g. EXIST, Daylight, 六兆年と一夜物語"
           autocomplete="off" oninput="onQInput()" onkeydown="onQKey(event)" onfocus="onQFocus()">
         <button class="sc" id="sc" onclick="clearQ()">✕</button>
         <div class="drop" id="drop"></div>
       </div>
     </div>
     <div class="field">
-      <label>或直接輸入歌曲 ID</label>
-      <input type="number" id="song-id" placeholder="例：325" min="1" oninput="onManualId()">
+      <label data-i18n="song.id.label">Or enter Song ID directly</label>
+      <input type="number" id="song-id" data-i18n-placeholder="song.id.placeholder" placeholder="e.g. 325" min="1" oninput="onManualId()">
     </div>
     <div class="field">
-      <label>難度</label>
+      <label data-i18n="song.diff">Difficulty</label>
       <div class="diff-row">
         <button class="db easy"   onclick="setDiff(0)">EASY</button>
         <button class="db normal" onclick="setDiff(1)">NORMAL</button>
@@ -265,60 +279,69 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
       </div>
     </div>
     <div class="field">
-      <label>自訂譜面路徑（選填，填了忽略歌曲 ID）</label>
-      <input type="text" id="chart-path" placeholder="./325_exist_expert.txt">
+      <label data-i18n="song.chart.label">Custom chart path (optional, overrides Song ID)</label>
+      <input type="text" id="chart-path" data-i18n-placeholder="song.chart.placeholder" placeholder="./325_exist_expert.txt">
     </div>
   </div>
 
   <div class="card">
-    <div class="ct">後端與連線</div>
+    <div class="ct" data-i18n="song.backend">Backend & Connection</div>
     <div class="bg">
-      <div class="bc active" id="backend-hid" onclick="setBackend('hid')"><div class="bcn">HID 後端</div><div class="bcs">無需 USB 偵錯，實機首選</div></div>
-      <div class="bc" id="backend-adb" onclick="setBackend('adb')"><div class="bcn">ADB 後端</div><div class="bcs">支援模擬器 / 無線</div></div>
+      <div class="bc active" id="backend-hid" onclick="setBackend('hid')">
+        <div class="bcn">HID</div>
+        <div class="bcs" data-i18n="song.backend.hid">No USB debugging needed</div>
+      </div>
+      <div class="bc" id="backend-adb" onclick="setBackend('adb')">
+        <div class="bcn">ADB</div>
+        <div class="bcs" data-i18n="song.backend.adb">Emulator / wireless</div>
+      </div>
     </div>
-    <div class="field"><label>設備序列號（留空自動偵測）</label>
-      <input type="text" id="dev-serial" placeholder="R58M1234ABC">
+    <div class="field">
+      <label data-i18n="song.serial.label">Device serial (leave blank to auto-detect)</label>
+      <input type="text" id="dev-serial" data-i18n-placeholder="song.serial.placeholder" placeholder="R58M1234ABC">
     </div>
     <div id="orient-wrap">
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">螢幕旋轉（HID 適用）</label>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px" data-i18n="song.orient">Screen rotation (HID only)</label>
       <div class="seg">
-        <button class="sg active" id="ol" onclick="setOrient('left')">↺ 逆時針</button>
-        <button class="sg" id="or" onclick="setOrient('right')">↻ 順時針</button>
+        <button class="sg active" id="ol" onclick="setOrient('left')" data-i18n="song.orient.left">↺ Counter-clockwise</button>
+        <button class="sg" id="or" onclick="setOrient('right')" data-i18n="song.orient.right">↻ Clockwise</button>
       </div>
     </div>
   </div>
 
-  <button class="btn pri btn-b" onclick="submitRun()">▶ 載入並準備播放</button>
+  <button class="btn pri btn-b" onclick="submitRun()" data-i18n="song.load">▶ Load &amp; Prepare</button>
   <div class="log" id="song-log"></div>
 </div>
 
-<!-- 裝置設定 -->
+<!-- Device -->
 <div class="pane" id="pane-device">
-  <div class="pg-title">裝置設定</div>
+  <div class="pg-title" data-i18n="nav.device">Device</div>
   <div class="card">
-    <div class="ct">已儲存裝置</div>
-    <div id="dev-list"><div style="font-size:12px;color:var(--hint)">載入中...</div></div>
+    <div class="ct" data-i18n="device.saved">Saved Devices</div>
+    <div id="dev-list"><div style="font-size:12px;color:var(--hint)" data-i18n="device.loading">Loading...</div></div>
   </div>
   <div class="card">
-    <div class="ct">新增 / 更新裝置</div>
-    <div class="step"><div class="sn">1</div><div class="st">手機<strong>直立</strong>放好（前鏡頭朝上），短邊=寬、長邊=高</div></div>
-    <div class="row">
-      <div class="field"><label>序列號</label><input type="text" id="dc-s" placeholder="R58M1234ABC"></div>
-      <div class="field"><label>寬 (px)</label><input type="number" id="dc-w" placeholder="1080" min="1"></div>
-      <div class="field"><label>高 (px)</label><input type="number" id="dc-h" placeholder="2340" min="1"></div>
+    <div class="ct" data-i18n="device.add">Add / Update Device</div>
+    <div class="step">
+      <div class="sn">1</div>
+      <div class="st" data-i18n="device.step1">Hold phone in <strong>portrait</strong> (camera up). Short side = width, long side = height.</div>
     </div>
-    <button class="btn pri" onclick="saveDevice()">儲存</button>
+    <div class="row">
+      <div class="field"><label data-i18n="device.serial">Serial</label><input type="text" id="dc-s" placeholder="R58M1234ABC"></div>
+      <div class="field"><label data-i18n="device.width">Width (px)</label><input type="number" id="dc-w" placeholder="1080" min="1"></div>
+      <div class="field"><label data-i18n="device.height">Height (px)</label><input type="number" id="dc-h" placeholder="2340" min="1"></div>
+    </div>
+    <button class="btn pri" onclick="saveDevice()" data-i18n="device.save">Save</button>
     <div class="hint" id="dc-hint"></div>
   </div>
 </div>
 
-<!-- 播放控制 -->
+<!-- Play Control -->
 <div class="pane" id="pane-play">
-  <div class="pg-title">播放控制</div>
+  <div class="pg-title" data-i18n="nav.play">Play Control</div>
 
-  <!-- 歌曲資訊卡 -->
   <div class="play-now" id="play-now">
-    <div class="pn-none" id="pn-none">尚未載入歌曲，請先到「歌曲設定」頁面選擇</div>
+    <div class="pn-none" id="pn-none" data-i18n="play.none">No song loaded. Go to Song Setup first.</div>
     <div id="pn-loaded" style="display:none">
       <div class="pn-top">
         <div class="pn-jacket">
@@ -336,27 +359,26 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
       </div>
       <div class="pn-status">
         <div class="dot" id="pn-dot"></div>
-        <div class="pn-state-label" id="pn-state-label">就緒</div>
+        <div class="pn-state-label" id="pn-state-label">Ready</div>
         <div style="flex:1"></div>
-        <button class="btn" style="font-size:12px;padding:5px 10px" onclick="nav('song')">更換歌曲</button>
+        <button class="btn" style="font-size:12px;padding:5px 10px" onclick="nav('song')" data-i18n="play.change">Change Song</button>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="ct">開始播放</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7">
-      在遊戲中進入曲目，當<strong>第一個音符接近判定線</strong>的瞬間，按下開始。<br>
-      播放完畢後按「開始」可以<strong>重播</strong>同一首歌。
+    <div class="ct" data-i18n="play.start.title">Start Playback</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7" data-i18n="play.start.hint">
+      Enter the song in-game. Press <strong>Start</strong> when the first note approaches the judgment line.
     </div>
-    <button class="start-btn" id="btn-start" onclick="apiStart()" disabled>▶ 開始</button>
-    <div class="kh">點擊，或按 <kbd>Enter</kbd> / <kbd>Space</kbd></div>
+    <button class="start-btn" id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶ Start</button>
+    <div class="kh"><span data-i18n="play.start.kbd">Click, or press</span> <kbd>Enter</kbd> / <kbd>Space</kbd></div>
   </div>
 
   <div class="card">
-    <div class="ct">時間偏移調整</div>
-    <div style="font-size:11px;color:var(--hint);margin-bottom:8px">
-      打太早 → 負值 | 打太晚 → 正值 &nbsp;·&nbsp;
+    <div class="ct" data-i18n="play.offset.title">Offset Adjustment</div>
+    <div style="font-size:11px;color:var(--hint);margin-bottom:8px" data-i18n="play.offset.hint">
+      Too early → negative &nbsp;·&nbsp; Too late → positive &nbsp;·&nbsp;
       <kbd>←</kbd><kbd>→</kbd> ±10 &nbsp;<kbd>Shift</kbd>±50 &nbsp;<kbd>Ctrl</kbd>±100
     </div>
     <div class="oc">
@@ -369,45 +391,45 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
       <button class="adj" onclick="adj(100)"  title="+100ms">»</button>
     </div>
     <div style="text-align:center;margin-top:2px">
-      <button class="btn" onclick="resetOff()">歸零</button>
+      <button class="btn" onclick="resetOff()" data-i18n="play.offset.reset">Reset</button>
     </div>
   </div>
 
   <div class="card">
-    <button class="btn dan btn-b" onclick="apiStop()">■ 中斷播放</button>
-    <div class="kh" style="margin-top:5px">終端機按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 也可中斷</div>
+    <button class="btn dan btn-b" onclick="apiStop()" data-i18n="play.stop">■ Stop</button>
+    <div class="kh" style="margin-top:5px"><span data-i18n="play.stop.hint">Or press</span> <kbd>Ctrl</kbd>+<kbd>C</kbd> <span data-i18n="play.stop.hint2">in terminal</span></div>
   </div>
 
   <div class="log" id="play-log"></div>
 </div>
 
-<!-- 解包 -->
+<!-- Extract -->
 <div class="pane" id="pane-extract">
-  <div class="pg-title">解包素材</div>
+  <div class="pg-title" data-i18n="nav.extract">Extract Assets</div>
   <div class="card">
-    <div class="ct">從遊戲資料夾提取</div>
+    <div class="ct" data-i18n="extract.title">Extract from game folder</div>
     <div class="step"><div class="sn">1</div>
-      <div class="st">用 ADB 把遊戲資料拉到電腦：<br>
+      <div class="st" data-i18n="extract.step1">Pull game data via ADB:<br>
       <code>adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/ ./gamedata</code></div>
     </div>
     <div class="step"><div class="sn">2</div>
-      <div class="st">填入路徑，點解包。完成後 <code>assets/</code> 會出現在 ssm 同目錄。</div>
+      <div class="st" data-i18n="extract.step2">Enter the path below and click Extract. The <code>assets/</code> folder will be generated.</div>
     </div>
     <div class="field" style="margin-top:6px">
-      <label>素材資料夾路徑</label>
+      <label data-i18n="extract.path">Asset folder path</label>
       <input type="text" id="ex-path" placeholder="./gamedata">
     </div>
-    <button class="btn pri" onclick="doExtract()">解包</button>
+    <button class="btn pri" onclick="doExtract()" data-i18n="extract.btn">Extract</button>
     <div class="log" id="ex-log"></div>
   </div>
   <div class="card">
-    <div class="ct">或從 Bestdori 下載譜面</div>
+    <div class="ct" data-i18n="extract.alt">Or download charts from Bestdori</div>
     <div class="step"><div class="sn">1</div>
-      <div class="st">前往 <a href="https://bestdori.com/tool/explorer" target="_blank" style="color:var(--blue)">bestdori.com/tool/explorer</a>
-      → 選服務器 → musicscore → 找 <code>{ID}_{簡稱}_{難度}.txt</code></div>
+      <div class="st"><span data-i18n="extract.alt.step1">Go to</span> <a href="https://bestdori.com/tool/explorer" target="_blank" style="color:var(--blue)">bestdori.com/tool/explorer</a>
+      → musicscore → <code>{ID}_{name}_{diff}.txt</code></div>
     </div>
     <div class="step"><div class="sn">2</div>
-      <div class="st">下載後填入「歌曲設定」的<strong>自訂譜面路徑</strong>欄位</div>
+      <div class="st" data-i18n="extract.alt.step2">Download and enter the path in <strong>Custom chart path</strong>.</div>
     </div>
   </div>
 </div>
@@ -416,25 +438,217 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
 </div><!-- /layout -->
 
 <script>
+// ══ i18n ══════════════════════════════════════════════════
+var LANG = 'en';
+
+var T = {
+  en: {
+    'nav.menu':            'Menu',
+    'nav.song':            'Song Setup',
+    'nav.play':            'Play Control',
+    'nav.device':          'Device',
+    'nav.extract':         'Extract Assets',
+    'song.mode':           'Game Mode',
+    'song.mode.bang':      'Girls Band Party',
+    'song.search':         'Song Search',
+    'song.search.label':   'Search by name (EN / JP / ZH)',
+    'song.search.placeholder': 'e.g. EXIST, Daylight, 六兆年と一夜物語',
+    'song.id.label':       'Or enter Song ID directly',
+    'song.id.placeholder': 'e.g. 325',
+    'song.diff':           'Difficulty',
+    'song.chart.label':    'Custom chart path (optional, overrides Song ID)',
+    'song.chart.placeholder': './325_exist_expert.txt',
+    'song.backend':        'Backend & Connection',
+    'song.backend.hid':    'No USB debugging needed',
+    'song.backend.adb':    'Emulator / wireless',
+    'song.serial.label':   'Device serial (leave blank to auto-detect)',
+    'song.serial.placeholder': 'R58M1234ABC',
+    'song.orient':         'Screen rotation (HID only)',
+    'song.orient.left':    '↺ Counter-clockwise',
+    'song.orient.right':   '↻ Clockwise',
+    'song.load':           '▶ Load & Prepare',
+    'device.saved':        'Saved Devices',
+    'device.loading':      'Loading...',
+    'device.add':          'Add / Update Device',
+    'device.step1':        'Hold phone in <strong>portrait</strong> (camera up). Short side = width, long side = height.',
+    'device.serial':       'Serial',
+    'device.width':        'Width (px)',
+    'device.height':       'Height (px)',
+    'device.save':         'Save',
+    'device.none':         'No saved devices',
+    'play.none':           'No song loaded. Go to Song Setup first.',
+    'play.change':         'Change Song',
+    'play.start.title':    'Start Playback',
+    'play.start.hint':     'Enter the song in-game. Press <strong>Start</strong> when the first note approaches the judgment line.',
+    'play.start.btn':      '▶ Start',
+    'play.start.kbd':      'Click, or press',
+    'play.offset.title':   'Offset Adjustment',
+    'play.offset.hint':    'Too early → negative &nbsp;·&nbsp; Too late → positive &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> ±10 &nbsp;<kbd>Shift</kbd>±50 &nbsp;<kbd>Ctrl</kbd>±100',
+    'play.offset.reset':   'Reset',
+    'play.stop':           '■ Stop',
+    'play.stop.hint':      'Or press',
+    'play.stop.hint2':     'in terminal',
+    'extract.title':       'Extract from game folder',
+    'extract.step1':       'Pull game data via ADB:<br><code>adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/ ./gamedata</code>',
+    'extract.step2':       'Enter the path below and click Extract. The <code>assets/</code> folder will be generated.',
+    'extract.path':        'Asset folder path',
+    'extract.btn':         'Extract',
+    'extract.alt':         'Or download charts from Bestdori',
+    'extract.alt.step1':   'Go to',
+    'extract.alt.step2':   'Download and enter the path in <strong>Custom chart path</strong>.',
+    'state.idle':          'Idle',
+    'state.ready':         'Ready',
+    'state.playing':       'Playing',
+    'state.done':          'Done',
+    'state.error':         'Error',
+    'state.ready.full':    'Ready, waiting to start',
+    'state.playing.full':  'Playing...',
+    'state.done.full':     'Done',
+    'state.error.full':    'Error',
+    'log.loading':         'Loading...',
+    'log.sent':            'Command sent',
+    'log.ready':           'Ready! Enter the song and press Start.',
+    'log.playing':         'Playing...',
+    'log.done':            'Done ✓',
+    'log.fail':            'Failed: ',
+    'log.conn.fail':       'Connection failed: ',
+    'log.no.song':         'Please select a song or enter a custom chart path.',
+    'log.extract.start':   'Extracting: ',
+    'log.extract.done':    'Done! assets/ generated.',
+    'log.extract.fail':    'Error: ',
+    'dc.hint.missing':     'Please fill in all fields',
+    'dc.hint.saved':       '✓ Saved',
+    'dc.hint.fail':        'Save failed',
+    'drop.none':           'No results found',
+    'manual.title':        'Manual input',
+  },
+  zh: {
+    'nav.menu':            '主選單',
+    'nav.song':            '歌曲設定',
+    'nav.play':            '播放控制',
+    'nav.device':          '裝置設定',
+    'nav.extract':         '解包素材',
+    'song.mode':           '遊戲模式',
+    'song.mode.bang':      '少女樂團派對',
+    'song.search':         '歌曲搜尋',
+    'song.search.label':   '輸入歌名搜尋（中日英皆可）',
+    'song.search.placeholder': '例：EXIST、六兆年と一夜物語、Daylight',
+    'song.id.label':       '或直接輸入歌曲 ID',
+    'song.id.placeholder': '例：325',
+    'song.diff':           '難度',
+    'song.chart.label':    '自訂譜面路徑（選填，填了忽略歌曲 ID）',
+    'song.chart.placeholder': './325_exist_expert.txt',
+    'song.backend':        '後端與連線',
+    'song.backend.hid':    '無需 USB 偵錯，實機首選',
+    'song.backend.adb':    '支援模擬器 / 無線',
+    'song.serial.label':   '設備序列號（留空自動偵測）',
+    'song.serial.placeholder': 'R58M1234ABC',
+    'song.orient':         '螢幕旋轉（HID 適用）',
+    'song.orient.left':    '↺ 逆時針',
+    'song.orient.right':   '↻ 順時針',
+    'song.load':           '▶ 載入並準備播放',
+    'device.saved':        '已儲存裝置',
+    'device.loading':      '載入中...',
+    'device.add':          '新增 / 更新裝置',
+    'device.step1':        '手機<strong>直立</strong>放好（前鏡頭朝上），短邊=寬、長邊=高',
+    'device.serial':       '序列號',
+    'device.width':        '寬 (px)',
+    'device.height':       '高 (px)',
+    'device.save':         '儲存',
+    'device.none':         '尚無儲存的裝置',
+    'play.none':           '尚未載入歌曲，請先到「歌曲設定」頁面選擇',
+    'play.change':         '更換歌曲',
+    'play.start.title':    '開始播放',
+    'play.start.hint':     '在遊戲中進入曲目，當<strong>第一個音符接近判定線</strong>的瞬間，按下開始。',
+    'play.start.btn':      '▶ 開始',
+    'play.start.kbd':      '點擊，或按',
+    'play.offset.title':   '時間偏移調整',
+    'play.offset.hint':    '打太早 → 負值 &nbsp;·&nbsp; 打太晚 → 正值 &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> ±10 &nbsp;<kbd>Shift</kbd>±50 &nbsp;<kbd>Ctrl</kbd>±100',
+    'play.offset.reset':   '歸零',
+    'play.stop':           '■ 中斷播放',
+    'play.stop.hint':      '終端機按',
+    'play.stop.hint2':     '也可中斷',
+    'extract.title':       '從遊戲資料夾提取',
+    'extract.step1':       '用 ADB 把遊戲資料拉到電腦：<br><code>adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/ ./gamedata</code>',
+    'extract.step2':       '填入路徑，點解包。完成後 <code>assets/</code> 會出現在 ssm 同目錄。',
+    'extract.path':        '素材資料夾路徑',
+    'extract.btn':         '解包',
+    'extract.alt':         '或從 Bestdori 下載譜面',
+    'extract.alt.step1':   '前往',
+    'extract.alt.step2':   '下載後填入<strong>自訂譜面路徑</strong>欄位。',
+    'state.idle':          '閒置',
+    'state.ready':         '就緒',
+    'state.playing':       '播放中',
+    'state.done':          '播放完畢',
+    'state.error':         '錯誤',
+    'state.ready.full':    '就緒，等待開始',
+    'state.playing.full':  '播放中...',
+    'state.done.full':     '播放完畢',
+    'state.error.full':    '發生錯誤',
+    'log.loading':         '載入中...',
+    'log.sent':            '指令已送出',
+    'log.ready':           '就緒！進入遊戲曲目後按「開始」',
+    'log.playing':         '播放中...',
+    'log.done':            '播放完畢 ✓',
+    'log.fail':            '失敗：',
+    'log.conn.fail':       '連線失敗：',
+    'log.no.song':         '請先選擇歌曲或填入自訂譜面路徑',
+    'log.extract.start':   '開始解包：',
+    'log.extract.done':    '解包完成！assets/ 已產生',
+    'log.extract.fail':    '錯誤：',
+    'dc.hint.missing':     '請填寫所有欄位',
+    'dc.hint.saved':       '✓ 已儲存',
+    'dc.hint.fail':        '儲存失敗',
+    'drop.none':           '找不到相符歌曲',
+    'manual.title':        '手動輸入',
+  }
+};
+
+function t(key){ return (T[LANG] && T[LANG][key]) || (T['en'][key]) || key; }
+
+function setLang(lang){
+  LANG = lang;
+  document.getElementById('lt-en').classList.toggle('active', lang==='en');
+  document.getElementById('lt-zh').classList.toggle('active', lang==='zh');
+  document.documentElement.lang = lang==='zh'?'zh-TW':'en';
+  // 更新所有 data-i18n 元素
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    var key = el.getAttribute('data-i18n');
+    el.innerHTML = t(key);
+  });
+  // 更新 placeholder
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  // 更新動態文字
+  updateDynamicTexts();
+}
+
+function updateDynamicTexts(){
+  // 狀態文字
+  var stateMap = {0:'state.idle',1:'state.ready.full',2:'state.playing.full',3:'state.done.full',4:'state.error.full'};
+  var stateKey = stateMap[S.state] || 'state.idle';
+  var el = document.getElementById('np-state-txt');
+  if(el) el.textContent = t(stateKey);
+  var el2 = document.getElementById('pn-state-label');
+  if(el2) el2.textContent = t(stateKey);
+  // 開始按鈕
+  var btn = document.getElementById('btn-start');
+  if(btn && !btn.disabled) btn.textContent = t('play.start.btn');
+  // 裝置頁
+  if(document.getElementById('pane-device').classList.contains('active')) loadDevices();
+}
+
 // ══ 狀態 ══════════════════════════════════════════════════
 var S={
-  backend:'hid',diff:3,orient:'left',mode:'bang',
-  state:0,offset:0,
-  songId:0,songData:null,
-  db:null, dropIdx:-1
+  backend:'hid', diff:3, orient:'left', mode:'bang',
+  state:0, offset:0,
+  songId:0, songData:null,
+  db:null, dropIdx:-1,
+  _lastLogState:-1
 };
 var DN=['easy','normal','hard','expert','special'];
 var DL_BANG=['EASY','NORMAL','HARD','EXPERT','SPECIAL'];
-var DL_PJSK=['EASY','NORMAL','HARD','EXPERT','MASTER'];
-
-// ── Bug fix: state=5 已移除，中斷後統一回到 StateDone(3) 可重開始 ──
-var STATE_NAME={
-  0:'閒置',
-  1:'就緒，等待開始',
-  2:'播放中',
-  3:'播放完畢',
-  4:'發生錯誤'
-};
 var DOT_CLS={1:'ready',2:'playing',3:'done',4:'error'};
 
 // ══ 導航 ══════════════════════════════════════════════════
@@ -449,10 +663,6 @@ function nav(id){
 // ══ 模式/後端/方向 ════════════════════════════════════════
 function setMode(m){
   S.mode=m; S.db=null;
-  ['bang','pjsk'].forEach(function(x){
-    document.getElementById('mode-'+x).classList.toggle('active',x===m);
-  });
-  document.getElementById('db4').textContent=m==='pjsk'?'MASTER':'SPECIAL';
   if(S.songId) clearSong();
 }
 function setBackend(b){
@@ -498,7 +708,7 @@ function loadDB(cb){
   fetch('/api/songdb?mode='+S.mode)
     .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
     .then(function(d){S.db=d;cb(d);})
-    .catch(function(e){log('song-log','無法載入歌曲資料庫：'+e,'err');});
+    .catch(function(e){log('song-log',t('log.conn.fail')+e,'err');});
 }
 
 function pickName(arr){
@@ -534,12 +744,11 @@ function doSearch(q){
 
 function renderDrop(res){
   var drop=document.getElementById('drop');
-  if(!res.length){drop.innerHTML='<div class="drop-hint">找不到相符歌曲</div>';drop.classList.add('open');return;}
-  var labels=S.mode==='pjsk'?DL_PJSK:DL_BANG;
-  drop.innerHTML=res.map(function(r,i){
+  if(!res.length){drop.innerHTML='<div class="drop-hint">'+t('drop.none')+'</div>';drop.classList.add('open');return;}
+  drop.innerHTML=res.map(function(r){
     var title=pickName(r.song.musicTitle);
     var diffs=Object.keys(r.song.difficulty||{}).map(Number).sort();
-    var dh=diffs.map(function(d){return'<span class="di-d d-'+DN[d]+'">'+labels[d]+'</span>';}).join('');
+    var dh=diffs.map(function(d){return'<span class="di-d d-'+DN[d]+'">'+DL_BANG[d]+'</span>';}).join('');
     return'<div class="di" onclick="selSong('+r.id+')">'
       +'<span class="di-id">#'+r.id+'</span>'
       +'<div class="di-info"><div class="di-title">'+esc(title)+'</div>'
@@ -581,7 +790,7 @@ function selSong(id){
     closeDrop();
     var diffs=Object.keys(song.difficulty||{}).map(Number).sort();
     setDiffAvail(diffs);
-    log('song-log','已選：#'+id+' '+title,'ok');
+    log('song-log','#'+id+' '+title,'ok');
   });
 }
 function clearSong(){
@@ -597,7 +806,7 @@ function onManualId(){
   if(v>0){
     S.songId=v;S.songData=null;
     document.getElementById('sb-id').textContent='#'+v;
-    document.getElementById('sb-title').textContent='手動輸入';
+    document.getElementById('sb-title').textContent=t('manual.title');
     document.getElementById('sel-bar').classList.add('show');
     setDiffAvail(null);
   }
@@ -623,63 +832,48 @@ es.onmessage=function(e){
 
 function updateUI(d){
   var st=d.state;
-
-  // ── dot 顏色 ──
   var dotCls=DOT_CLS[st]||'';
   document.getElementById('np-dot').className='dot '+dotCls;
   document.getElementById('pn-dot').className='dot '+dotCls;
 
-  // ── 狀態文字 ──
-  var stateText=STATE_NAME[st]||'閒置';
+  var stateMap={0:'state.idle',1:'state.ready.full',2:'state.playing.full',3:'state.done.full',4:'state.error.full'};
+  var stateText=t(stateMap[st]||'state.idle');
   document.getElementById('np-state-txt').textContent=stateText;
   document.getElementById('pn-state-label').textContent=stateText;
 
-  // ── offset display ──
   document.getElementById('ov').textContent=d.offset||0;
 
-  // ── Bug fix: 開始按鈕邏輯 ──
-  // state=1(Ready) → 啟用，顯示「▶ 開始」+ 脈動
-  // state=3(Done)  → 啟用，顯示「↺ 重播」，無脈動
-  // state=5(Stopped) 或其他 → 禁用，顯示「▶ 開始」，無脈動
   var btn=document.getElementById('btn-start');
   if(st===1){
-    // StateReady：可以按開始（首次 or 中斷後皆是此狀態）
     btn.disabled=false;
     btn.classList.add('rdy');
-    btn.textContent='▶ 開始';
+    btn.textContent=t('play.start.btn');
   } else {
-    // 其他狀態（Idle/Playing/Done/Error）一律 disabled
     btn.disabled=true;
     btn.classList.remove('rdy');
-    btn.textContent='▶ 開始';
+    btn.textContent=t('play.start.btn');
   }
 
-  // ── now playing info ──
   if(d.nowPlaying&&(d.nowPlaying.songId>0||d.nowPlaying.title)){
-    var np=d.nowPlaying;
-    showNP(np);
-    updatePlayCard(np,st);
+    showNP(d.nowPlaying);
+    updatePlayCard(d.nowPlaying);
   }
 
-  // ── log 訊息（避免重複：用 lastLogState 追蹤）──
   if(st!==S._lastLogState){
     S._lastLogState=st;
-    if(st===1) log('play-log','就緒！進入遊戲曲目後按「開始」','info');
-    if(st===2) log('play-log','播放中...','info');
-    if(st===3) log('play-log','播放完畢 ✓','ok');
-    if(st===4&&d.error) log('play-log','錯誤：'+d.error,'err');
+    if(st===1) log('play-log',t('log.ready'),'info');
+    if(st===2) log('play-log',t('log.playing'),'info');
+    if(st===3) log('play-log',t('log.done'),'ok');
+    if(st===4&&d.error) log('play-log',t('log.fail')+d.error,'err');
   }
 }
 
 function showNP(np){
-  var card=document.getElementById('np-card');
-  card.style.display='block';
+  document.getElementById('np-card').style.display='block';
   if(np.jacketUrl){
     var img=document.getElementById('np-img');
-    var no=document.getElementById('np-no');
-    img.src=np.jacketUrl;
-    img.style.display='block';
-    no.style.display='none';
+    img.src=np.jacketUrl;img.style.display='block';
+    document.getElementById('np-no').style.display='none';
   }
   document.getElementById('np-title').textContent=np.title||'—';
   document.getElementById('np-artist').textContent=np.artist||'';
@@ -689,15 +883,13 @@ function showNP(np){
   document.getElementById('np-lv').textContent=np.diffLevel?'Lv.'+np.diffLevel:'';
 }
 
-function updatePlayCard(np,state){
+function updatePlayCard(np){
   document.getElementById('pn-none').style.display='none';
   document.getElementById('pn-loaded').style.display='block';
   var pimg=document.getElementById('pn-img');
-  var pno=document.getElementById('pn-no');
   if(np.jacketUrl){
-    pimg.src=np.jacketUrl;
-    pimg.style.display='block';
-    pno.style.display='none';
+    pimg.src=np.jacketUrl;pimg.style.display='block';
+    document.getElementById('pn-no').style.display='none';
   }
   document.getElementById('pn-title-big').textContent=np.title||'—';
   document.getElementById('pn-artist-big').textContent=np.artist||'';
@@ -707,7 +899,7 @@ function updatePlayCard(np,state){
   document.getElementById('pn-lv-big').textContent=np.diffLevel?'Lv.'+np.diffLevel:'';
 }
 
-// ══ 鍵盤支援 ══════════════════════════════════════════════
+// ══ 鍵盤 ══════════════════════════════════════════════════
 document.addEventListener('keydown',function(e){
   if(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')return;
   if(!document.getElementById('pane-play').classList.contains('active'))return;
@@ -727,14 +919,13 @@ function buildNowPlaying(){
     if(di&&di[S.diff]) np.diffLevel=di[S.diff].playLevel||0;
     var ji=S.songData.jacketImage;
     if(ji&&ji[0]){
-      var jiName=ji[0];
       var folderNo=Math.ceil(S.songId/10)*10;
-      if(folderNo===0) folderNo=10;
-      np.jacketUrl='https://bestdori.com/assets/jp/musicjacket/musicjacket'+folderNo+'_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket'+folderNo+'-'+jiName+'-jacket.png';
+      if(folderNo===0)folderNo=10;
+      np.jacketUrl='https://bestdori.com/assets/jp/musicjacket/musicjacket'+folderNo+'_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket'+folderNo+'-'+ji[0]+'-jacket.png';
     }
     if(S.db&&S.db.bands&&S.songData.bandId){
       var band=S.db.bands[S.songData.bandId];
-      if(band&&band.bandName) np.artist=pickName(band.bandName);
+      if(band&&band.bandName)np.artist=pickName(band.bandName);
     }
   }
   return np;
@@ -744,24 +935,21 @@ function submitRun(){
   var sid=parseInt(document.getElementById('song-id').value)||S.songId||0;
   var cp=document.getElementById('chart-path').value.trim();
   var ds=document.getElementById('dev-serial').value.trim();
-  if(!sid&&!cp){log('song-log','請先選擇歌曲或填入自訂譜面路徑','err');return;}
-  var body={
-    mode:S.mode,backend:S.backend,diff:DN[S.diff],orient:S.orient,
-    songId:sid,chartPath:cp,deviceSerial:ds,
-    nowPlaying:buildNowPlaying()
-  };
-  log('song-log','載入中...','info');
+  if(!sid&&!cp){log('song-log',t('log.no.song'),'err');return;}
+  var body={mode:S.mode,backend:S.backend,diff:DN[S.diff],orient:S.orient,
+    songId:sid,chartPath:cp,deviceSerial:ds,nowPlaying:buildNowPlaying()};
+  log('song-log',t('log.loading'),'info');
   fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
     .then(function(r){
-      if(r.ok){log('song-log','指令已送出','ok');nav('play');}
-      else r.text().then(function(t){log('song-log','失敗：'+t,'err');});
-    }).catch(function(e){log('song-log','連線失敗：'+e,'err');});
+      if(r.ok){log('song-log',t('log.sent'),'ok');nav('play');}
+      else r.text().then(function(tx){log('song-log',t('log.fail')+tx,'err');});
+    }).catch(function(e){log('song-log',t('log.conn.fail')+e,'err');});
 }
 
 function apiStart(){
   if(S.state!==1)return;
   fetch('/api/start',{method:'POST'})
-    .catch(function(e){log('play-log','連線失敗：'+e,'err');});
+    .catch(function(e){log('play-log',t('log.conn.fail')+e,'err');});
 }
 function apiStop(){fetch('/api/stop',{method:'POST'});}
 function adj(d){
@@ -773,7 +961,9 @@ function resetOff(){adj(-S.offset);}
 function loadDevices(){
   fetch('/api/device').then(function(r){return r.json();}).then(function(d){
     var list=document.getElementById('dev-list');
-    if(!d||!Object.keys(d).length){list.innerHTML='<div style="font-size:12px;color:var(--hint)">尚無儲存的裝置</div>';return;}
+    if(!d||!Object.keys(d).length){
+      list.innerHTML='<div style="font-size:12px;color:var(--hint)">'+t('device.none')+'</div>';return;
+    }
     list.innerHTML=Object.entries(d).map(function(e){
       return'<div class="dev-row"><span class="dev-s">'+e[0]+'</span><span>'+e[1].width+' × '+e[1].height+'</span></div>';
     }).join('');
@@ -783,25 +973,28 @@ function saveDevice(){
   var s=document.getElementById('dc-s').value.trim();
   var w=parseInt(document.getElementById('dc-w').value)||0;
   var h=parseInt(document.getElementById('dc-h').value)||0;
-  if(!s||!w||!h){document.getElementById('dc-hint').textContent='請填寫所有欄位';return;}
+  if(!s||!w||!h){document.getElementById('dc-hint').textContent=t('dc.hint.missing');return;}
   fetch('/api/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serial:s,width:w,height:h})})
     .then(function(r){
-      if(r.ok){document.getElementById('dc-hint').textContent='✓ 已儲存';loadDevices();}
-      else document.getElementById('dc-hint').textContent='儲存失敗';
+      if(r.ok){document.getElementById('dc-hint').textContent=t('dc.hint.saved');loadDevices();}
+      else document.getElementById('dc-hint').textContent=t('dc.hint.fail');
     });
 }
 
 // ══ 解包 ══════════════════════════════════════════════════
 function doExtract(){
   var p=document.getElementById('ex-path').value.trim();
-  if(!p){log('ex-log','請填入素材資料夾路徑','err');return;}
-  log('ex-log','開始解包：'+p,'info');
+  if(!p){log('ex-log',t('log.no.song'),'err');return;}
+  log('ex-log',t('log.extract.start')+p,'info');
   fetch('/api/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p})})
     .then(function(r){
-      if(r.ok)log('ex-log','解包完成！assets/ 已產生','ok');
-      else r.text().then(function(t){log('ex-log','錯誤：'+t,'err');});
-    }).catch(function(e){log('ex-log','連線失敗：'+e,'err');});
+      if(r.ok)log('ex-log',t('log.extract.done'),'ok');
+      else r.text().then(function(tx){log('ex-log',t('log.extract.fail')+tx,'err');});
+    }).catch(function(e){log('ex-log',t('log.conn.fail')+e,'err');});
 }
+
+// ══ 初始化（預設 EN）══════════════════════════════════════
+setLang('en');
 </script>
 </body>
 </html>
