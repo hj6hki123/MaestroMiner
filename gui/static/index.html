@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSM — Star Stone Miner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f1;--surface:#fff;--border:#e8e6de;--border2:#ccc9be;
+  --text:#1a1a18;--muted:#6b6963;--hint:#9e9b94;
+  --blue:#185FA5;--blue-bg:#E6F1FB;--blue-light:#b5d4f4;
+  --green:#3B6D11;--green-bg:#EAF3DE;
+  --amber:#854F0B;--amber-bg:#FAEEDA;
+  --red:#A32D2D;--red-bg:#FCEBEB;--red-border:#F09595;
+  --purple:#534AB7;--purple-bg:#EEEDFE;
+  --r:8px;--rl:12px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1a18;--surface:#232321;--border:#363430;--border2:#4a4843;
+  --text:#e8e6df;--muted:#9e9b94;--hint:#6b6963;
+  --blue:#5ba3e0;--blue-bg:#0c2a45;--blue-light:#1a4a7a;
+  --green:#7ab84a;--green-bg:#192e09;
+  --amber:#d4921e;--amber-bg:#2c1e04;
+  --red:#e06060;--red-bg:#2c0909;--red-border:#7a2020;
+  --purple:#9b95e0;--purple-bg:#1c1a42;
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+.layout{display:flex;height:100vh}
+
+/* ── sidebar ── */
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:1rem .75rem;gap:.25rem}
+.logo{font-size:16px;font-weight:700;padding:4px 8px;margin-bottom:.5rem;letter-spacing:-.3px}
+.logo em{color:var(--blue);font-style:normal}
+.nav-sec{font-size:10px;font-weight:600;color:var(--hint);letter-spacing:.08em;text-transform:uppercase;padding:8px 8px 3px;margin-top:.25rem}
+.nav-btn{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r);font-size:13px;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .12s}
+.nav-btn:hover{background:var(--blue-bg);color:var(--blue)}
+.nav-btn.active{background:var(--blue-bg);color:var(--blue);font-weight:500}
+.nav-btn .ico{font-size:13px;width:18px;text-align:center;flex-shrink:0}
+
+/* ── now playing card in sidebar ── */
+.np-card{margin-top:auto;border-radius:var(--rl);overflow:hidden;border:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.np-jacket{width:100%;aspect-ratio:1;background:var(--bg);position:relative;overflow:hidden}
+.np-jacket img{width:100%;height:100%;object-fit:cover;display:block}
+.np-jacket .np-no-img{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;color:var(--border2)}
+.np-info{padding:8px 10px}
+.np-title{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.np-artist{font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np-meta{display:flex;align-items:center;gap:6px;margin-top:5px}
+.np-diff{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px}
+.d-easy{background:var(--blue-bg);color:var(--blue)}
+.d-normal{background:var(--green-bg);color:var(--green)}
+.d-hard{background:var(--amber-bg);color:var(--amber)}
+.d-expert{background:var(--red-bg);color:var(--red)}
+.d-special,.d-master{background:var(--purple-bg);color:var(--purple)}
+.np-lv{font-size:10px;color:var(--muted)}
+.np-state{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--border2);flex-shrink:0;transition:background .3s}
+.dot.ready{background:#639922}
+.dot.playing{background:var(--blue);animation:pulse 1.2s infinite}
+.dot.error{background:#e24b4a}
+.dot.done{background:#639922}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ── main ── */
+.main{flex:1;overflow-y:auto;padding:1.75rem 2rem}
+.pane{display:none}.pane.active{display:block}
+.pg-title{font-size:18px;font-weight:700;margin-bottom:1.25rem}
+
+/* ── card ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1rem 1.125rem;margin-bottom:.875rem}
+.ct{font-size:11px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.field{display:flex;flex-direction:column;gap:3px;margin-bottom:9px}
+.field:last-child{margin-bottom:0}
+.field label{font-size:11px;color:var(--muted)}
+input[type=text],input[type=number],select{width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:inherit;transition:border .12s}
+input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(24,95,165,.1)}
+.row{display:flex;gap:9px}.row .field{flex:1}
+
+/* ── search ── */
+.sw{position:relative}
+.sw input{padding-right:28px}
+.sc{position:absolute;right:7px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--hint);cursor:pointer;font-size:14px;padding:2px 4px;display:none}
+.sc:hover{color:var(--text)}
+.drop{position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);box-shadow:0 6px 24px rgba(0,0,0,.13);z-index:200;max-height:260px;overflow-y:auto;display:none}
+.drop.open{display:block}
+.di{padding:7px 11px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;transition:background .1s}
+.di:last-child{border-bottom:none}
+.di:hover,.di.hi{background:var(--blue-bg)}
+.di-id{font-size:10px;font-family:monospace;color:var(--hint);min-width:30px;flex-shrink:0}
+.di-info{flex:1;min-width:0}
+.di-title{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.di-band{font-size:10px;color:var(--muted)}
+.di-diffs{display:flex;gap:2px;flex-shrink:0}
+.di-d{font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px}
+.drop-hint{padding:10px;font-size:12px;color:var(--hint);text-align:center}
+
+/* ── selected song bar ── */
+.sel-bar{background:var(--blue-bg);border:1px solid var(--blue-light);border-radius:var(--r);padding:6px 10px;display:none;align-items:center;gap:7px;margin-bottom:9px}
+.sel-bar.show{display:flex}
+.sb-id{font-size:10px;font-family:monospace;color:var(--blue);flex-shrink:0}
+.sb-title{font-size:12px;font-weight:500;color:var(--blue);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-x{background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;padding:1px 3px;flex-shrink:0}
+
+/* ── diff buttons ── */
+.diff-row{display:flex;gap:5px;flex-wrap:wrap}
+.db{padding:4px 9px;font-size:11px;font-weight:700;border:1.5px solid var(--border);border-radius:6px;cursor:pointer;background:none;color:var(--muted);transition:all .12s;font-family:inherit}
+.db:hover:not(.dis){border-color:var(--blue-light)}
+.db.active.easy{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+.db.active.normal{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.db.active.hard{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+.db.active.expert{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.db.active.special,.db.active.master{background:var(--purple-bg);border-color:var(--purple);color:var(--purple)}
+.db.dis{opacity:.28;cursor:not-allowed}
+
+/* ── backend / orient ── */
+.bg{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:9px}
+.bc{padding:9px 11px;border:1px solid var(--border);border-radius:var(--r);cursor:pointer;background:var(--surface);transition:all .12s}
+.bc:hover{border-color:var(--blue-light)}
+.bc.active{border-color:var(--blue);background:var(--blue-bg)}
+.bc .bcn{font-size:13px;font-weight:500;color:var(--text)}
+.bc.active .bcn{color:var(--blue)}
+.bc .bcs{font-size:10px;color:var(--hint);margin-top:1px}
+.seg{display:flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:9px}
+.sg{flex:1;padding:6px 4px;font-size:12px;font-weight:500;border:none;background:none;color:var(--muted);cursor:pointer;border-right:1px solid var(--border);font-family:inherit;transition:all .12s}
+.sg:last-child{border-right:none}
+.sg.active{background:var(--blue-bg);color:var(--blue)}
+
+/* ── buttons ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 13px;font-size:13px;font-weight:500;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:all .12s;font-family:inherit}
+.btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-bg)}
+.btn:active{transform:scale(.98)}
+.btn.pri{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btn.pri:hover{background:#0c447c;border-color:#0c447c;color:#fff}
+.btn.dan{border-color:var(--red-border);color:var(--red);background:var(--red-bg)}
+.btn.dan:hover{background:#f7c1c1;border-color:var(--red)}
+.btn:disabled,.btn.dis{opacity:.4;cursor:not-allowed;transform:none}
+.btn-b{width:100%}
+
+/* ── play page ── */
+.play-now{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;margin-bottom:.875rem}
+.pn-top{display:flex;gap:0}
+.pn-jacket{width:96px;height:96px;flex-shrink:0;background:var(--bg);position:relative;overflow:hidden}
+.pn-jacket img{width:100%;height:100%;object-fit:cover}
+.pn-jacket .pn-no{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;color:var(--border2)}
+.pn-meta{flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.pn-title{font-size:16px;font-weight:700;line-height:1.25}
+.pn-artist{font-size:12px;color:var(--muted)}
+.pn-badges{display:flex;align-items:center;gap:7px;margin-top:4px}
+.pn-lv{font-size:11px;color:var(--muted)}
+.pn-status{padding:10px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.pn-state-label{font-size:13px;font-weight:500}
+.pn-none{padding:1.5rem;text-align:center;font-size:13px;color:var(--muted)}
+
+/* ── start button ── */
+.start-btn{width:100%;padding:13px;font-size:15px;font-weight:700;border-radius:var(--rl);border:2px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer;transition:all .15s;font-family:inherit}
+.start-btn:hover:not(:disabled){background:#0c447c;border-color:#0c447c}
+.start-btn:active:not(:disabled){transform:scale(.99)}
+.start-btn:disabled{background:var(--bg);border-color:var(--border);color:var(--border2);cursor:not-allowed}
+.start-btn.rdy{animation:bpulse 2s infinite}
+@keyframes bpulse{0%,100%{box-shadow:0 0 0 0 rgba(24,95,165,.4)}50%{box-shadow:0 0 0 8px rgba(24,95,165,0)}}
+kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-radius:4px;font-size:10px;font-family:monospace;background:var(--bg);color:var(--muted)}
+.kh{font-size:11px;color:var(--hint);text-align:center;margin-top:5px}
+
+/* ── offset ── */
+.oc{display:flex;align-items:center;justify-content:center;gap:5px;padding:.625rem 0}
+.ov{font-size:24px;font-weight:700;min-width:80px;text-align:center;font-variant-numeric:tabular-nums}
+.ou{font-size:11px;color:var(--muted);text-align:center;margin-top:1px}
+.adj{width:34px;height:34px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);color:var(--text);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .12s;flex-shrink:0;font-family:inherit}
+.adj:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-bg)}
+.adj:active{transform:scale(.93)}
+
+/* ── log ── */
+.log{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:8px 11px;font-family:'Courier New',monospace;font-size:11px;color:var(--muted);min-height:40px;max-height:100px;overflow-y:auto;line-height:1.6;margin-top:.875rem}
+.ll{}.ll.info{color:var(--blue)}.ll.ok{color:var(--green)}.ll.err{color:var(--red)}
+
+.step{display:flex;gap:9px;align-items:flex-start;margin-bottom:9px}
+.sn{width:19px;height:19px;border-radius:50%;background:var(--blue-bg);color:var(--blue);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.st{font-size:12px;color:var(--text);line-height:1.65}
+.st code{font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);padding:1px 4px;border-radius:3px}
+.dvr{height:1px;background:var(--border);margin:9px 0}
+.dev-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.dev-row:last-child{border-bottom:none}
+.dev-s{font-family:monospace;font-size:11px;color:var(--muted)}
+.hint{font-size:11px;color:var(--hint);margin-top:5px}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══ sidebar ══ -->
+<div class="sidebar">
+  <div class="logo"><em>★</em> SSM</div>
+
+  <div class="nav-sec">主選單</div>
+  <button class="nav-btn active" id="nav-song" onclick="nav('song')"><span class="ico">♪</span>歌曲設定</button>
+  <button class="nav-btn" id="nav-device" onclick="nav('device')"><span class="ico">📱</span>裝置設定</button>
+  <button class="nav-btn" id="nav-play" onclick="nav('play')"><span class="ico">▶</span>播放控制</button>
+  <button class="nav-btn" id="nav-extract" onclick="nav('extract')"><span class="ico">📦</span>解包素材</button>
+
+  <!-- Now Playing mini card -->
+  <div class="np-card" id="np-card" style="display:none">
+    <div class="np-jacket">
+      <img id="np-img" src="" alt="" style="display:none" onerror="this.style.display='none';document.getElementById('np-no').style.display='flex'">
+      <div class="np-no-img" id="np-no">♪</div>
+    </div>
+    <div class="np-info">
+      <div class="np-title" id="np-title">—</div>
+      <div class="np-artist" id="np-artist"></div>
+      <div class="np-meta">
+        <span class="np-diff" id="np-diff"></span>
+        <span class="np-lv" id="np-lv"></span>
+        <span class="np-state">
+          <span class="dot" id="np-dot"></span>
+          <span id="np-state-txt">閒置</span>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ main ══ -->
+<div class="main">
+
+<!-- 歌曲設定 -->
+<div class="pane active" id="pane-song">
+  <div class="pg-title">歌曲設定</div>
+
+  <div class="card">
+    <div class="ct">遊戲模式</div>
+    <div class="bg">
+      <div class="bc active" id="mode-bang" onclick="setMode('bang')"><div class="bcn">BanG Dream!</div><div class="bcs">少女樂團派對</div></div>
+      <div class="bc" id="mode-pjsk" onclick="setMode('pjsk')"><div class="bcn">Project Sekai</div><div class="bcs">彩色舞台</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">歌曲搜尋</div>
+    <div class="sel-bar" id="sel-bar">
+      <span class="sb-id" id="sb-id"></span>
+      <span class="sb-title" id="sb-title"></span>
+      <button class="sb-x" onclick="clearSong()">✕</button>
+    </div>
+    <div class="field">
+      <label>輸入歌名搜尋（中日英皆可）</label>
+      <div class="sw">
+        <input type="text" id="q" placeholder="例：EXIST、六兆年と一夜物語、Daylight"
+          autocomplete="off" oninput="onQInput()" onkeydown="onQKey(event)" onfocus="onQFocus()">
+        <button class="sc" id="sc" onclick="clearQ()">✕</button>
+        <div class="drop" id="drop"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>或直接輸入歌曲 ID</label>
+      <input type="number" id="song-id" placeholder="例：325" min="1" oninput="onManualId()">
+    </div>
+    <div class="field">
+      <label>難度</label>
+      <div class="diff-row">
+        <button class="db easy"   onclick="setDiff(0)">EASY</button>
+        <button class="db normal" onclick="setDiff(1)">NORMAL</button>
+        <button class="db hard"   onclick="setDiff(2)">HARD</button>
+        <button class="db expert active" onclick="setDiff(3)">EXPERT</button>
+        <button class="db special" id="db4" onclick="setDiff(4)">SPECIAL</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>自訂譜面路徑（選填，填了忽略歌曲 ID）</label>
+      <input type="text" id="chart-path" placeholder="./325_exist_expert.txt">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">後端與連線</div>
+    <div class="bg">
+      <div class="bc active" id="backend-hid" onclick="setBackend('hid')"><div class="bcn">HID 後端</div><div class="bcs">無需 USB 偵錯，實機首選</div></div>
+      <div class="bc" id="backend-adb" onclick="setBackend('adb')"><div class="bcn">ADB 後端</div><div class="bcs">支援模擬器 / 無線</div></div>
+    </div>
+    <div class="field"><label>設備序列號（留空自動偵測）</label>
+      <input type="text" id="dev-serial" placeholder="R58M1234ABC">
+    </div>
+    <div id="orient-wrap">
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">螢幕旋轉（HID 適用）</label>
+      <div class="seg">
+        <button class="sg active" id="ol" onclick="setOrient('left')">↺ 逆時針</button>
+        <button class="sg" id="or" onclick="setOrient('right')">↻ 順時針</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn pri btn-b" onclick="submitRun()">▶ 載入並準備播放</button>
+  <div class="log" id="song-log"></div>
+</div>
+
+<!-- 裝置設定 -->
+<div class="pane" id="pane-device">
+  <div class="pg-title">裝置設定</div>
+  <div class="card">
+    <div class="ct">已儲存裝置</div>
+    <div id="dev-list"><div style="font-size:12px;color:var(--hint)">載入中...</div></div>
+  </div>
+  <div class="card">
+    <div class="ct">新增 / 更新裝置</div>
+    <div class="step"><div class="sn">1</div><div class="st">手機<strong>直立</strong>放好（前鏡頭朝上），短邊=寬、長邊=高</div></div>
+    <div class="row">
+      <div class="field"><label>序列號</label><input type="text" id="dc-s" placeholder="R58M1234ABC"></div>
+      <div class="field"><label>寬 (px)</label><input type="number" id="dc-w" placeholder="1080" min="1"></div>
+      <div class="field"><label>高 (px)</label><input type="number" id="dc-h" placeholder="2340" min="1"></div>
+    </div>
+    <button class="btn pri" onclick="saveDevice()">儲存</button>
+    <div class="hint" id="dc-hint"></div>
+  </div>
+</div>
+
+<!-- 播放控制 -->
+<div class="pane" id="pane-play">
+  <div class="pg-title">播放控制</div>
+
+  <!-- 歌曲資訊卡 -->
+  <div class="play-now" id="play-now">
+    <div class="pn-none" id="pn-none">尚未載入歌曲，請先到「歌曲設定」頁面選擇</div>
+    <div id="pn-loaded" style="display:none">
+      <div class="pn-top">
+        <div class="pn-jacket">
+          <img id="pn-img" src="" alt="" onerror="this.style.display='none';document.getElementById('pn-no').style.display='flex'">
+          <div class="pn-no" id="pn-no" style="display:none">♪</div>
+        </div>
+        <div class="pn-meta">
+          <div class="pn-title" id="pn-title-big"></div>
+          <div class="pn-artist" id="pn-artist-big"></div>
+          <div class="pn-badges">
+            <span class="np-diff" id="pn-diff-badge"></span>
+            <span class="pn-lv" id="pn-lv-big"></span>
+          </div>
+        </div>
+      </div>
+      <div class="pn-status">
+        <div class="dot" id="pn-dot"></div>
+        <div class="pn-state-label" id="pn-state-label">就緒</div>
+        <div style="flex:1"></div>
+        <button class="btn" style="font-size:12px;padding:5px 10px" onclick="nav('song')">更換歌曲</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">開始播放</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7">
+      在遊戲中進入曲目，當<strong>第一個音符接近判定線</strong>的瞬間，按下開始。<br>
+      播放完畢後按「開始」可以<strong>重播</strong>同一首歌。
+    </div>
+    <button class="start-btn" id="btn-start" onclick="apiStart()" disabled>▶ 開始</button>
+    <div class="kh">點擊，或按 <kbd>Enter</kbd> / <kbd>Space</kbd></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">時間偏移調整</div>
+    <div style="font-size:11px;color:var(--hint);margin-bottom:8px">
+      打太早 → 負值 | 打太晚 → 正值 &nbsp;·&nbsp;
+      <kbd>←</kbd><kbd>→</kbd> ±10 &nbsp;<kbd>Shift</kbd>±50 &nbsp;<kbd>Ctrl</kbd>±100
+    </div>
+    <div class="oc">
+      <button class="adj" onclick="adj(-100)" title="-100ms">«</button>
+      <button class="adj" onclick="adj(-50)"  title="-50ms">‹‹</button>
+      <button class="adj" onclick="adj(-10)"  title="-10ms">‹</button>
+      <div><div class="ov" id="ov">0</div><div class="ou">ms</div></div>
+      <button class="adj" onclick="adj(10)"   title="+10ms">›</button>
+      <button class="adj" onclick="adj(50)"   title="+50ms">››</button>
+      <button class="adj" onclick="adj(100)"  title="+100ms">»</button>
+    </div>
+    <div style="text-align:center;margin-top:2px">
+      <button class="btn" onclick="resetOff()">歸零</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <button class="btn dan btn-b" onclick="apiStop()">■ 中斷播放</button>
+    <div class="kh" style="margin-top:5px">終端機按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 也可中斷</div>
+  </div>
+
+  <div class="log" id="play-log"></div>
+</div>
+
+<!-- 解包 -->
+<div class="pane" id="pane-extract">
+  <div class="pg-title">解包素材</div>
+  <div class="card">
+    <div class="ct">從遊戲資料夾提取</div>
+    <div class="step"><div class="sn">1</div>
+      <div class="st">用 ADB 把遊戲資料拉到電腦：<br>
+      <code>adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/ ./gamedata</code></div>
+    </div>
+    <div class="step"><div class="sn">2</div>
+      <div class="st">填入路徑，點解包。完成後 <code>assets/</code> 會出現在 ssm 同目錄。</div>
+    </div>
+    <div class="field" style="margin-top:6px">
+      <label>素材資料夾路徑</label>
+      <input type="text" id="ex-path" placeholder="./gamedata">
+    </div>
+    <button class="btn pri" onclick="doExtract()">解包</button>
+    <div class="log" id="ex-log"></div>
+  </div>
+  <div class="card">
+    <div class="ct">或從 Bestdori 下載譜面</div>
+    <div class="step"><div class="sn">1</div>
+      <div class="st">前往 <a href="https://bestdori.com/tool/explorer" target="_blank" style="color:var(--blue)">bestdori.com/tool/explorer</a>
+      → 選服務器 → musicscore → 找 <code>{ID}_{簡稱}_{難度}.txt</code></div>
+    </div>
+    <div class="step"><div class="sn">2</div>
+      <div class="st">下載後填入「歌曲設定」的<strong>自訂譜面路徑</strong>欄位</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+// ══ 狀態 ══════════════════════════════════════════════════
+var S={
+  backend:'hid',diff:3,orient:'left',mode:'bang',
+  state:0,offset:0,
+  songId:0,songData:null,
+  db:null, dropIdx:-1
+};
+var DN=['easy','normal','hard','expert','special'];
+var DL_BANG=['EASY','NORMAL','HARD','EXPERT','SPECIAL'];
+var DL_PJSK=['EASY','NORMAL','HARD','EXPERT','MASTER'];
+var STATE_NAME={0:'閒置',1:'就緒，等待開始',2:'播放中',3:'播放完畢',4:'發生錯誤'};
+var DOT_CLS={1:'ready',2:'playing',3:'done',4:'error'};
+
+// ══ 導航 ══════════════════════════════════════════════════
+function nav(id){
+  document.querySelectorAll('.nav-btn').forEach(function(e){e.classList.remove('active')});
+  document.querySelectorAll('.pane').forEach(function(e){e.classList.remove('active')});
+  document.getElementById('nav-'+id).classList.add('active');
+  document.getElementById('pane-'+id).classList.add('active');
+  if(id==='device') loadDevices();
+}
+
+// ══ 模式/後端/方向 ════════════════════════════════════════
+function setMode(m){
+  S.mode=m; S.db=null;
+  ['bang','pjsk'].forEach(function(x){
+    document.getElementById('mode-'+x).classList.toggle('active',x===m);
+  });
+  document.getElementById('db4').textContent=m==='pjsk'?'MASTER':'SPECIAL';
+  if(S.songId) clearSong();
+}
+function setBackend(b){
+  S.backend=b;
+  ['hid','adb'].forEach(function(x){
+    document.getElementById('backend-'+x).classList.toggle('active',x===b);
+  });
+  document.getElementById('orient-wrap').style.opacity=b==='adb'?'0.4':'1';
+}
+function setOrient(o){
+  S.orient=o;
+  document.getElementById('ol').classList.toggle('active',o==='left');
+  document.getElementById('or').classList.toggle('active',o==='right');
+}
+
+// ══ 難度 ══════════════════════════════════════════════════
+function setDiff(i){
+  S.diff=i;
+  document.querySelectorAll('.db').forEach(function(b,j){b.classList.toggle('active',j===i)});
+}
+function setDiffAvail(avail){
+  document.querySelectorAll('.db').forEach(function(b,i){
+    var ok=!avail||avail.indexOf(i)>=0;
+    b.classList.toggle('dis',!ok);
+    if(!ok&&S.diff===i) setDiff(avail?avail[avail.length-1]:3);
+  });
+}
+
+// ══ 搜尋 ══════════════════════════════════════════════════
+var qTimer=null;
+function onQInput(){
+  var v=document.getElementById('q').value;
+  document.getElementById('sc').style.display=v?'block':'none';
+  clearTimeout(qTimer);
+  if(!v.trim()){closeDrop();return;}
+  qTimer=setTimeout(function(){doSearch(v.trim());},160);
+}
+function onQFocus(){var v=document.getElementById('q').value.trim();if(v)doSearch(v);}
+function clearQ(){document.getElementById('q').value='';document.getElementById('sc').style.display='none';closeDrop();}
+
+function loadDB(cb){
+  if(S.db){cb(S.db);return;}
+  fetch('/api/songdb?mode='+S.mode)
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(function(d){S.db=d;cb(d);})
+    .catch(function(e){log('song-log','無法載入歌曲資料庫：'+e,'err');});
+}
+
+function pickName(arr){
+  if(!arr)return'';
+  return arr[2]||arr[1]||arr[0]||arr[3]||arr[4]||'';
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function doSearch(q){
+  loadDB(function(db){
+    var ql=q.toLowerCase(),res=[];
+    var ids=Object.keys(db.songs);
+    for(var i=0;i<ids.length;i++){
+      var id=parseInt(ids[i]),song=db.songs[ids[i]];
+      if(!song||!song.musicTitle)continue;
+      var ok=false;
+      for(var j=0;j<song.musicTitle.length;j++){
+        if(song.musicTitle[j]&&song.musicTitle[j].toLowerCase().indexOf(ql)>=0){ok=true;break;}
+      }
+      if(!ok)continue;
+      var band=db.bands[song.bandId];
+      res.push({id:id,song:song,band:band&&band.bandName?pickName(band.bandName):''});
+    }
+    res.sort(function(a,b){
+      var at=pickName(a.song.musicTitle).toLowerCase(),bt=pickName(b.song.musicTitle).toLowerCase();
+      var ae=at===ql,be=bt===ql;if(ae&&!be)return-1;if(!ae&&be)return 1;
+      var as=at.startsWith(ql),bs=bt.startsWith(ql);if(as&&!bs)return-1;if(!as&&bs)return 1;
+      return a.id-b.id;
+    });
+    renderDrop(res.slice(0,40));
+  });
+}
+
+function renderDrop(res){
+  var drop=document.getElementById('drop');
+  if(!res.length){drop.innerHTML='<div class="drop-hint">找不到相符歌曲</div>';drop.classList.add('open');return;}
+  var labels=S.mode==='pjsk'?DL_PJSK:DL_BANG;
+  drop.innerHTML=res.map(function(r,i){
+    var title=pickName(r.song.musicTitle);
+    var diffs=Object.keys(r.song.difficulty||{}).map(Number).sort();
+    var dh=diffs.map(function(d){return'<span class="di-d d-'+DN[d]+'">'+labels[d]+'</span>';}).join('');
+    return'<div class="di" onclick="selSong('+r.id+')">'
+      +'<span class="di-id">#'+r.id+'</span>'
+      +'<div class="di-info"><div class="di-title">'+esc(title)+'</div>'
+      +(r.band?'<div class="di-band">'+esc(r.band)+'</div>':'')
+      +'</div><div class="di-diffs">'+dh+'</div></div>';
+  }).join('');
+  drop.classList.add('open');
+  S.dropIdx=-1;
+}
+
+function closeDrop(){document.getElementById('drop').classList.remove('open');S.dropIdx=-1;}
+
+function onQKey(e){
+  var items=document.getElementById('drop').querySelectorAll('.di');
+  if(e.key==='ArrowDown'){e.preventDefault();S.dropIdx=Math.min(S.dropIdx+1,items.length-1);hiDrop(items);}
+  else if(e.key==='ArrowUp'){e.preventDefault();S.dropIdx=Math.max(S.dropIdx-1,-1);hiDrop(items);}
+  else if(e.key==='Enter'){if(S.dropIdx>=0&&items[S.dropIdx])items[S.dropIdx].click();}
+  else if(e.key==='Escape')closeDrop();
+}
+function hiDrop(items){
+  items.forEach(function(el,i){
+    el.classList.toggle('hi',i===S.dropIdx);
+    if(i===S.dropIdx)el.scrollIntoView({block:'nearest'});
+  });
+}
+document.addEventListener('click',function(e){if(!e.target.closest('.sw'))closeDrop();});
+
+function selSong(id){
+  loadDB(function(db){
+    var song=db.songs[id];if(!song)return;
+    S.songId=id;S.songData=song;
+    var title=pickName(song.musicTitle);
+    document.getElementById('sb-id').textContent='#'+id;
+    document.getElementById('sb-title').textContent=title;
+    document.getElementById('sel-bar').classList.add('show');
+    document.getElementById('q').value='';
+    document.getElementById('sc').style.display='none';
+    document.getElementById('song-id').value=id;
+    closeDrop();
+    var diffs=Object.keys(song.difficulty||{}).map(Number).sort();
+    setDiffAvail(diffs);
+    log('song-log','已選：#'+id+' '+title,'ok');
+  });
+}
+function clearSong(){
+  S.songId=0;S.songData=null;
+  document.getElementById('sel-bar').classList.remove('show');
+  document.getElementById('song-id').value='';
+  document.getElementById('q').value='';
+  document.getElementById('sc').style.display='none';
+  setDiffAvail(null);closeDrop();
+}
+function onManualId(){
+  var v=parseInt(document.getElementById('song-id').value)||0;
+  if(v>0){
+    S.songId=v;S.songData=null;
+    document.getElementById('sb-id').textContent='#'+v;
+    document.getElementById('sb-title').textContent='手動輸入';
+    document.getElementById('sel-bar').classList.add('show');
+    setDiffAvail(null);
+  }
+}
+
+// ══ log ═══════════════════════════════════════════════════
+function log(boxId,msg,type){
+  var box=document.getElementById(boxId);
+  var l=document.createElement('div');
+  l.className='ll '+(type||'');
+  l.textContent='['+new Date().toLocaleTimeString()+'] '+msg;
+  box.appendChild(l);
+  box.scrollTop=box.scrollHeight;
+}
+
+// ══ SSE ═══════════════════════════════════════════════════
+var es=new EventSource('/api/events');
+es.onmessage=function(e){
+  var d=JSON.parse(e.data);
+  S.state=d.state;S.offset=d.offset||0;
+  updateUI(d);
+};
+
+function updateUI(d){
+  // sidebar dot & text
+  var dotCls=DOT_CLS[d.state]||'';
+  document.getElementById('np-dot').className='dot '+dotCls;
+  document.getElementById('np-state-txt').textContent=STATE_NAME[d.state]||'閒置';
+  document.getElementById('pn-dot').className='dot '+dotCls;
+  document.getElementById('pn-state-label').textContent=STATE_NAME[d.state]||'閒置';
+
+  // offset display
+  document.getElementById('ov').textContent=d.offset||0;
+
+  // start button
+  var canStart=d.state===1||d.state===3; // Ready OR Done(可重播)
+  var btn=document.getElementById('btn-start');
+  btn.disabled=!canStart;
+  btn.classList.toggle('rdy',canStart);
+  btn.textContent=d.state===3?'↺ 重播':'▶ 開始';
+
+  // now playing info
+  if(d.nowPlaying&&(d.nowPlaying.songId>0||d.nowPlaying.title)){
+    var np=d.nowPlaying;
+    showNP(np);
+    // 若在播放控制頁也更新大卡
+    updatePlayCard(np,d.state);
+  }
+
+  // log
+  if(d.state===1) log('play-log','就緒！進入遊戲曲目後按「開始」','info');
+  if(d.state===2) log('play-log','播放中...','info');
+  if(d.state===3) log('play-log','播放完畢 ✓ — 可按「重播」再來一次','ok');
+  if(d.state===4&&d.error) log('play-log','錯誤：'+d.error,'err');
+}
+
+function showNP(np){
+  var card=document.getElementById('np-card');
+  card.style.display='block';
+  // jacket
+  if(np.jacketUrl){
+    var img=document.getElementById('np-img');
+    var no=document.getElementById('np-no');
+    img.src=np.jacketUrl;
+    img.style.display='block';
+    no.style.display='none';
+  }
+  document.getElementById('np-title').textContent=np.title||'—';
+  document.getElementById('np-artist').textContent=np.artist||'';
+  var db=document.getElementById('np-diff');
+  db.className='np-diff d-'+(np.diff||'expert');
+  db.textContent=(np.diff||'').toUpperCase();
+  document.getElementById('np-lv').textContent=np.diffLevel?'Lv.'+np.diffLevel:'';
+}
+
+function updatePlayCard(np,state){
+  document.getElementById('pn-none').style.display='none';
+  document.getElementById('pn-loaded').style.display='block';
+  // jacket
+  var pimg=document.getElementById('pn-img');
+  var pno=document.getElementById('pn-no');
+  if(np.jacketUrl){
+    pimg.src=np.jacketUrl;
+    pimg.style.display='block';
+    pno.style.display='none';
+  }
+  document.getElementById('pn-title-big').textContent=np.title||'—';
+  document.getElementById('pn-artist-big').textContent=np.artist||'';
+  var badge=document.getElementById('pn-diff-badge');
+  badge.className='np-diff d-'+(np.diff||'expert');
+  badge.textContent=(np.diff||'').toUpperCase();
+  document.getElementById('pn-lv-big').textContent=np.diffLevel?'Lv.'+np.diffLevel:'';
+}
+
+// ══ 鍵盤支援 ══════════════════════════════════════════════
+document.addEventListener('keydown',function(e){
+  if(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')return;
+  if(!document.getElementById('pane-play').classList.contains('active'))return;
+  switch(e.key){
+    case 'Enter':case ' ':e.preventDefault();apiStart();break;
+    case 'ArrowLeft':e.preventDefault();adj(e.ctrlKey||e.metaKey?-100:e.shiftKey?-50:-10);break;
+    case 'ArrowRight':e.preventDefault();adj(e.ctrlKey||e.metaKey?100:e.shiftKey?50:10);break;
+  }
+});
+
+// ══ API ═══════════════════════════════════════════════════
+function buildNowPlaying(){
+  // 從目前選的歌曲資料組 NowPlaying 資訊，送給後端儲存
+  var np={songId:S.songId,diff:DN[S.diff],mode:S.mode,title:'',artist:'',diffLevel:0,jacketUrl:''};
+  if(S.songData){
+    np.title=pickName(S.songData.musicTitle)||'';
+    // diffLevel
+    var di=S.songData.difficulty;
+    if(di&&di[S.diff]) np.diffLevel=di[S.diff].playLevel||0;
+    // jacket URL (Bestdori CDN)
+    var ji=S.songData.jacketImage;
+    if(ji&&ji[0]){
+      np.jacketUrl='https://bestdori.com/assets/jp/musicjacket/musicjacket_'+ji[0]+'/musicjacket_M.png';
+    }
+    // band = artist
+    if(S.db&&S.db.bands&&S.songData.bandId){
+      var band=S.db.bands[S.songData.bandId];
+      if(band&&band.bandName) np.artist=pickName(band.bandName);
+    }
+  }
+  return np;
+}
+
+function submitRun(){
+  var sid=parseInt(document.getElementById('song-id').value)||S.songId||0;
+  var cp=document.getElementById('chart-path').value.trim();
+  var ds=document.getElementById('dev-serial').value.trim();
+  if(!sid&&!cp){log('song-log','請先選擇歌曲或填入自訂譜面路徑','err');return;}
+  var body={
+    mode:S.mode,backend:S.backend,diff:DN[S.diff],orient:S.orient,
+    songId:sid,chartPath:cp,deviceSerial:ds,
+    nowPlaying:buildNowPlaying()
+  };
+  log('song-log','載入中...','info');
+  fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){
+      if(r.ok){log('song-log','指令已送出','ok');nav('play');}
+      else r.text().then(function(t){log('song-log','失敗：'+t,'err');});
+    }).catch(function(e){log('song-log','連線失敗：'+e,'err');});
+}
+
+function apiStart(){
+  if(S.state!==1&&S.state!==3)return;
+  fetch('/api/start',{method:'POST'})
+    .catch(function(e){log('play-log','連線失敗：'+e,'err');});
+}
+function apiStop(){fetch('/api/stop',{method:'POST'});}
+function adj(d){
+  fetch('/api/offset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delta:d})});
+}
+function resetOff(){adj(-S.offset);}
+
+// ══ 裝置設定 ══════════════════════════════════════════════
+function loadDevices(){
+  fetch('/api/device').then(function(r){return r.json();}).then(function(d){
+    var list=document.getElementById('dev-list');
+    if(!d||!Object.keys(d).length){list.innerHTML='<div style="font-size:12px;color:var(--hint)">尚無儲存的裝置</div>';return;}
+    list.innerHTML=Object.entries(d).map(function(e){
+      return'<div class="dev-row"><span class="dev-s">'+e[0]+'</span><span>'+e[1].width+' × '+e[1].height+'</span></div>';
+    }).join('');
+  });
+}
+function saveDevice(){
+  var s=document.getElementById('dc-s').value.trim();
+  var w=parseInt(document.getElementById('dc-w').value)||0;
+  var h=parseInt(document.getElementById('dc-h').value)||0;
+  if(!s||!w||!h){document.getElementById('dc-hint').textContent='請填寫所有欄位';return;}
+  fetch('/api/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serial:s,width:w,height:h})})
+    .then(function(r){
+      if(r.ok){document.getElementById('dc-hint').textContent='✓ 已儲存';loadDevices();}
+      else document.getElementById('dc-hint').textContent='儲存失敗';
+    });
+}
+
+// ══ 解包 ══════════════════════════════════════════════════
+function doExtract(){
+  var p=document.getElementById('ex-path').value.trim();
+  if(!p){log('ex-log','請填入素材資料夾路徑','err');return;}
+  log('ex-log','開始解包：'+p,'info');
+  fetch('/api/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p})})
+    .then(function(r){
+      if(r.ok)log('ex-log','解包完成！assets/ 已產生','ok');
+      else r.text().then(function(t){log('ex-log','錯誤：'+t,'err');});
+    }).catch(function(e){log('ex-log','連線失敗：'+e,'err');});
+}
+</script>
+</body>
+</html>
