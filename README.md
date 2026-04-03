@@ -27,7 +27,10 @@ Given that the original author has stopped development (I think?), I've adapted 
 ## Disclaimer
 This program was heavily developed with the assistance of AI. Please use it at your own discretion and feel free to report any unexpected bugs or issues.
 
+## Future Projects
+1. Mobile Porting & Deployment: Porting the application to mobile devices for use on non-rooted hardware (leveraging ADB tools such as Shizuku).
 
+2. Automated Rhythm Game Playback: Implementation of image recognition for automated gameplay in rhythm games.
 
 ---
 
