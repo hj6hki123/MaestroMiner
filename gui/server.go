@@ -421,10 +421,13 @@ func (s *Server) WaitForStart(ctx context.Context) bool {
 
 	select {
 	case <-startCh:
+		if ctx.Err() != nil {
+			return false
+		}
 		s.mu.Lock()
 		s.state = StatePlaying
 		s.mu.Unlock()
-		s.broadcastState()
+		go s.broadcastState()
 		return true
 	case <-ctx.Done():
 		return false
