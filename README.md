@@ -7,6 +7,7 @@
 # SSM Web GUI (Star Stone Miner Web GUI Version)
 
 This project is an extended branch based on the core architecture of [kvarenzn/ssm](https://github.com/kvarenzn/ssm).
+Given that the original author has stopped development (I think?), I've adapted its core architecture, using AI to quickly and easily introduce a GUI interface for greater ease of use. Since my HID is unusable, I've only tested the ADB functionality. There are still a few bugs to fix, but overall, the operation is smoother.
 
 ## Interface Features
 ![Interface Features](/imgs/page.png "page")
