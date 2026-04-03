@@ -247,7 +247,7 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	req := s.lastRunReq
 	s.mu.Unlock()
 
-	if st != StatePlaying {
+	if st != StatePlaying && st != StateDone {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -494,8 +494,31 @@ done:
 	// 正常播完才設 Done；被 stop/ctx 中斷時狀態已由外部設好，不覆蓋
 	if s.state == StatePlaying {
 		s.state = StateDone
+		req := s.lastRunReq // 記住目前的歌曲與設定參數
 		s.mu.Unlock()
 		s.broadcastState()
+
+		//  新增：自動重新初始化，省去手動按「中斷」的麻煩
+		go func() {
+			// 稍微等待 1 秒，讓前端有時間顯示綠色的 "Done ✓"
+			time.Sleep(1000 * time.Millisecond)
+
+			s.mu.Lock()
+			// 確保這 1 秒內，玩家沒有手動按中斷，也沒有載入新歌
+			if s.state != StateDone || s.lastRunReq != req {
+				s.mu.Unlock()
+				return
+			}
+			// 狀態重置為 Idle，讓前端準備切換
+			s.state = StateIdle
+			s.mu.Unlock()
+			s.broadcastState()
+
+			// 自動重新執行同一首歌的載入流程 -> 最後會回到 Ready 狀態
+			if s.OnRunRequest != nil {
+				s.OnRunRequest(req)
+			}
+		}()
 	} else {
 		s.mu.Unlock()
 	}
