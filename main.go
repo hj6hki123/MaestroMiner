@@ -32,7 +32,7 @@ import (
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/db"
-	"github.com/kvarenzn/ssm/gui"       // ← 新增
+	"github.com/kvarenzn/ssm/gui" // ← 新增
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/scores"
 	"github.com/kvarenzn/ssm/stage"
@@ -727,7 +727,10 @@ func main() {
 	flag.IntVar(&guiPort, "port", 8765, "GUI 使用的 port（預設 8765）")
 
 	flag.Parse()
-
+	//如果沒有加上任何參數，自動把 guiMode 設為 true
+	if len(os.Args) == 1 {
+		guiMode = true
+	}
 	term.Hello()
 	defer term.Bye()
 

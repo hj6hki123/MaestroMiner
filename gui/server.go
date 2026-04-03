@@ -28,10 +28,10 @@ type PlayState int
 
 const (
 	StateIdle    PlayState = iota // 0 閒置
-	StateReady                   // 1 就緒等待開始
-	StatePlaying                 // 2 播放中
-	StateDone                    // 3 播放完畢（保留資料，可重播）
-	StateError                   // 4 錯誤
+	StateReady                    // 1 就緒等待開始
+	StatePlaying                  // 2 播放中
+	StateDone                     // 3 播放完畢（保留資料，可重播）
+	StateError                    // 4 錯誤
 )
 
 // NowPlaying 儲存目前載入的歌曲資訊，供前端顯示

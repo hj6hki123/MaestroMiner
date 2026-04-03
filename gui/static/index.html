@@ -194,8 +194,8 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
 
   <div class="nav-sec">主選單</div>
   <button class="nav-btn active" id="nav-song" onclick="nav('song')"><span class="ico">♪</span>歌曲設定</button>
-  <button class="nav-btn" id="nav-device" onclick="nav('device')"><span class="ico">📱</span>裝置設定</button>
   <button class="nav-btn" id="nav-play" onclick="nav('play')"><span class="ico">▶</span>播放控制</button>
+  <button class="nav-btn" id="nav-device" onclick="nav('device')"><span class="ico">📱</span>裝置設定</button>
   <button class="nav-btn" id="nav-extract" onclick="nav('extract')"><span class="ico">📦</span>解包素材</button>
 
   <!-- Now Playing mini card -->
@@ -697,19 +697,30 @@ document.addEventListener('keydown',function(e){
 
 // ══ API ═══════════════════════════════════════════════════
 function buildNowPlaying(){
-  // 從目前選的歌曲資料組 NowPlaying 資訊，送給後端儲存
   var np={songId:S.songId,diff:DN[S.diff],mode:S.mode,title:'',artist:'',diffLevel:0,jacketUrl:''};
   if(S.songData){
     np.title=pickName(S.songData.musicTitle)||'';
-    // diffLevel
+    
+    // 取得數字難度
     var di=S.songData.difficulty;
     if(di&&di[S.diff]) np.diffLevel=di[S.diff].playLevel||0;
-    // jacket URL (Bestdori CDN)
-    var ji=S.songData.jacketImage;
-    if(ji&&ji[0]){
-      np.jacketUrl='https://bestdori.com/assets/jp/musicjacket/musicjacket_'+ji[0]+'/musicjacket_M.png';
+    
+    // 處理 BanG Dream 圖片路徑 
+    var ji = S.songData.jacketImage;
+    if (ji && ji[0]) {
+      var jiName = ji[0]; // 可能拿到 "489_mayoiuta" 或 "dont_be_afraid"
+      
+      var folderNo = Math.ceil(S.songId / 10) * 10;
+      
+      
+      if (folderNo === 0) folderNo = 10;
+      
+      
+      np.jacketUrl = 'https://bestdori.com/assets/jp/musicjacket/musicjacket' + folderNo + '_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket' + folderNo + '-' + jiName + '-jacket.png';
     }
-    // band = artist
+    
+
+    // 取得樂團名稱作為 Artist
     if(S.db&&S.db.bands&&S.songData.bandId){
       var band=S.db.bands[S.songData.bandId];
       if(band&&band.bandName) np.artist=pickName(band.bandName);
@@ -717,6 +728,8 @@ function buildNowPlaying(){
   }
   return np;
 }
+
+
 
 function submitRun(){
   var sid=parseInt(document.getElementById('song-id').value)||S.songId||0;
