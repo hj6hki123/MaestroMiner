@@ -905,6 +905,7 @@ document.addEventListener('keydown',function(e){
   if(!document.getElementById('pane-play').classList.contains('active'))return;
   switch(e.key){
     case 'Enter':case ' ':e.preventDefault();apiStart();break;
+    // 鍵盤方向鍵也走 adj()，debounce 會自動合併連按
     case 'ArrowLeft':e.preventDefault();adj(e.ctrlKey||e.metaKey?-100:e.shiftKey?-50:-10);break;
     case 'ArrowRight':e.preventDefault();adj(e.ctrlKey||e.metaKey?100:e.shiftKey?50:10);break;
   }
@@ -952,10 +953,27 @@ function apiStart(){
     .catch(function(e){log('play-log',t('log.conn.fail')+e,'err');});
 }
 function apiStop(){fetch('/api/stop',{method:'POST'});}
+// Offset：直接送給 server，由 SSE 回傳後統一更新顯示
+// 不在本地自己加，避免與 SSE 推送重複造成雙倍跳動
+var _adjTimer = null;
+var _adjPending = 0;
 function adj(d){
-  fetch('/api/offset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delta:d})});
+  _adjPending += d;
+  clearTimeout(_adjTimer);
+  _adjTimer = setTimeout(function(){
+    if(_adjPending === 0) return;
+    var delta = _adjPending;
+    _adjPending = 0;
+    fetch('/api/offset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delta:delta})});
+  }, 50);
 }
-function resetOff(){adj(-S.offset);}
+function resetOff(){
+  _adjPending = 0;
+  clearTimeout(_adjTimer);
+  var delta = -S.offset;
+  if(delta === 0) return;
+  fetch('/api/offset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delta:delta})});
+}
 
 // ══ 裝置設定 ══════════════════════════════════════════════
 function loadDevices(){

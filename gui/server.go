@@ -454,14 +454,11 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 		default:
 		}
 
-		// offset 調整
+		// offset 調整：只移動播放時間基準點
+		// s.offset 已由 handleOffset 更新，這裡不重複加
 		select {
 		case delta := <-offsetCh:
-			s.mu.Lock()
-			s.offset += delta
 			start = start.Add(time.Duration(-delta) * time.Millisecond)
-			s.mu.Unlock()
-			s.broadcastState()
 		default:
 		}
 
