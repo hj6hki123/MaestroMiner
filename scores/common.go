@@ -87,6 +87,10 @@ type VTEGenerateConfig struct {
 	FlickFactor         float64
 	FlickReportInterval int64
 	SlideReportInterval int64
+	// ★ 新增抖動設定
+	TimingJitter   int64   // 時間偏移抖動幅度（ms），觸發時間在 ±TimingJitter ms 內隨機偏移
+	PositionJitter float64 // 座標抖動幅度（軌道單位，0~1），建議值 0.01~0.03
+	TapDurJitter   int64   // 按壓時長抖動幅度（ms），TapDuration ± TapDurJitter
 }
 
 type noteKind uint8

@@ -53,6 +53,11 @@ type RunRequest struct {
 	ChartPath    string     `json:"chartPath"`
 	DeviceSerial string     `json:"deviceSerial"`
 	NowPlaying   NowPlaying `json:"nowPlaying"`
+
+	// ★ 抖動設定
+	TimingJitter   int64   `json:"timingJitter"`   // 時間偏移抖動（ms），0 = 關閉
+	PositionJitter float64 `json:"positionJitter"` // 座標抖動（軌道單位），0 = 關閉
+	TapDurJitter   int64   `json:"tapDurJitter"`   // 按壓時長抖動（ms），0 = 關閉
 }
 
 type Server struct {
@@ -64,11 +69,11 @@ type Server struct {
 	offset     int
 	errMsg     string
 	nowPlaying NowPlaying
-	lastRunReq RunRequest // 儲存最後一次的請求，供中斷重打使用
+	lastRunReq RunRequest
 
 	startCh  chan struct{}
 	offsetCh chan int
-	stopCh   chan struct{} // close() 此 channel 來停止播放
+	stopCh   chan struct{}
 
 	controller controllers.Controller
 	events     []common.ViscousEventItem
@@ -180,7 +185,6 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	// 儲存這次請求，供中斷後重打使用
 	s.mu.Lock()
 	s.lastRunReq = req
 	s.mu.Unlock()
@@ -252,25 +256,20 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. 關閉 stopCh，讓 autoplayInner 立刻退出（sleep 也會中斷）
 	s.mu.Lock()
 	oldStop := s.stopCh
 	s.mu.Unlock()
 	select {
 	case <-oldStop:
-		// 已關閉，不重複
 	default:
 		close(oldStop)
 	}
 
-	// 2. 先把狀態設成 Idle，讓前端知道正在重新初始化
 	s.mu.Lock()
 	s.state = StateIdle
 	s.mu.Unlock()
 	s.broadcastState()
 
-	// 3. 重新觸發 OnRunRequest（用相同的歌曲資料 + 重新建連線）
-	//    main.go 的 goroutine 會跑完整的連線流程，最後呼叫 SetReady 回到 Ready 狀態
 	if s.OnRunRequest != nil {
 		go s.OnRunRequest(req)
 	}
@@ -385,7 +384,6 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) SetReady(ctrl controllers.Controller, events []common.ViscousEventItem, np NowPlaying) {
 	s.mu.Lock()
-	// 關閉舊 stopCh，中斷任何殘留的等待
 	select {
 	case <-s.stopCh:
 	default:
@@ -412,7 +410,6 @@ func (s *Server) SetError(msg string) {
 	s.broadcastState()
 }
 
-// WaitForStart 阻塞直到前端按「開始」或被取消
 func (s *Server) WaitForStart(ctx context.Context) bool {
 	s.mu.Lock()
 	startCh := s.startCh
@@ -436,7 +433,6 @@ func (s *Server) WaitForStart(ctx context.Context) bool {
 	}
 }
 
-// Autoplay 播放主迴圈
 func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	s.mu.Lock()
 	stopCh := s.stopCh
@@ -448,7 +444,6 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	current := 0
 
 	for current < n {
-		// 停止或換歌
 		select {
 		case <-stopCh:
 			goto done
@@ -457,8 +452,6 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 		default:
 		}
 
-		// offset 調整：只移動播放時間基準點
-		// s.offset 已由 handleOffset 更新，這裡不重複加
 		select {
 		case delta := <-offsetCh:
 			start = start.Add(time.Duration(-delta) * time.Millisecond)
@@ -475,7 +468,6 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 			continue
 		}
 
-		// sleep 期間也能響應 stop/ctx
 		if remaining > 10 {
 			select {
 			case <-stopCh:
@@ -491,30 +483,24 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 
 done:
 	s.mu.Lock()
-	// 正常播完才設 Done；被 stop/ctx 中斷時狀態已由外部設好，不覆蓋
 	if s.state == StatePlaying {
 		s.state = StateDone
-		req := s.lastRunReq // 記住目前的歌曲與設定參數
+		req := s.lastRunReq
 		s.mu.Unlock()
 		s.broadcastState()
 
-		//  新增：自動重新初始化，省去手動按「中斷」的麻煩
 		go func() {
-			// 稍微等待 1 秒，讓前端有時間顯示綠色的 "Done ✓"
 			time.Sleep(1000 * time.Millisecond)
 
 			s.mu.Lock()
-			// 確保這 1 秒內，玩家沒有手動按中斷，也沒有載入新歌
 			if s.state != StateDone || s.lastRunReq != req {
 				s.mu.Unlock()
 				return
 			}
-			// 狀態重置為 Idle，讓前端準備切換
 			s.state = StateIdle
 			s.mu.Unlock()
 			s.broadcastState()
 
-			// 自動重新執行同一首歌的載入流程 -> 最後會回到 Ready 狀態
 			if s.OnRunRequest != nil {
 				s.OnRunRequest(req)
 			}

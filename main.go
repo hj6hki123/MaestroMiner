@@ -151,12 +151,12 @@ func runGUI(conf *config.Config) {
 			}
 
 			genConfig := &scores.VTEGenerateConfig{
-				TapDuration:         10,
+				TapDuration:         12, // 原本 10，略微拉長
 				FlickDuration:       60,
-				FlickReportInterval: 5,
+				FlickReportInterval: 8, // 原本 5，降低 flick 的更新頻率
 				FlickFactor:         1.0 / 5,
 				FlickPow:            1,
-				SlideReportInterval: 10,
+				SlideReportInterval: 16, // 原本 10，降低 slide 的更新頻率
 			}
 			if pjskMode {
 				genConfig.FlickFactor = 1.0 / 6
@@ -850,12 +850,12 @@ func main() {
 	}
 
 	genConfig := &scores.VTEGenerateConfig{
-		TapDuration:         10,
+		TapDuration:         12, // 原本 10，略微拉長
 		FlickDuration:       60,
-		FlickReportInterval: 5,
+		FlickReportInterval: 8, // 原本 5，降低 flick 的更新頻率
 		FlickFactor:         1.0 / 5,
 		FlickPow:            1,
-		SlideReportInterval: 10,
+		SlideReportInterval: 16, // 原本 10，降低 slide 的更新頻率
 	}
 	if pjskMode {
 		genConfig.FlickFactor = 1.0 / 6

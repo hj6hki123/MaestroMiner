@@ -6,6 +6,7 @@ package controllers
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"net"
@@ -92,6 +93,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			"log_level=info",                    // log level
 			"audio=false",                       // disable audio sync
 			"clipboard_autosync=false",          // disable clipboard
+			"video_bit_rate=100000",             // 給一個極低的 bitrate，減少影像流量
 		)
 		if err != nil {
 			log.Fatalln("Failed to start `scrcpy-server`:", err)
@@ -129,11 +131,11 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	buf := make([]byte, 4)
 	videoSocket.Read(buf)
 	c.codecID = string(buf)
-
-	c.decoder, err = av.NewAVDecoder(c.codecID)
-	if err != nil {
-		return err
-	}
+	// c.decoder, err = av.NewAVDecoder(c.codecID)
+	// if err != nil {
+	//     return err
+	// }
+	c.decoder = nil
 
 	videoSocket.Read(buf)
 	c.width = int(binary.BigEndian.Uint32(buf))
@@ -173,24 +175,25 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			if n, err := videoSocket.Read(ptsBuf); err != nil || n != 8 {
 				break
 			}
-
 			pts := binary.BigEndian.Uint64(ptsBuf)
 
 			if n, err := videoSocket.Read(sizeBuf); err != nil || n != 4 {
 				break
 			}
-
 			size := binary.BigEndian.Uint32(sizeBuf)
 
-			data := make([]byte, size)
+			if c.decoder == nil {
+				// 不需要解碼，直接丟棄
+				io.CopyN(io.Discard, videoSocket, int64(size))
+				continue
+			}
 
+			data := make([]byte, size)
 			if n, err := videoSocket.Read(data); err != nil || n != int(size) {
 				break
 			}
-
 			c.decoder.Decode(pts, data)
 		}
-
 		c.vRunning = false
 	}()
 
