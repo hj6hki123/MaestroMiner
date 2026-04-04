@@ -11,7 +11,7 @@ Given that the original author has stopped development (I think?), I've adapted 
 ![Interface Features](/imgs/page.png "page")
 ##  What's new
 > [!CAUTION]
-> **NOTE: This method is currently not supported on the Japanese server (JP).**
+> **NOTE: JP Server> Unsupported due to detection risks affecting AP performance.**
 
 ### 🎵 Smart Song Search
 ![Keyword Search](/imgs/retrival.png "retrival")
