@@ -26,7 +26,7 @@ Given that the original author has stopped development (I think?), I've adapted 
 - **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
 ## Quick Start
-1. Place `ssm-gui.exe` in the same folder as `scrcpy-server-v3.3.1` (required for ADB backend).
+1. Extract the Package: Unzip the downloaded archive.
 2. Double-click `ssm-gui.exe`, or run it from a terminal:
    ```
    ssm-gui.exe
