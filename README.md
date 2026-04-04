@@ -11,7 +11,7 @@ Given that the original author has stopped development (I think?), I've adapted 
 ![Interface Features](/imgs/page.png "page")
 ##  What's new
 > [!CAUTION]
-> **NOTE: JP Server> Unsupported due to detection risks affecting AP performance.**
+> **JP Server: AP performance may be inconsistent due to enhanced detection mechanisms.**
 
 ### 🎵 Smart Song Search
 ![Keyword Search](/imgs/retrival.png "retrival")
