@@ -26,7 +26,7 @@ Given that the original author has stopped development (I think?), I've adapted 
 - **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
 ## Quick Start
-1. Extract the Package: Unzip the downloaded archive.
+1. Download & Extract: Get the latest release from  [Releases](https://github.com/hj6hki123/ssm-gui/releases) and extract the .zip or .7z file to your computer.
 2. Double-click `ssm-gui.exe`, or run it from a terminal:
    ```
    ssm-gui.exe
