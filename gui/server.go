@@ -399,6 +399,13 @@ func (s *Server) SetReady(ctrl controllers.Controller, events []common.ViscousEv
 	s.stopCh = make(chan struct{})
 	s.offsetCh = make(chan int, 32)
 	s.mu.Unlock()
+
+	// 在就緒時就做一次 reset，而不是在播放開始時
+	// 這樣不會影響播放的時間基準
+	if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
+		sc.ResetTouch()
+	}
+
 	s.broadcastState()
 }
 
@@ -438,13 +445,13 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	stopCh := s.stopCh
 	events := s.events
 	offsetCh := s.offsetCh
-	ctrl := s.controller
+	//ctrl := s.controller
 	s.mu.Unlock()
 
-	if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
-		sc.ResetTouch()
-		time.Sleep(50 * time.Millisecond) // 等待 50ms 讓設備反應
-	}
+	// if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
+	// 	sc.ResetTouch()
+	// 	time.Sleep(50 * time.Millisecond) // 等待 50ms 讓設備反應
+	// }
 
 	n := len(events)
 	current := 0
