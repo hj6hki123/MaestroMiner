@@ -25,6 +25,18 @@ Given that the original author has stopped development (I think?), I've adapted 
 - **Interrupt & restart instantly** — hit Stop, then Start again without re-loading anything
 - **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
+## Quick Start
+1. Place `ssm-gui.exe` in the same folder as `scrcpy-server-v3.3.1` (required for ADB backend).
+2. Double-click `ssm-gui.exe`, or run it from a terminal:
+   ```
+   ssm-gui.exe
+   ```
+3. Your browser will open automatically at `http://127.0.0.1:8765`.  
+   If it doesn't, open it manually.
+4. Follow the three steps in the UI: **Song Setup → Play Control → Start**.
+
+**_Currently supporting windows-amd64 only. Build it yourself for other OSs, or better yet, send a PR with some GitHub Actions because I'm too lazy to set them up lol._**
+
 ## Disclaimer
 This program was heavily developed with the assistance of AI. Please use it at your own discretion and feel free to report any unexpected bugs or issues.
 
