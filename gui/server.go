@@ -438,7 +438,13 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	stopCh := s.stopCh
 	events := s.events
 	offsetCh := s.offsetCh
+	ctrl := s.controller
 	s.mu.Unlock()
+
+	if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
+		sc.ResetTouch()
+		time.Sleep(50 * time.Millisecond) // 等待 50ms 讓設備反應
+	}
 
 	n := len(events)
 	current := 0
@@ -482,6 +488,12 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	}
 
 done:
+	s.mu.Lock()
+	doneCtrl := s.controller
+	s.mu.Unlock()
+	if sc, ok := doneCtrl.(*controllers.ScrcpyController); ok {
+		sc.ResetTouch()
+	}
 	s.mu.Lock()
 	if s.state == StatePlaying {
 		s.state = StateDone

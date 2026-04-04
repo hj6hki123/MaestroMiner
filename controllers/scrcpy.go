@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"time"
 
 	"github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/common"
@@ -117,6 +118,9 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	c.controlSocket = controlSocket
 
 	log.Debugln("Control socket accepted.")
+
+	// ★ 等待 scrcpy-server 在裝置端完成初始化
+	time.Sleep(500 * time.Millisecond)
 
 	err = c.device.Client().KillForward(localName, true)
 	if err != nil {
@@ -298,5 +302,15 @@ func (c *ScrcpyController) Send(data []byte) {
 
 	if n != len(data) {
 		log.Fatalf("Failed to send control data through control socket: expect to send %d bytes, but %d bytes were sent", len(data), n)
+	}
+}
+
+func (c *ScrcpyController) ResetTouch() {
+	if c.controlSocket == nil {
+		return
+	}
+	for i := 0; i < 10; i++ {
+		data := c.Encode(common.TouchUp, 0, 0, uint64(i))
+		c.controlSocket.Write(data)
 	}
 }
