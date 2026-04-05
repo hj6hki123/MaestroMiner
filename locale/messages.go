@@ -102,6 +102,26 @@ There is NO WARRANTY, to the extent permitted by law.`)
 var LanguageString string
 
 var P *message.Printer
+var fallbackPrinter *message.Printer
+
+func Sprintf(format string, args ...any) string {
+	if P == nil {
+		if fallbackPrinter == nil {
+			fallbackPrinter = message.NewPrinter(language.English)
+		}
+		return fallbackPrinter.Sprintf(format, args...)
+	}
+
+	result := P.Sprintf(format, args...)
+	if result == format {
+		if fallbackPrinter == nil {
+			fallbackPrinter = message.NewPrinter(language.English)
+		}
+		return fallbackPrinter.Sprintf(format, args...)
+	}
+
+	return result
+}
 
 func init() {
 	regSimplifiedChinese()
@@ -117,4 +137,5 @@ func init() {
 	lang, _, _ := matcher.Match(language.Make(LanguageString))
 
 	P = message.NewPrinter(lang)
+	fallbackPrinter = message.NewPrinter(language.English)
 }

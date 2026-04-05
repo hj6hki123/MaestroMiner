@@ -13,13 +13,13 @@ import (
 )
 
 func sprintf(format string, args ...any) string {
-	return locale.P.Sprintf(format, args...)
+	return locale.Sprintf(format, args...)
 }
 
 func sprints(args ...any) []string {
 	s := []string{}
 	for _, a := range args {
-		s = append(s, locale.P.Sprintf(fmt.Sprint(a)))
+		s = append(s, locale.Sprintf(fmt.Sprint(a)))
 	}
 	return s
 }

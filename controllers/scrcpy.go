@@ -91,7 +91,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			"com.genymobile.scrcpy.Server",
 			version,
 			fmt.Sprintf("scid=%s", c.sessionID), // session id
-			"log_level=info",                    // log level
+			"log_level=warn",                    // log level
 			"audio=false",                       // disable audio sync
 			"clipboard_autosync=false",          // disable clipboard
 			"video_bit_rate=100000",             // Use a very low bitrate to reduce video bandwidth usage

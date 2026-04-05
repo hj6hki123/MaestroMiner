@@ -12,6 +12,7 @@ import "C"
 
 import (
 	"errors"
+	"sync"
 	"unsafe"
 )
 
@@ -41,9 +42,14 @@ var (
 	ErrOutOfMemory      = errors.New("out of memory")
 	ErrSendPacketFailed = errors.New("failed to send packet")
 	ErrDecodeFailed     = errors.New("decode error")
+	avLogLevelOnce      sync.Once
 )
 
 func NewAVDecoder(id string) (*AVDecoder, error) {
+	avLogLevelOnce.Do(func() {
+		C.av_log_set_level(C.AV_LOG_ERROR)
+	})
+
 	var codecId uint32 = C.AV_CODEC_ID_NONE
 	needMerge := false
 	switch id {

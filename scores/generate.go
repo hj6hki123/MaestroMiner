@@ -397,7 +397,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 	for id, event := range events {
 		ms := quantify(event.start())
 
-		log.Debugf("[TARGET] ms=%dms kind=%v isFlick=%v", ms, event.kind(), event.isFlick())
+		//log.Debugf("[TARGET] ms=%dms kind=%v isFlick=%v", ms, event.kind(), event.isFlick())
 
 		switch event.kind() {
 		case tapNote, dragNote:

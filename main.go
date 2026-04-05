@@ -542,13 +542,13 @@ func (t *tui) render(full bool) {
 	}
 	t.emptyLine()
 	if !t.playing {
-		t.pcenterln(locale.P.Sprintf("ui line 0"))
+		t.pcenterln(locale.Sprintf("ui line 0"))
 		t.emptyLine()
 		t.emptyLine()
 	} else {
-		t.pcenterln(locale.P.Sprintf("Offset: %d ms", t.offset))
-		t.pcenterln(locale.P.Sprintf("ui line 1"))
-		t.pcenterln(locale.P.Sprintf("ui line 2"))
+		t.pcenterln(locale.Sprintf("Offset: %d ms", t.offset))
+		t.pcenterln(locale.Sprintf("ui line 1"))
+		t.pcenterln(locale.Sprintf("ui line 2"))
 	}
 	t.renderMutex.Unlock()
 }
