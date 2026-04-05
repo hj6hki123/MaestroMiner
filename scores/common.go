@@ -168,12 +168,12 @@ func (s *star) isLast() bool {
 func (s *star) iterSlide() iter.Seq[*star] {
 	return func(yield func(*star) bool) {
 		cur := s.head
-		nextSec := -1.0
-		if cur.next != nil {
-			nextSec = cur.next.seconds
-		}
-		//log.Debugf("[ITERSLIDE] start head=%p %.4f head.next=%p %.4f",
-			cur, cur.seconds, cur.next, nextSec)
+		// nextSec := -1.0
+		// if cur.next != nil {
+		// 	nextSec = cur.next.seconds
+		// }
+		// log.Debugf("[ITERSLIDE] start head=%p %.4f head.next=%p %.4f",
+		// 	cur, cur.seconds, cur.next, nextSec)
 
 		if !yield(cur) {
 			return
