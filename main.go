@@ -258,7 +258,7 @@ func runGUI(conf *config.Config) {
 		log.Die("GUI server 啟動失敗：", err)
 	}
 
-	fmt.Printf("\n★  SSM GUI 已啟動\n")
+	fmt.Printf("\n  SSM GUI 已啟動\n")
 	fmt.Printf("   請用瀏覽器開啟：%s\n\n", addr)
 
 	openBrowser(addr)
@@ -742,7 +742,7 @@ func main() {
 
 	log.ShowDebug(showDebugLog)
 
-	// ★ GUI mode has priority.
+	//  GUI mode has priority.
 	if guiMode {
 		const CONFIG_PATH = "./config.json"
 		conf, err := config.Load(CONFIG_PATH)

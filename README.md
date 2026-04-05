@@ -10,8 +10,6 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 Given that the original author has stopped development (I think?), I've adapted its core architecture, using AI to quickly and easily introduce a GUI interface for greater ease of use. Since my HID is unusable, I've only tested the ADB functionality. There are still a few bugs to fix, but overall, the operation is smoother.
 ![Interface Features](/imgs/page.png "page")
 ##  What's new
-> [!CAUTION]
-> **JP Server: AP performance may be inconsistent due to enhanced detection mechanisms.**
 
 ### 🎵 Smart Song Search
 ![Keyword Search](/imgs/retrival.png "retrival")
@@ -39,6 +37,8 @@ Given that the original author has stopped development (I think?), I've adapted 
 
 ## Disclaimer
 This program was heavily developed with the assistance of AI. Please use it at your own discretion and feel free to report any unexpected bugs or issues.
+> [!CAUTION]
+> **For certain SPECIAL difficulty songs, such as Game Changer, some movements have already been handled. However, patterns like left-right directions after sustained presses are still frequently missed. A preliminary solution has been implemented, and further help is welcome from anyone willing to contribute.**
 
 ## Future Projects
 1. Mobile Porting & Deployment: Porting the application to mobile devices for use on non-rooted hardware (leveraging ADB tools such as Shizuku).
