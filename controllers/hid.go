@@ -242,7 +242,11 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 		for _, event := range events.Events {
 			x, y := mapper(event.X, event.Y)
 			status := currentFingers[event.PointerID]
-			switch event.Action {
+			action, ok := common.NormalizeTouchAction(event.Action)
+			if !ok {
+				log.Fatalf("unknown touch action: %d\n", event.Action)
+			}
+			switch action {
 			case common.TouchDown:
 				if status.OnScreen {
 					log.Fatalf("pointer `%d` is already on screen", event.PointerID)
@@ -257,8 +261,6 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
 				}
 				status.OnScreen = false
-			default:
-				log.Fatalf("unknown touch action: %d\n", event.Action)
 			}
 			status.X = x
 			status.Y = y

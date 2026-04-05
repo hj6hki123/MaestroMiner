@@ -263,7 +263,11 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 		var data []byte
 		for _, event := range events.Events {
 			x, y := mapper(event.X, event.Y)
-			switch event.Action {
+			action, ok := common.NormalizeTouchAction(event.Action)
+			if !ok {
+				log.Fatalf("unknown touch action: %d\n", event.Action)
+			}
+			switch action {
 			case common.TouchDown:
 				if currentFingers[event.PointerID] {
 					log.Fatalf("pointer `%d` is already on screen", event.PointerID)
@@ -278,11 +282,9 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
 				}
 				currentFingers[event.PointerID] = false
-			default:
-				log.Fatalf("unknown touch action: %d\n", event.Action)
 			}
 
-			data = append(data, c.Encode(event.Action, int32(x), int32(y), uint64(event.PointerID))...)
+			data = append(data, c.Encode(action, int32(x), int32(y), uint64(event.PointerID))...)
 		}
 
 		result = append(result, common.ViscousEventItem{
