@@ -396,6 +396,9 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 	nodes := NewCloves[int64]()
 	for id, event := range events {
 		ms := quantify(event.start())
+
+		log.Debugf("[TARGET] ms=%dms kind=%v isFlick=%v", ms, event.kind(), event.isFlick())
+
 		switch event.kind() {
 		case tapNote, dragNote:
 			nodes.AddEvent(id, ms, ms+config.TapDuration)
@@ -404,7 +407,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		case slideNote:
 			endMs := quantify(event.seconds)
 			if !event.isFlick() {
-				nodes.AddEvent(id, ms, endMs+1)
+				nodes.AddEvent(id, ms, endMs)
 			} else {
 				nodes.AddEvent(id, ms, endMs+config.FlickDuration+config.FlickReportInterval)
 			}
@@ -430,6 +433,16 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 
 	addFlickTail := func(event *star, pointerID int, ms int64, xs float64) {
 		dx, dy := event.delta(config.FlickFactor)
+		if event.width > 1.0/6 && math.Abs(math.Cos(event.direction)) > 0.5 {
+			minTravel := event.width
+			if math.Abs(dx) < minTravel {
+				if dx >= 0 {
+					dx = minTravel
+				} else {
+					dx = -minTravel
+				}
+			}
+		}
 		factor := 1.0 / math.Pow(float64(config.FlickDuration), config.FlickPow)
 		for i := config.FlickReportInterval; i <= config.FlickDuration; i += config.FlickReportInterval {
 			rate := factor * math.Pow(float64(i), config.FlickPow)
@@ -488,13 +501,22 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		case throwNote, flickNote:
 			// Apply timing jitter
 			ms := jitterMs(quantify(event.seconds))
+			xs := event.track
+			if event.width > 1.0/6 && math.Abs(math.Cos(event.direction)) > 0.5 {
+				half := event.width / 2
+				if math.Cos(event.direction) > 0 {
+					xs = event.track - half
+				} else {
+					xs = event.track + half
+				}
+			}
 			addEvent(ms, &common.VirtualTouchEvent{
-				X:         jitterF(event.track),
+				X:         jitterF(xs),
 				Y:         0,
 				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
-			addFlickTail(event, pointerID, ms, event.track)
+			addFlickTail(event, pointerID, ms, xs)
 		case slideNote:
 			var ms int64
 			var xStart float64

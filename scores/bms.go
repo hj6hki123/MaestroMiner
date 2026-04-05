@@ -4,7 +4,6 @@
 package scores
 
 import (
-	"cmp"
 	"fmt"
 	"math"
 	"regexp"
@@ -155,6 +154,8 @@ var wavNoteTypeMap = map[string]BasicNoteType{
 	"add_long_dir_flick.wav":      NoteTypeFlick,
 	"long_end_dir_flick_l.wav":    NoteTypeFlickLeft,
 	"long_end_dir_flick_r.wav":    NoteTypeFlickRight,
+	"cont_bezier_front_a.wav":     NoteTypeSlideA,
+	"cont_bezier_front_b.wav":     NoteTypeSlideB,
 }
 
 type NoteType interface {
@@ -271,15 +272,56 @@ type bmsBPMEvent struct {
 	BPM  float64
 }
 
-type bmsRawEvent struct {
-	Channel  string
-	NoteType NoteType
-	Extra    int
+type bmsTargetKind uint8
+
+const (
+	bmsTargetTap bmsTargetKind = iota
+	bmsTargetFlick
+	bmsTargetSlideStart
+	bmsTargetSlideTick
+	bmsTargetSlideEnd
+	bmsTargetUnknown
+)
+
+type bmsTarget struct {
+	Channel           string
+	Kind              bmsTargetKind
+	NoteType          NoteType
+	Extra             int
+	MergedDirectional bool
+}
+
+func (t *bmsTarget) IsSlide() bool {
+	return t.Kind == bmsTargetSlideStart || t.Kind == bmsTargetSlideTick || t.Kind == bmsTargetSlideEnd
+}
+
+func (t *bmsTarget) IsTap() bool {
+	return t.Kind == bmsTargetTap
+}
+
+func classifyBmsTarget(noteType NoteType) bmsTargetKind {
+	switch noteType.NoteType() {
+	case NoteTypeNote:
+		return bmsTargetTap
+	case NoteTypeFlick, NoteTypeFlickLeft, NoteTypeFlickRight:
+		return bmsTargetFlick
+	case NoteTypeSlideA, NoteTypeSlideB:
+		return bmsTargetSlideStart
+	case NoteTypeSlideMiddle:
+		return bmsTargetSlideTick
+	case NoteTypeSlideEndA, NoteTypeSlideEndB,
+		NoteTypeSlideEndFlickA, NoteTypeSlideEndFlickB,
+		NoteTypeSlideEndFlickLeftA, NoteTypeSlideEndFlickRightA,
+		NoteTypeSlideEndFlickLeftB, NoteTypeSlideEndFlickRightB:
+		return bmsTargetSlideEnd
+	default:
+		return bmsTargetUnknown
+	}
 }
 
 type bmsEventsPack struct {
 	bpmEvents []float64
-	RawEvents []*bmsRawEvent
+	Targets   []*bmsTarget
 }
 
 // slideEndFlickAngle returns the angle for SlideEndFlick types. Returns -1 if not applicable.
@@ -363,7 +405,11 @@ func ParseBMS(chartText string) Chart {
 
 	finalEvents := []*star{}
 	rawEvents := map[float64]*bmsEventsPack{}
-	directionalFlickTicks := map[float64][7]byte{}
+	type directionalFlickTarget struct {
+		track int
+		kind  BasicNoteType
+	}
+	directionalFlickTargets := map[float64][]directionalFlickTarget{}
 
 	for len(lines) != 0 {
 		line := lines[0]
@@ -398,8 +444,9 @@ func ParseBMS(chartText string) Chart {
 			default:
 				wav, ok := wavs[ev.Type]
 				if !ok {
-					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &bmsRawEvent{
+					rawEvents[tick].Targets = append(rawEvents[tick].Targets, &bmsTarget{
 						Channel:  channel,
+						Kind:     bmsTargetTap,
 						NoteType: NoteTypeNote,
 					})
 					continue
@@ -408,94 +455,211 @@ func ParseBMS(chartText string) Chart {
 				noteType, err := NoteTypeOf(wav)
 				if err != nil {
 					log.Warnf("failed to get note type: %+v, treated as normal tap", err)
-					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &bmsRawEvent{
+					rawEvents[tick].Targets = append(rawEvents[tick].Targets, &bmsTarget{
 						Channel:  channel,
+						Kind:     bmsTargetTap,
 						NoteType: NoteTypeNote,
 					})
 					continue
 				}
 
-				rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &bmsRawEvent{
+				rawEvents[tick].Targets = append(rawEvents[tick].Targets, &bmsTarget{
 					Channel:  channel,
+					Kind:     classifyBmsTarget(noteType),
 					NoteType: noteType,
 				})
 
 				if noteType == NoteTypeFlickLeft || noteType == NoteTypeFlickRight {
-					if _, ok := directionalFlickTicks[tick]; !ok {
-						directionalFlickTicks[tick] = [7]byte{}
-					}
-					v := directionalFlickTicks[tick]
-					if noteType == NoteTypeFlickLeft {
-						v[TRACKS_MAP[channel]] = '<'
-					} else {
-						v[TRACKS_MAP[channel]] = '>'
-					}
-					directionalFlickTicks[tick] = v
+					directionalFlickTargets[tick] = append(directionalFlickTargets[tick], directionalFlickTarget{
+						track: TRACKS_MAP[channel],
+						kind:  noteType.NoteType(),
+					})
 				}
 			}
 		}
 	}
 
-	for tick, v := range directionalFlickTicks {
-		start := -1
-		length := 0
-		newEvents := []*bmsRawEvent{}
+	for tick, targets := range directionalFlickTargets {
+		leftCounts := [7]int{}
+		rightCounts := [7]int{}
+		for _, t := range targets {
+			switch t.kind {
+			case NoteTypeFlickLeft:
+				leftCounts[t.track]++
+			case NoteTypeFlickRight:
+				rightCounts[t.track]++
+			}
+		}
 
-		for i, c := range append(v[:], 0) {
-			if c == '>' {
-				if start == -1 {
-					start = i
-					length = 1
+		newEvents := []*bmsTarget{}
+		extractRuns := func(counts *[7]int, noteType BasicNoteType, reverse bool) {
+			for {
+				start := -1
+				length := 0
+				hasAny := false
+				if reverse {
+					for i := 6; i >= -1; i-- {
+						occupied := i >= 0 && counts[i] > 0
+						if occupied {
+							hasAny = true
+							if start == -1 {
+								start = i
+								length = 1
+							} else {
+								length++
+							}
+						} else if start != -1 {
+							newEvents = append(newEvents, &bmsTarget{
+								Channel:           simpleTracks[start],
+								Kind:              bmsTargetFlick,
+								NoteType:          noteType,
+								Extra:             length,
+								MergedDirectional: true,
+							})
+							for j := start; j > start-length; j-- {
+								counts[j]--
+							}
+							start = -1
+							length = 0
+						}
+					}
 				} else {
-					length++
+					for i := 0; i <= 7; i++ {
+						occupied := i < 7 && counts[i] > 0
+						if occupied {
+							hasAny = true
+							if start == -1 {
+								start = i
+								length = 1
+							} else {
+								length++
+							}
+						} else if start != -1 {
+							newEvents = append(newEvents, &bmsTarget{
+								Channel:           simpleTracks[start],
+								Kind:              bmsTargetFlick,
+								NoteType:          noteType,
+								Extra:             length,
+								MergedDirectional: true,
+							})
+							for j := start; j < start+length; j++ {
+								counts[j]--
+							}
+							start = -1
+							length = 0
+						}
+					}
 				}
-			} else if start != -1 {
-				newEvents = append(newEvents, &bmsRawEvent{
-					Channel:  simpleTracks[start],
-					NoteType: NoteTypeFlickRight,
-					Extra:    length,
-				})
-				start = -1
-				length = 0
+
+				if !hasAny {
+					return
+				}
 			}
 		}
 
-		rev := append([]byte{0}, v[:]...)
-		for i := 6; i >= -1; i-- {
-			c := rev[i+1]
-			if c == '<' {
-				if start == -1 {
-					start = i
-					length = 1
-				} else {
-					length++
-				}
-			} else if start != -1 {
-				newEvents = append(newEvents, &bmsRawEvent{
-					Channel:  simpleTracks[start],
-					NoteType: NoteTypeFlickLeft,
-					Extra:    length,
-				})
-				start = -1
-				length = 0
-			}
-		}
+		extractRuns(&rightCounts, NoteTypeFlickRight, false)
+		extractRuns(&leftCounts, NoteTypeFlickLeft, true)
 
-		for _, ev := range rawEvents[tick].RawEvents {
-			if ev.NoteType != NoteTypeFlickLeft && ev.NoteType != NoteTypeFlickRight {
-				newEvents = append(newEvents, ev)
-			}
-		}
-		rawEvents[tick].RawEvents = newEvents
+		rawEvents[tick].Targets = append(rawEvents[tick].Targets, newEvents...)
 	}
 
 	ticks := utils.SortedKeysOf(rawEvents)
 
 	holdTracks := [7]float64{math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN()}
-	var slideA, slideB *star
+	type slideState struct {
+		current  *star
+		lastTick float64
+	}
+
+	activeSlides := map[string][]*slideState{
+		"a": {},
+		"b": {},
+	}
 	secStart := 0.0
 	tickStart := 0.0
 	bpmEvents := []*bmsBPMEvent{}
+
+	pickNearestSlide := func(mark string, trackID float64) (int, *slideState) {
+		states := activeSlides[mark]
+		if len(states) == 0 {
+			return -1, nil
+		}
+
+		bestIdx := -1
+		bestDist := math.Inf(1)
+		for i, st := range states {
+			d := math.Abs(st.current.track - trackID)
+			if d < bestDist {
+				bestDist = d
+				bestIdx = i
+			}
+		}
+
+		if bestIdx == -1 {
+			return -1, nil
+		}
+
+		return bestIdx, states[bestIdx]
+	}
+
+	appendOrStartSlide := func(mark string, sec, trackID, width float64, tick float64) {
+		idx, st := pickNearestSlide(mark, trackID)
+		if st == nil {
+			head := newStar(sec, trackID, width).markAsHead()
+			activeSlides[mark] = append(activeSlides[mark], &slideState{current: head, lastTick: tick})
+			return
+		}
+
+		st.current = newStar(sec, trackID, width).chainsAfter(st.current)
+		st.lastTick = tick
+		activeSlides[mark][idx] = st
+	}
+
+	appendSlideMiddle := func(mark string, sec, trackID, width float64, tick float64) {
+		idx, st := pickNearestSlide(mark, trackID)
+		if st == nil {
+			return
+		}
+
+		st.current = newStar(sec, trackID, width).chainsAfter(st.current)
+		st.lastTick = tick
+		activeSlides[mark][idx] = st
+	}
+
+	endSlide := func(mark string, sec, trackID, width float64, angle int, tick float64) {
+		idx, st := pickNearestSlide(mark, trackID)
+		if st == nil {
+			return
+		}
+
+		end := newStar(sec, trackID, width).chainsAfter(st.current)
+		if angle >= 0 {
+			end = end.flickToIfOk(true, angle)
+		}
+		finalEvents = append(finalEvents, end.markAsEnd())
+		activeSlides[mark] = slices.Delete(activeSlides[mark], idx, idx+1)
+	}
+
+	resolveDirectionalFlickSpan := func(trackID float64, noteType NoteType, extra int) (float64, float64) {
+		span := max(extra, 1)
+		if span == 1 {
+			return trackID, 1.0 / 6
+		}
+
+		half := (float64(span) - 1) / 12
+		switch noteType {
+		case NoteTypeFlickRight:
+			left := trackID
+			right := trackID + 2*half
+			return (left + right) / 2, float64(span) / 6
+		case NoteTypeFlickLeft:
+			right := trackID
+			left := trackID - 2*half
+			return (left + right) / 2, float64(span) / 6
+		default:
+			return trackID, 1.0 / 6
+		}
+	}
 
 	for _, tick := range ticks {
 		pack := rawEvents[tick]
@@ -506,18 +670,62 @@ func ParseBMS(chartText string) Chart {
 			bpm = bpmValue
 		}
 
-		// End-type notes are processed last to ensure SlideMiddle/SlideA/SlideB on the same tick are handled first.
-		slices.SortFunc(pack.RawEvents, func(a, b *bmsRawEvent) int {
-			toInt := func(n NoteType) int {
-				if isSlideEnd(n.NoteType()) {
-					return 1
-				}
-				return 0
-			}
-			return cmp.Compare(toInt(a.NoteType), toInt(b.NoteType))
-		})
+		taps := []*bmsTarget{}
+		slideStarts := []*bmsTarget{}
+		slideMids := []*bmsTarget{}
+		slideEnds := []*bmsTarget{}
+		flicks := []*bmsTarget{}
+		others := []*bmsTarget{}
 
-		for _, ev := range pack.RawEvents {
+		for _, ev := range pack.Targets {
+			switch ev.Kind {
+			case bmsTargetSlideStart:
+				slideStarts = append(slideStarts, ev)
+			case bmsTargetSlideTick:
+				slideMids = append(slideMids, ev)
+			case bmsTargetTap:
+				taps = append(taps, ev)
+			case bmsTargetFlick:
+				flicks = append(flicks, ev)
+			case bmsTargetSlideEnd:
+				slideEnds = append(slideEnds, ev)
+			default:
+				others = append(others, ev)
+			}
+		}
+
+		orderedTargets := make([]*bmsTarget, 0, len(pack.Targets))
+		orderedTargets = append(orderedTargets, slideStarts...)
+		orderedTargets = append(orderedTargets, slideMids...)
+		orderedTargets = append(orderedTargets, taps...)
+		orderedTargets = append(orderedTargets, flicks...)
+		orderedTargets = append(orderedTargets, slideEnds...)
+		orderedTargets = append(orderedTargets, others...)
+
+		mergedLeftCover := [7]bool{}
+		mergedRightCover := [7]bool{}
+		for _, ev := range orderedTargets {
+			if !ev.MergedDirectional {
+				continue
+			}
+			start, ok := TRACKS_MAP[ev.Channel]
+			if !ok {
+				continue
+			}
+			length := max(ev.Extra, 1)
+			switch ev.NoteType {
+			case NoteTypeFlickRight:
+				for i := start; i < min(start+length, 7); i++ {
+					mergedRightCover[i] = true
+				}
+			case NoteTypeFlickLeft:
+				for i := start; i > max(start-length, -1); i-- {
+					mergedLeftCover[i] = true
+				}
+			}
+		}
+
+		for _, ev := range orderedTargets {
 			switch ev.Channel {
 			case ChannelNoteTrack1, ChannelNoteTrack2, ChannelNoteTrack3, ChannelNoteTrack4, ChannelNoteTrack5, ChannelNoteTrack6, ChannelNoteTrack7:
 				trackID := float64(TRACKS_MAP[ev.Channel]) / 6
@@ -530,56 +738,36 @@ func ParseBMS(chartText string) Chart {
 					finalEvents = append(finalEvents,
 						newStar(sec, trackID, 1.0/6).markAsTap().flickToIfOk(true, 90))
 				case NoteTypeFlickLeft:
+					if !ev.MergedDirectional && mergedLeftCover[TRACKS_MAP[ev.Channel]] {
+						continue
+					}
+					flickTrack, flickWidth := resolveDirectionalFlickSpan(trackID, ev.NoteType, ev.Extra)
 					finalEvents = append(finalEvents,
-						newStar(sec, trackID, 1.0/6).markAsTap().flickToIfOk(true, 180))
+						newStar(sec, flickTrack, flickWidth).markAsTap().flickToIfOk(true, 180))
 				case NoteTypeFlickRight:
+					if !ev.MergedDirectional && mergedRightCover[TRACKS_MAP[ev.Channel]] {
+						continue
+					}
+					flickTrack, flickWidth := resolveDirectionalFlickSpan(trackID, ev.NoteType, ev.Extra)
 					finalEvents = append(finalEvents,
-						newStar(sec, trackID, 1.0/6).markAsTap().flickToIfOk(true, 0))
+						newStar(sec, flickTrack, flickWidth).markAsTap().flickToIfOk(true, 0))
 				case NoteTypeSlideA:
-					if slideA == nil {
-						slideA = newStar(sec, trackID, 1.0/6).markAsTap().markAsHead()
-					} else {
-						slideA = newStar(sec, trackID, 1.0/6).chainsAfter(slideA)
-					}
+					appendOrStartSlide("a", sec, trackID, 1.0/6, tick)
 				case NoteTypeSlideB:
-					if slideB == nil {
-						slideB = newStar(sec, trackID, 1.0/6).markAsTap().markAsHead()
-					} else {
-						slideB = newStar(sec, trackID, 1.0/6).chainsAfter(slideB)
-					}
+					appendOrStartSlide("b", sec, trackID, 1.0/6, tick)
 				case NoteTypeSlideMiddle:
-					if slideA != nil {
-						slideA = newStar(sec, trackID, 1.0/6).chainsAfter(slideA)
-					}
-					if slideB != nil {
-						slideB = newStar(sec, trackID, 1.0/6).chainsAfter(slideB)
-					}
+					appendSlideMiddle("a", sec, trackID, 1.0/6, tick)
+					appendSlideMiddle("b", sec, trackID, 1.0/6, tick)
 				case NoteTypeSlideEndA:
-					if slideA != nil {
-						finalEvents = append(finalEvents,
-							newStar(sec, trackID, 1.0/6).chainsAfter(slideA).markAsEnd())
-						slideA = nil
-					}
+					endSlide("a", sec, trackID, 1.0/6, -1, tick)
 				case NoteTypeSlideEndB:
-					if slideB != nil {
-						finalEvents = append(finalEvents,
-							newStar(sec, trackID, 1.0/6).chainsAfter(slideB).markAsEnd())
-						slideB = nil
-					}
+					endSlide("b", sec, trackID, 1.0/6, -1, tick)
 				case NoteTypeSlideEndFlickA, NoteTypeSlideEndFlickLeftA, NoteTypeSlideEndFlickRightA:
-					if slideA != nil {
-						angle := slideEndFlickAngle(ev.NoteType.(BasicNoteType))
-						finalEvents = append(finalEvents,
-							newStar(sec, trackID, 1.0/6).chainsAfter(slideA).flickToIfOk(true, angle).markAsEnd())
-						slideA = nil
-					}
+					angle := slideEndFlickAngle(ev.NoteType.(BasicNoteType))
+					endSlide("a", sec, trackID, 1.0/6, angle, tick)
 				case NoteTypeSlideEndFlickB, NoteTypeSlideEndFlickLeftB, NoteTypeSlideEndFlickRightB:
-					if slideB != nil {
-						angle := slideEndFlickAngle(ev.NoteType.(BasicNoteType))
-						finalEvents = append(finalEvents,
-							newStar(sec, trackID, 1.0/6).chainsAfter(slideB).flickToIfOk(true, angle).markAsEnd())
-						slideB = nil
-					}
+					angle := slideEndFlickAngle(ev.NoteType.(BasicNoteType))
+					endSlide("b", sec, trackID, 1.0/6, angle, tick)
 				default:
 					log.Warnf("unknown note type %s on note track\n", ev.NoteType)
 				}
@@ -627,69 +815,31 @@ func ParseBMS(chartText string) Chart {
 				case SpecialSlideNoteType:
 					switch nt.mark {
 					case "a":
-						if slideA == nil {
-							slideA = newStar(sec, trackID+nt.offset/6, 1.0/6).markAsTap().markAsHead()
-						} else {
-							slideA = newStar(sec, trackID+nt.offset/6, 1.0/6).chainsAfter(slideA)
-						}
+						appendOrStartSlide("a", sec, trackID+nt.offset/6, 1.0/6, tick)
 					case "b":
-						if slideB == nil {
-							slideB = newStar(sec, trackID+nt.offset/6, 1.0/6).markAsTap().markAsHead()
-						} else {
-							slideB = newStar(sec, trackID+nt.offset/6, 1.0/6).chainsAfter(slideB)
-						}
+						appendOrStartSlide("b", sec, trackID+nt.offset/6, 1.0/6, tick)
 					default:
 						log.Warnf("unknown mark %s\n", nt.mark)
 					}
 				case BasicNoteType:
 					switch nt {
 					case NoteTypeSlideA:
-						if slideA == nil {
-							slideA = newStar(sec, trackID, 1.0/6).markAsTap().markAsHead()
-						} else {
-							slideA = newStar(sec, trackID, 1.0/6).chainsAfter(slideA)
-						}
+						appendOrStartSlide("a", sec, trackID, 1.0/6, tick)
 					case NoteTypeSlideB:
-						if slideB == nil {
-							slideB = newStar(sec, trackID, 1.0/6).markAsTap().markAsHead()
-						} else {
-							slideB = newStar(sec, trackID, 1.0/6).chainsAfter(slideB)
-						}
+						appendOrStartSlide("b", sec, trackID, 1.0/6, tick)
 					case NoteTypeSlideMiddle:
-						if slideA != nil {
-							slideA = newStar(sec, trackID, 1.0/6).chainsAfter(slideA)
-						}
-						if slideB != nil {
-							slideB = newStar(sec, trackID, 1.0/6).chainsAfter(slideB)
-						}
+						appendSlideMiddle("a", sec, trackID, 1.0/6, tick)
+						appendSlideMiddle("b", sec, trackID, 1.0/6, tick)
 					case NoteTypeSlideEndA:
-						if slideA != nil {
-							finalEvents = append(finalEvents,
-								newStar(sec, trackID, 1.0/6).chainsAfter(slideA).markAsEnd())
-							slideA = nil
-						}
+						endSlide("a", sec, trackID, 1.0/6, -1, tick)
 					case NoteTypeSlideEndB:
-						if slideB != nil {
-							finalEvents = append(finalEvents,
-								newStar(sec, trackID, 1.0/6).chainsAfter(slideB).markAsEnd())
-							slideB = nil
-						}
+						endSlide("b", sec, trackID, 1.0/6, -1, tick)
 					case NoteTypeSlideEndFlickA, NoteTypeSlideEndFlickLeftA, NoteTypeSlideEndFlickRightA:
-					
-						if slideA != nil {
-							angle := slideEndFlickAngle(nt)
-							finalEvents = append(finalEvents,
-								newStar(sec, trackID, 1.0/6).chainsAfter(slideA).flickToIfOk(true, angle).markAsEnd())
-							slideA = nil
-						}
+						angle := slideEndFlickAngle(nt)
+						endSlide("a", sec, trackID, 1.0/6, angle, tick)
 					case NoteTypeSlideEndFlickB, NoteTypeSlideEndFlickLeftB, NoteTypeSlideEndFlickRightB:
-						if slideB != nil {
-							angle := slideEndFlickAngle(nt)
-						
-							finalEvents = append(finalEvents,
-								newStar(sec, trackID, 1.0/6).chainsAfter(slideB).flickToIfOk(true, angle).markAsEnd())
-							slideB = nil
-						}
+						angle := slideEndFlickAngle(nt)
+						endSlide("b", sec, trackID, 1.0/6, angle, tick)
 					default:
 						log.Warnf("%s should not appear on special channel %s (tick = %f)", ev.NoteType, ev.Channel, tick)
 					}
@@ -700,11 +850,11 @@ func ParseBMS(chartText string) Chart {
 		}
 	}
 
-	if slideA != nil {
-		finalEvents = append(finalEvents, slideA.markAsEnd())
+	for _, st := range activeSlides["a"] {
+		finalEvents = append(finalEvents, st.current.markAsEnd())
 	}
-	if slideB != nil {
-		finalEvents = append(finalEvents, slideB.markAsEnd())
+	for _, st := range activeSlides["b"] {
+		finalEvents = append(finalEvents, st.current.markAsEnd())
 	}
 
 	return finalEvents
