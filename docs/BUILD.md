@@ -1,6 +1,6 @@
 # 构建
 1. 安装Go 1.24+
-2. 安装gcc（推荐9.x+，Windows 用 MSYS2 + MinGW）
+2. 安装gcc(推荐9.x+，Windows 用 MSYS2 + MinGW)
 3. 安装pkgconf
 4. 安装依赖库：`libusb-1.0`、`ffmpeg`、`libavcodec`、`libavformat`、`libavutil`
     - 部分系统可能打包在一起，注意安装`-dev`/`-devel`包

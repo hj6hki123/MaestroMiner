@@ -27,11 +27,11 @@ var staticFiles embed.FS
 type PlayState int
 
 const (
-	StateIdle    PlayState = iota // 0 閒置
-	StateReady                    // 1 就緒等待開始
-	StatePlaying                  // 2 播放中
-	StateDone                     // 3 播放完畢
-	StateError                    // 4 錯誤
+	StateIdle    PlayState = iota // 0 Idle
+	StateReady                    // 1 Ready (waiting to start)
+	StatePlaying                  // 2 Playing
+	StateDone                     // 3 Finished
+	StateError                    // 4 Error
 )
 
 type NowPlaying struct {
@@ -54,10 +54,10 @@ type RunRequest struct {
 	DeviceSerial string     `json:"deviceSerial"`
 	NowPlaying   NowPlaying `json:"nowPlaying"`
 
-	// ★ 抖動設定
-	TimingJitter   int64   `json:"timingJitter"`   // 時間偏移抖動（ms），0 = 關閉
-	PositionJitter float64 `json:"positionJitter"` // 座標抖動（軌道單位），0 = 關閉
-	TapDurJitter   int64   `json:"tapDurJitter"`   // 按壓時長抖動（ms），0 = 關閉
+	// Jitter settings
+	TimingJitter   int64   `json:"timingJitter"`   // Time jitter (ms), 0 = disabled
+	PositionJitter float64 `json:"positionJitter"` // Position jitter (track units), 0 = disabled
+	TapDurJitter   int64   `json:"tapDurJitter"`   // Tap duration jitter (ms), 0 = disabled
 }
 
 type Server struct {
@@ -366,7 +366,7 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 		Path string `json:"path"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
-		http.Error(w, "需要提供 path 欄位", http.StatusBadRequest)
+		http.Error(w, "path field is required", http.StatusBadRequest)
 		return
 	}
 	if s.OnExtractRequest == nil {
@@ -374,13 +374,13 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.OnExtractRequest(body.Path); err != nil {
-		http.Error(w, "解包失敗："+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Extraction failed:"+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-// ─── 播放狀態控制 ───────────────────────────────
+// ─── Playback state control ───────────────────────────────
 
 func (s *Server) SetReady(ctrl controllers.Controller, events []common.ViscousEventItem, np NowPlaying) {
 	s.mu.Lock()
@@ -400,8 +400,7 @@ func (s *Server) SetReady(ctrl controllers.Controller, events []common.ViscousEv
 	s.offsetCh = make(chan int, 32)
 	s.mu.Unlock()
 
-	// 在就緒時就做一次 reset，而不是在播放開始時
-	// 這樣不會影響播放的時間基準
+	// Perform a reset when ready instead of at playback start
 	if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
 		sc.ResetTouch()
 	}
@@ -529,7 +528,7 @@ done:
 	}
 }
 
-// ─── 啟動 ──────────────────────────────────────
+// ─── Startup ──────────────────────────────────────
 
 func (s *Server) Start() (string, error) {
 	staticFS, err := fs.Sub(staticFiles, "static")

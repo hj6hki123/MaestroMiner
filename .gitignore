@@ -1,4 +1,5 @@
 *.json
+!gui/static/locales/*.json
 /*.svg
 /assets/
 /data/

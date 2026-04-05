@@ -4,29 +4,29 @@
 
 Release 版本是預先編譯好的 .exe + DLL，你無法直接「修改」它。  
 要加 GUI 功能，需要：
-1. 安裝編譯環境（Go + MSYS2/MinGW）
+1. 安裝編譯環境(Go + MSYS2/MinGW)
 2. 複製新增的檔案到 ssm 原始碼目錄
 3. 執行編譯指令
 4. 把原本的 DLL 複製到新 .exe 旁邊
 
 ---
 
-## 第一步：安裝編譯環境（Windows）
+## 第一步：安裝編譯環境(Windows)
 
 ### 1-1. 安裝 Go
 
-前往 https://go.dev/dl/ 下載 Windows amd64 版本（.msi 安裝檔）。
+前往 https://go.dev/dl/ 下載 Windows amd64 版本(.msi 安裝檔)。
 
-安裝後，開新的命令提示字元（CMD），確認：
+安裝後，開新的命令提示字元(CMD)，確認：
 ```
 go version
 ```
 應該看到類似 `go version go1.24.x windows/amd64`
 
-### 1-2. 安裝 MSYS2（提供 gcc、libusb、ffmpeg）
+### 1-2. 安裝 MSYS2(提供 gcc、libusb、ffmpeg)
 
 1. 前往 https://www.msys2.org 下載安裝程式，一路按 Next  
-2. 安裝完成後，開啟 **MSYS2 UCRT64** 終端機（不是 MSYS2 MSYS）
+2. 安裝完成後，開啟 **MSYS2 UCRT64** 終端機(不是 MSYS2 MSYS)
 3. 執行以下指令安裝套件：
 
 ```bash
@@ -45,12 +45,12 @@ pacman -S \
   mingw-w64-x86_64-ntldd
 ```
 
-> 注意：原始 CI 用的是 `mingw-w64-x86_64-*`（MINGW64），  
+> 注意：原始 CI 用的是 `mingw-w64-x86_64-*`(MINGW64)，  
 > 如果你用的是 UCRT64，把前綴換成 `mingw-w64-ucrt-x86_64-*`
 
 ### 1-3. 確認 gcc 可以被 Go 找到
 
-**方法 A（推薦）**：把 MinGW 的 bin 加入 PATH
+**方法 A(推薦)**：把 MinGW 的 bin 加入 PATH
 
 在 Windows 搜尋「環境變數」→「使用者的環境變數」→ Path → 新增：
 ```
@@ -63,7 +63,7 @@ gcc --version
 ```
 應看到版本資訊。
 
-**方法 B**：每次編譯前在 CMD 手動 set PATH（臨時）：
+**方法 B**：每次編譯前在 CMD 手動 set PATH(臨時)：
 ```
 set PATH=C:\msys64\mingw64\bin;%PATH%
 ```
@@ -85,7 +85,7 @@ cd ssm
 
 ```
 ssm/
-├── main.go                   ← 替換（新增 --gui flag）
+├── main.go                   ← 替換(新增 --gui flag)
 ├── openbrowser_windows.go    ← 新增
 ├── openbrowser_unix.go       ← 新增
 └── gui/                      ← 新增整個目錄
@@ -94,7 +94,7 @@ ssm/
         └── index.html
 ```
 
-**複製指令（假設你把本包解壓到 C:\ssm-gui-patch）：**
+**複製指令(假設你把本包解壓到 C:\ssm-gui-patch)：**
 
 ```
 # 替換 main.go
@@ -115,7 +115,7 @@ copy C:\ssm-gui-patch\gui\static\index.html .\gui\static\
 
 ## 第四步：編譯
 
-在 ssm 目錄下，開 CMD（已確認 gcc 在 PATH）：
+在 ssm 目錄下，開 CMD(已確認 gcc 在 PATH)：
 
 ```
 set CGO_ENABLED=1
@@ -141,7 +141,7 @@ go build -ldflags "-X main.SSM_VERSION=gui-custom" -o ssm-gui.exe
 copy C:\ssm-release\*.dll .
 ```
 
-或者用 ntldd 自動抓（需在 MSYS2 UCRT64 下）：
+或者用 ntldd 自動抓(需在 MSYS2 UCRT64 下)：
 
 ```bash
 mkdir build
@@ -155,7 +155,7 @@ done
 
 ## 第六步：使用
 
-### 原本的 CLI 模式（完全不變）
+### 原本的 CLI 模式(完全不變)
 ```
 ssm-gui.exe -d expert -n 325
 ```
@@ -201,7 +201,7 @@ SSE 連線需要瀏覽器支援，建議使用 Chrome / Edge / Firefox 最新版
 
 ```
 gui/server.go       — HTTP server + SSE 廣播 + 所有 API endpoint
-gui/static/index.html — 前端 UI（單一 HTML 打包，無需 npm）
+gui/static/index.html — 前端 UI(單一 HTML 打包，無需 npm)
 main.go             — 加入 --gui / --port flag，注入 callback
 openbrowser_*.go    — 跨平台自動開瀏覽器
 ```
@@ -212,9 +212,9 @@ GET  /              → 前端 HTML
 GET  /api/events    → SSE 即時狀態推送
 GET  /api/status    → 當前狀態 JSON
 POST /api/run       → 送入設定，開始準備播放
-POST /api/start     → 觸發開始（等同按 ENTER）
+POST /api/start     → 觸發開始(等同按 ENTER)
 POST /api/offset    → 調整時間偏移 { "delta": 10 }
-POST /api/stop      → 中斷播放（等同 Ctrl-C）
+POST /api/stop      → 中斷播放(等同 Ctrl-C)
 GET  /api/device    → 取得裝置設定
 POST /api/device    → 儲存裝置尺寸
 POST /api/extract   → 解包素材 { "path": "..." }

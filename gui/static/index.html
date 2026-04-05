@@ -31,7 +31,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .sidebar-top{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;margin-bottom:.5rem}
 .logo{font-size:16px;font-weight:700;letter-spacing:-.3px}
 .logo em{color:var(--blue);font-style:normal}
-/* ── 語言選擇器 ── */
+/* ── language picker ── */
 .lang-picker{position:relative;flex-shrink:0}
 .lang-btn{display:flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);color:var(--text);cursor:pointer;font-size:12px;font-family:inherit;transition:all .12s;white-space:nowrap}
 .lang-btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-bg)}
@@ -49,7 +49,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .lang-opt .lo-info{display:flex;flex-direction:column;gap:1px}
 .lang-opt .lo-name{font-weight:500}
 .lang-opt .lo-native{font-size:10px;color:var(--hint)}
-/* ── nav ── */
+/* ── navigation ── */
 .nav-sec{font-size:10px;font-weight:600;color:var(--hint);letter-spacing:.08em;text-transform:uppercase;padding:8px 8px 3px;margin-top:.25rem}
 .nav-btn{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r);font-size:13px;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .12s}
 .nav-btn:hover{background:var(--blue-bg);color:var(--blue)}
@@ -425,7 +425,7 @@ kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border2);border-
 </div>
 
 <script>
-// ══ i18n 引擎 ══════════════════════════════════════════════
+// ══ i18n engine ════════════════════════════════════════════
 var I18n=(function(){
   var langs={};
   var langMeta=[
@@ -524,7 +524,7 @@ function closeLangMenu(){
 }
 document.addEventListener('click',function(e){if(!e.target.closest('#lang-picker'))closeLangMenu();});
 
-// ══ 抖動 ═══════════════════════════════════════════════════
+// ══ jitter ═════════════════════════════════════════════════
 var JITTER_POS_MAP=[0,0.02,0.04,0.06,0.08,0.10,0.12,0.15,0.18,0.22,0.25];
 
 function jitterRealValue(key,raw){
@@ -543,7 +543,7 @@ function renderJitter(key){
 function renderAllJitters(){['timing','position','tapDur'].forEach(renderJitter);}
 function onJitter(key){renderJitter(key);}
 
-// ══ 狀態 ═══════════════════════════════════════════════════
+// ══ state ══════════════════════════════════════════════════
 var S={backend:'hid',diff:3,orient:'left',mode:'bang',state:0,offset:0,songId:0,songData:null,db:null,dropIdx:-1,_lastLogState:-1};
 var DN=['easy','normal','hard','expert','special'];
 var DL_BANG=['EASY','NORMAL','HARD','EXPERT','SPECIAL'];
@@ -587,7 +587,7 @@ function setDiffAvail(avail){
   });
 }
 
-// ══ 搜尋 ═══════════════════════════════════════════════════
+// ══ search ═════════════════════════════════════════════════
 var qTimer=null;
 function onQInput(){
   var v=document.getElementById('q').value;
@@ -733,7 +733,7 @@ function updatePlayCard(np){
   document.getElementById('pn-lv-big').textContent=np.diffLevel?'Lv.'+np.diffLevel:'';
 }
 
-// ══ 鍵盤 ═══════════════════════════════════════════════════
+// ══ keyboard ═══════════════════════════════════════════════
 document.addEventListener('keydown',function(e){
   if(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')return;
   if(!document.getElementById('pane-play').classList.contains('active'))return;
@@ -779,7 +779,7 @@ var _adjTimer=null,_adjPending=0;
 function adj(d){_adjPending+=d;clearTimeout(_adjTimer);_adjTimer=setTimeout(function(){if(_adjPending===0)return;var delta=_adjPending;_adjPending=0;fetch('/api/offset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delta:delta})});},50);}
 function resetOff(){_adjPending=0;clearTimeout(_adjTimer);var delta=-S.offset;if(delta===0)return;fetch('/api/offset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delta:delta})});}
 
-// ══ 裝置 ═══════════════════════════════════════════════════
+// ══ devices ════════════════════════════════════════════════
 function loadDevices(){
   fetch('/api/device').then(function(r){return r.json();}).then(function(d){
     var list=document.getElementById('dev-list');
@@ -794,7 +794,7 @@ function saveDevice(){
     .then(function(r){if(r.ok){document.getElementById('dc-hint').textContent=t('dc.hint.saved');loadDevices();}else document.getElementById('dc-hint').textContent=t('dc.hint.fail');});
 }
 
-// ══ 解包 ═══════════════════════════════════════════════════
+// ══ extraction ═════════════════════════════════════════════
 function doExtract(){
   var p=document.getElementById('ex-path').value.trim();
   if(!p){log('ex-log',t('log.no.song'),'err');return;}
@@ -804,7 +804,7 @@ function doExtract(){
     .catch(function(e){log('ex-log',t('log.conn.fail')+e,'err');});
 }
 
-// ══ 初始化 ══════════════════════════════════════════════════
+// ══ initialization ═════════════════════════════════════════
 I18n.init();
 </script>
 </body>

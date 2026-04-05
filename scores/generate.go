@@ -17,9 +17,9 @@ import (
 )
 
 func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVirtualEvents {
-	// ── 抖動 helper ────────────────────────────────────────────────────────────
+	// ── Jitter helpers ────────────────────────────────────────────────────────────
 
-	// 時間偏移抖動：在 ±TimingJitter ms 內均勻隨機
+	// Time jitter: uniformly random within ±TimingJitter ms
 	jitterMs := func(base int64) int64 {
 		if config.TimingJitter <= 0 {
 			return base
@@ -28,7 +28,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		return base + rand.Int63n(half*2+1) - half
 	}
 
-	// 座標抖動：在 ±PositionJitter 軌道單位內均勻隨機
+	// Position jitter: uniformly random within
 	jitterF := func(base float64) float64 {
 		if config.PositionJitter <= 0 {
 			return base
@@ -36,7 +36,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		return base + (rand.Float64()*2-1)*config.PositionJitter
 	}
 
-	// 按壓時長：TapDuration ± TapDurJitter，最小保留 1ms
+	// Tap duration: TapDuration ± TapDurJitter,
 	tapDur := func() int64 {
 		if config.TapDurJitter <= 0 {
 			return config.TapDuration
@@ -48,8 +48,6 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		}
 		return dur
 	}
-
-	// ── 以下為原始邏輯（未修改的部分） ─────────────────────────────────────────
 
 	// sort events by start time
 	slices.SortFunc(events, func(a, b *star) int {
@@ -375,9 +373,11 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			for _, conn := range connections {
 				from := noteNodes[conn.from]
 				to := noteNodes[conn.to]
-				if !from.isSlide() {
-					from.markAsHead()
+				if from.head != nil {
+					// todo:fix
+					continue
 				}
+				from.markAsHead()
 				to.chainsAfter(from)
 				toBeDeleted.Add(from)
 			}
@@ -452,7 +452,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		pointerID := pointers[idx]
 		switch event.kind() {
 		case tapNote:
-			// ★ 套用時間抖動與座標抖動
+			// Apply timing jitter
 			ms := jitterMs(quantify(event.seconds))
 			x := jitterF(event.track)
 			dur := tapDur()
@@ -469,7 +469,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				PointerID: pointerID,
 			})
 		case dragNote:
-			// ★ 套用時間抖動與座標抖動
+			// Apply timing jitter
 			ms := jitterMs(quantify(event.seconds))
 			x := jitterF(event.track)
 			dur := tapDur()
@@ -486,7 +486,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				PointerID: pointerID,
 			})
 		case throwNote, flickNote:
-			// ★ 套用時間抖動
+			// Apply timing jitter
 			ms := jitterMs(quantify(event.seconds))
 			addEvent(ms, &common.VirtualTouchEvent{
 				X:         jitterF(event.track),
@@ -498,55 +498,46 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		case slideNote:
 			var ms int64
 			var xStart float64
+			var lastStep *star
 
 			first := true
 			for step := range event.iterSlide() {
 				if first {
-					// ★ slide 起點套用時間抖動與座標抖動
 					ms = jitterMs(quantify(step.seconds))
 					xStart = jitterF(step.track)
 					addEvent(ms, &common.VirtualTouchEvent{
-						X:         xStart,
-						Y:         0,
-						Action:    common.TouchDown,
-						PointerID: pointerID,
+						X: xStart, Y: 0, Action: common.TouchDown, PointerID: pointerID,
 					})
 					first = false
+					lastStep = step
+					//log.Debugf("[ITER] first step.seconds=%.4f isEnd=%v dir=%.4f", step.seconds, step.isEnd(), step.direction)
 					continue
 				}
-
 				nextMs := quantify(step.seconds)
 				for i := ms + config.SlideReportInterval; i < nextMs; i += config.SlideReportInterval {
 					factor := float64(i-ms) / float64(nextMs-ms)
 					currentX := xStart + (step.track-xStart)*factor
 					addEvent(i, &common.VirtualTouchEvent{
-						X:         currentX,
-						Y:         0,
-						Action:    common.TouchMove,
-						PointerID: pointerID,
+						X: currentX, Y: 0, Action: common.TouchMove, PointerID: pointerID,
 					})
 				}
 				ms = nextMs
-				xStart = jitterF(step.track) // ★ slide 各節點座標抖動
+				xStart = jitterF(step.track)
 				addEvent(ms, &common.VirtualTouchEvent{
-					X:         xStart,
-					Y:         0,
-					Action:    common.TouchMove,
-					PointerID: pointerID,
+					X: xStart, Y: 0, Action: common.TouchMove, PointerID: pointerID,
 				})
+				lastStep = step
+				//log.Debugf("[ITER] first step.seconds=%.4f isEnd=%v dir=%.4f", step.seconds, step.isEnd(), step.direction)
 			}
 
-			if !event.isFlick() {
+			if lastStep == nil || !lastStep.isFlick() {
 				addEvent(ms+1, &common.VirtualTouchEvent{
-					X:         xStart,
-					Y:         0,
-					Action:    common.TouchUp,
-					PointerID: pointerID,
+					X: xStart, Y: 0, Action: common.TouchUp, PointerID: pointerID,
 				})
 				continue
 			}
 
-			addFlickTail(event, pointerID, ms, xStart)
+			addFlickTail(lastStep, pointerID, ms, xStart)
 		}
 	}
 

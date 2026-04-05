@@ -9,6 +9,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/kvarenzn/ssm/log"
 )
 
 type SimpleRawEvent struct {
@@ -87,10 +89,10 @@ type VTEGenerateConfig struct {
 	FlickFactor         float64
 	FlickReportInterval int64
 	SlideReportInterval int64
-	// ★ 新增抖動設定
-	TimingJitter   int64   // 時間偏移抖動幅度（ms），觸發時間在 ±TimingJitter ms 內隨機偏移
-	PositionJitter float64 // 座標抖動幅度（軌道單位，0~1），建議值 0.01~0.03
-	TapDurJitter   int64   // 按壓時長抖動幅度（ms），TapDuration ± TapDurJitter
+	//  Jitter settings
+	TimingJitter   int64   // Time jitter range (ms)
+	PositionJitter float64 // Position jitter
+	TapDurJitter   int64   // Tap duration jitter
 }
 
 type noteKind uint8
@@ -166,6 +168,13 @@ func (s *star) isLast() bool {
 func (s *star) iterSlide() iter.Seq[*star] {
 	return func(yield func(*star) bool) {
 		cur := s.head
+		nextSec := -1.0
+		if cur.next != nil {
+			nextSec = cur.next.seconds
+		}
+		//log.Debugf("[ITERSLIDE] start head=%p %.4f head.next=%p %.4f",
+			cur, cur.seconds, cur.next, nextSec)
+
 		if !yield(cur) {
 			return
 		}
@@ -188,6 +197,11 @@ func (s *star) iterSlide() iter.Seq[*star] {
 }
 
 func (s *star) chainsAfter(prev *star) *star {
+	if prev.next != nil {
+		log.Warnf("[CHAIN] overwriting prev.next! prev.seconds=%.4f old_next.seconds=%.4f new.seconds=%.4f",
+			prev.seconds, prev.next.seconds, s.seconds)
+	}
+	//log.Debugf("[CHAIN_SET] prev=%p %.4f → new=%p %.4f", prev, prev.seconds, s, s.seconds)
 	s.prev = prev
 	s.head = prev.head
 	prev.next = s

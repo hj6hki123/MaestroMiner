@@ -1,13 +1,6 @@
 // Copyright (C) 2024, 2025 kvarenzn
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// 這是修改後的 main.go，在原始版本加上 --gui / --port 旗標
-// 修改範圍：
-//   1. 新增 guiMode, guiPort 兩個 flag
-//   2. 新增 runGUI() function
-//   3. main() 最末加上 GUI 分支
-//   4. config.Config.askFor() 改為可從外部注入（見 config/config.go 的修改說明）
-
 package main
 
 import (
@@ -32,7 +25,7 @@ import (
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/db"
-	"github.com/kvarenzn/ssm/gui" // ← 新增
+	"github.com/kvarenzn/ssm/gui" // newly added
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/scores"
 	"github.com/kvarenzn/ssm/stage"
@@ -44,7 +37,7 @@ import (
 
 var SSM_VERSION = "(unknown)"
 
-// flags（原有的）
+// original flags
 var (
 	backend      string
 	songID       int
@@ -58,7 +51,6 @@ var (
 	pjskMode     bool
 )
 
-// ★ 新增 GUI flags
 var (
 	guiMode bool
 	guiPort int
@@ -72,12 +64,12 @@ const (
 )
 
 // ─────────────────────────────────────────────
-// GUI 模式主流程
+// GUI mode main flow
 // ─────────────────────────────────────────────
 func runGUI(conf *config.Config) {
 	srv := gui.NewServer(guiPort, conf)
 
-	// 確保每次只有一個播放 goroutine 在跑
+	// Ensure only one playback goroutine runs at a time.
 	var (
 		runMu         sync.Mutex
 		currentCancel context.CancelFunc
@@ -85,7 +77,7 @@ func runGUI(conf *config.Config) {
 	)
 
 	runOnce := func(req gui.RunRequest) {
-		// 取消舊的，等它結束（含 scrcpy.Close）
+		// Cancel the previous run and wait for it to finish (including scrcpy.Close).
 		runMu.Lock()
 		if currentCancel != nil {
 			currentCancel()
@@ -278,7 +270,7 @@ func runGUI(conf *config.Config) {
 }
 
 // ─────────────────────────────────────────────
-// 以下為原有函式（未修改）
+// The following are original functions (unchanged).
 // ─────────────────────────────────────────────
 
 func downloadServer() {
@@ -737,12 +729,11 @@ func main() {
 	flag.BoolVar(&showDebugLog, "g", false, p.Sprintf("usage.g"))
 	flag.BoolVar(&showVersion, "v", false, p.Sprintf("usage.v"))
 
-	// ★ 新增 GUI flags
-	flag.BoolVar(&guiMode, "gui", false, "啟動圖形化介面（瀏覽器 GUI）")
-	flag.IntVar(&guiPort, "port", 8765, "GUI 使用的 port（預設 8765）")
+	flag.BoolVar(&guiMode, "gui", false, "啟動圖形化介面(瀏覽器 GUI)")
+	flag.IntVar(&guiPort, "port", 8765, "GUI 使用的 port(預設 8765)")
 
 	flag.Parse()
-	//如果沒有加上任何參數，自動把 guiMode 設為 true
+	// If no arguments are provided, enable GUI mode by default.
 	if len(os.Args) == 1 {
 		guiMode = true
 	}
@@ -751,7 +742,7 @@ func main() {
 
 	log.ShowDebug(showDebugLog)
 
-	// ★ GUI 模式優先
+	// ★ GUI mode has priority.
 	if guiMode {
 		const CONFIG_PATH = "./config.json"
 		conf, err := config.Load(CONFIG_PATH)
@@ -762,7 +753,7 @@ func main() {
 		return
 	}
 
-	// ─── 以下全部與原版相同 ───
+	// ─── Everything below is the same as the original version ───
 
 	if extract != "" {
 		db, err := Extract(extract, func(path string) bool {

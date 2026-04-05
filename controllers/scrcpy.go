@@ -94,7 +94,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			"log_level=info",                    // log level
 			"audio=false",                       // disable audio sync
 			"clipboard_autosync=false",          // disable clipboard
-			"video_bit_rate=100000",             // 給一個極低的 bitrate，減少影像流量
+			"video_bit_rate=100000",             // Use a very low bitrate to reduce video bandwidth usage
 		)
 		if err != nil {
 			log.Fatalln("Failed to start `scrcpy-server`:", err)
@@ -119,7 +119,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 
 	log.Debugln("Control socket accepted.")
 
-	// ★ 等待 scrcpy-server 在裝置端完成初始化
+	// Wait for scrcpy-server to finish initialization on the device
 	time.Sleep(500 * time.Millisecond)
 
 	err = c.device.Client().KillForward(localName, true)
@@ -187,7 +187,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			size := binary.BigEndian.Uint32(sizeBuf)
 
 			if c.decoder == nil {
-				// 不需要解碼，直接丟棄
+				// No decoding needed, discard directly
 				io.CopyN(io.Discard, videoSocket, int64(size))
 				continue
 			}
@@ -295,6 +295,14 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 }
 
 func (c *ScrcpyController) Send(data []byte) {
+	// for i := 0; i < len(data); i += 32 {
+	// 	chunk := data[i : i+32]
+	// 	action := chunk[1]
+	// 	x := int(binary.BigEndian.Uint32(chunk[10:]))
+	// 	y := int(binary.BigEndian.Uint32(chunk[14:]))
+	// 	pid := binary.BigEndian.Uint64(chunk[2:])
+	// 	log.Debugf("[TOUCH] action=%d ptr=%d x=%d y=%d", action, pid, x, y)
+	// }
 	n, err := c.controlSocket.Write(data)
 	if err != nil {
 		log.Fatalln("Failed to send control data through control socket:", err)
