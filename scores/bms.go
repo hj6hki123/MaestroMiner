@@ -1,4 +1,4 @@
-// Copyright (C) 2024, 2025 kvarenzn
+// Copyright (C) 2024, 2025, 2026 kvarenzn
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 package scores
@@ -101,6 +101,7 @@ const (
 )
 
 var wavNoteTypeMap map[string]BasicNoteType = map[string]BasicNoteType{
+	"":                           NoteTypeNote,
 	"bd.wav":                     NoteTypeNote,
 	"flick.wav":                  NoteTypeFlick,
 	"無音_flick.wav":               NoteTypeFlick,
@@ -234,7 +235,7 @@ func (n SpecialSlideNoteType) Offset() float64 {
 	return n.offset
 }
 
-func NoteTypeOf(wav string) (NoteType, error) {
+func noteTypeOf(wav string) (NoteType, error) {
 	basicType, ok := wavNoteTypeMap[wav]
 	if ok {
 		return basicType, nil
@@ -248,22 +249,6 @@ func NoteTypeOf(wav string) (NoteType, error) {
 	return NoteTypeNote, fmt.Errorf("unknown wav: %s", wav)
 }
 
-type bmsBPMEvent struct {
-	Tick float64
-	BPM  float64
-}
-
-type bmsRawEvent struct {
-	Channel  string
-	NoteType NoteType
-	Extra    int
-}
-
-type bmsEventsPack struct {
-	bpmEvents []float64
-	RawEvents []*bmsRawEvent
-}
-
 func ParseBMS(chartText string) Chart {
 	const barLength = 4
 	const FIELD_BEGIN = "*----------------------"
@@ -274,7 +259,8 @@ func ParseBMS(chartText string) Chart {
 	extendedHeaderTag := regexp.MustCompile(`^#([0-9A-Z]+) (.*)$`)
 	newline := regexp.MustCompile(`\r?\n`)
 
-	bpm := 130.0
+	rawBpmEvents := map[float64]float64{}
+
 	wavs := map[string]string{}
 	extendedBPM := map[string]float64{}
 
@@ -307,11 +293,11 @@ func ParseBMS(chartText string) Chart {
 		case "RANK":
 		case "LNTYPE":
 		case "BPM":
-			var err error
-			bpm, err = strconv.ParseFloat(value, 64)
+			bpm, err := strconv.ParseFloat(value, 64)
 			if err != nil {
 				log.Fatalf("failed to parse value of #BPM(%s), err: %+v", value, err)
 			}
+			rawBpmEvents[0] = bpm // tick = 0时，bpm为初始bpm
 		case "BGM":
 		default:
 			if strings.HasPrefix(key, "WAV") {
@@ -351,11 +337,14 @@ func ParseBMS(chartText string) Chart {
 	// MAIN DATA FILED
 	lines = lines[1:]
 
-	finalEvents := []*star{}
-	rawEvents := map[float64]*bmsEventsPack{}
+	type rawNoteEvent struct {
+		channel string
+		wav     string
+	}
+	rawNoteEvents := map[float64][]*rawNoteEvent{}
 
-	directionalFlickTicks := map[float64][7]byte{}
-	for len(lines) != 0 {
+	// 第一步：统计所有BPM事件，同时收集所有音符的wav数据，但不进行任何处理
+	for lineNumber := 0; len(lines) != 0; lineNumber++ {
 		line := lines[0]
 		lines = lines[1:]
 
@@ -363,7 +352,7 @@ func ParseBMS(chartText string) Chart {
 		if err == errInvalidDataLineFormat {
 			continue
 		} else if err != nil {
-			log.Fatalf("Failed to parse line %s: %s", line, err)
+			log.Fatalf("Failed to parse line #%d %s: %s", lineNumber, line, err)
 		}
 
 		for _, ev := range events {
@@ -374,71 +363,121 @@ func ParseBMS(chartText string) Chart {
 			case ChannelBackgroundMusic:
 				// do nothing
 			case ChannelBPMChange:
-				if _, ok := rawEvents[tick]; !ok {
-					rawEvents[tick] = &bmsEventsPack{}
-				}
-
 				value, err := strconv.ParseInt(ev.Type, 16, 64)
 				if err != nil {
-					log.Fatalf("failed to parse value of bpm(%s), err: %+v", ev.Type, err)
+					log.Fatalf("Failed to parse value of line #%d bpm(%s), err: %+v", lineNumber, ev.Type, err)
 				}
 
-				rawEvents[tick].bpmEvents = append(rawEvents[tick].bpmEvents, float64(value))
+				rawBpmEvents[tick] = float64(value)
 			case ChannelExtendedBPM:
-				if _, ok := rawEvents[tick]; !ok {
-					rawEvents[tick] = &bmsEventsPack{}
-				}
-
-				rawEvents[tick].bpmEvents = append(rawEvents[tick].bpmEvents, extendedBPM[ev.Type])
+				rawBpmEvents[tick] = extendedBPM[ev.Type]
 			default:
-				if _, ok := rawEvents[tick]; !ok {
-					rawEvents[tick] = &bmsEventsPack{}
+				if _, ok := rawNoteEvents[tick]; !ok {
+					rawNoteEvents[tick] = nil
 				}
 
 				wav, ok := wavs[ev.Type]
 				if !ok {
-					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &bmsRawEvent{
-						Channel:  channel,
-						NoteType: NoteTypeNote,
+					rawNoteEvents[tick] = append(rawNoteEvents[tick], &rawNoteEvent{
+						channel: channel,
 					})
 					continue
 				}
 
-				noteType, err := NoteTypeOf(wav)
-				if err == nil {
-					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &bmsRawEvent{
-						Channel:  channel,
-						NoteType: noteType,
-					})
-
-					// record directional flicks
-					if noteType == NoteTypeFlickLeft || noteType == NoteTypeFlickRight {
-						if _, ok := directionalFlickTicks[tick]; !ok {
-							directionalFlickTicks[tick] = [7]byte{}
-						}
-						v := directionalFlickTicks[tick]
-						if noteType == NoteTypeFlickLeft {
-							v[TRACKS_MAP[channel]] = '<'
-						} else {
-							v[TRACKS_MAP[channel]] = '>'
-						}
-						directionalFlickTicks[tick] = v
-					}
-				} else {
-					log.Warnf("failed to get note type: %+v, treated as normal tap", err)
-					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &bmsRawEvent{
-						Channel:  channel,
-						NoteType: NoteTypeNote,
-					})
-				}
+				rawNoteEvents[tick] = append(rawNoteEvents[tick], &rawNoteEvent{
+					channel: channel,
+					wav:     wav,
+				})
 			}
 		}
 	}
 
-	for tick, v := range directionalFlickTicks {
+	// 第二步：统计所有bpm事件，建立tick -> seconds转换表
+	bpmTicks := utils.SortedKeysOf(rawBpmEvents)
+	type bpmEvent struct {
+		tick    float64
+		bpm     float64
+		seconds float64
+	}
+	bpmTable := []*bpmEvent{}
+
+	lastTick := 0.0
+	secStart := 0.0
+	lastBpm := rawBpmEvents[0]
+	for _, tick := range bpmTicks {
+		secStart += barLength * 60 / lastBpm * (tick - lastTick)
+		bpm := rawBpmEvents[tick]
+		bpmTable = append(bpmTable, &bpmEvent{
+			tick:    tick,
+			bpm:     bpm,
+			seconds: secStart,
+		})
+
+		lastTick = tick
+		lastBpm = bpm
+	}
+
+	secondsOf := func(tick float64) float64 {
+		idx, found := slices.BinarySearchFunc(bpmTable, tick, func(e *bpmEvent, t float64) int {
+			return cmp.Compare(e.tick, t)
+		})
+		if !found {
+			idx--
+		}
+		bpmInfo := bpmTable[idx]
+		return bpmInfo.seconds + barLength*60/bpmInfo.bpm*(tick-bpmInfo.tick)
+	}
+
+	// 第三步：将rawNoteEvents初步转换为parsedNoteEvents
+	// 主要是为了将wav解析到音符类型，以及将tick转换为seconds
+	// 在这一步后，时间单位将统一为秒
+	type parsedNoteEvent struct {
+		channel  string
+		noteType NoteType
+		aux      int
+	}
+	parsedNoteEvents := map[float64][]*parsedNoteEvent{}
+	directionalFlickTicks := map[float64][7]byte{}
+	noteTicks := utils.SortedKeysOf(rawNoteEvents)
+	noteSeconds := []float64{}
+	for _, tick := range noteTicks {
+		evs := rawNoteEvents[tick]
+		seconds := secondsOf(tick)
+		noteSeconds = append(noteSeconds, seconds)
+		parsedEvents := []*parsedNoteEvent{}
+		for _, ev := range evs {
+			noteType, err := noteTypeOf(ev.wav)
+			if err != nil {
+				log.Warnf("Unknown wav at channel %s, time: %s: %+v", ev.channel, utils.FormatSeconds(seconds), err)
+				noteType = NoteTypeNote
+			}
+			parsedEvents = append(parsedEvents, &parsedNoteEvent{
+				channel:  ev.channel,
+				noteType: noteType,
+			})
+
+			// 收集带方向的滑动音符信息，以便在下一步中将其合并
+			if noteType == NoteTypeFlickLeft || noteType == NoteTypeFlickRight {
+				if _, ok := directionalFlickTicks[seconds]; !ok {
+					directionalFlickTicks[seconds] = [7]byte{}
+				}
+				v := directionalFlickTicks[tick]
+				if noteType == NoteTypeFlickLeft {
+					v[TRACKS_MAP[ev.channel]] = '<'
+				} else {
+					v[TRACKS_MAP[ev.channel]] = '>'
+				}
+				directionalFlickTicks[tick] = v
+			}
+		}
+		parsedNoteEvents[seconds] = parsedEvents
+	}
+
+	// 第四步：合并相邻的同一方向的滑动按键为一个，比如>>>可以视作一个滑动长度为3的滑键
+	for seconds, v := range directionalFlickTicks {
 		start := -1
 		length := 0
-		newEvents := []*bmsRawEvent{}
+		newRawEvents := []*parsedNoteEvent{}
 		for i, c := range append(v[:], 0) {
 			if c == '>' {
 				if start == -1 {
@@ -449,10 +488,10 @@ func ParseBMS(chartText string) Chart {
 				}
 			} else {
 				if start != -1 {
-					newEvents = append(newEvents, &bmsRawEvent{
-						Channel:  simpleTracks[start],
-						NoteType: NoteTypeFlickRight,
-						Extra:    length,
+					newRawEvents = append(newRawEvents, &parsedNoteEvent{
+						channel:  simpleTracks[start],
+						noteType: NoteTypeFlickRight,
+						aux:      length,
 					})
 					start = -1
 					length = 0
@@ -472,10 +511,10 @@ func ParseBMS(chartText string) Chart {
 				}
 			} else {
 				if start != -1 {
-					newEvents = append(newEvents, &bmsRawEvent{
-						Channel:  simpleTracks[start],
-						NoteType: NoteTypeFlickLeft,
-						Extra:    length,
+					newRawEvents = append(newRawEvents, &parsedNoteEvent{
+						channel:  simpleTracks[start],
+						noteType: NoteTypeFlickLeft,
+						aux:      length,
 					})
 					start = -1
 					length = 0
@@ -483,46 +522,31 @@ func ParseBMS(chartText string) Chart {
 			}
 		}
 
-		for _, ev := range rawEvents[tick].RawEvents {
-			if ev.NoteType != NoteTypeFlickLeft && ev.NoteType != NoteTypeFlickRight {
-				newEvents = append(newEvents, ev)
+		for _, ev := range parsedNoteEvents[seconds] {
+			if ev.noteType != NoteTypeFlickLeft && ev.noteType != NoteTypeFlickRight {
+				newRawEvents = append(newRawEvents, ev)
 			}
 		}
 
-		rawEvents[tick].RawEvents = newEvents
+		parsedNoteEvents[seconds] = newRawEvents
 	}
 
-	ticks := utils.SortedKeysOf(rawEvents)
-
+	// 第五步：将每个音符事件转换为手法规划器支持的结构（star）
+	finalEvents := []*star{}
 	holdTracks := [7]float64{math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN()}
 	var slideA, slideB *star
-	secStart := 0.0
-	tickStart := 0.0
 
-	bpmEvents := []*bmsBPMEvent{}
-
-	for _, tick := range ticks {
-		pack := rawEvents[tick]
-		for _, bpmValue := range pack.bpmEvents {
-			bpmEvents = append(bpmEvents, &bmsBPMEvent{
-				Tick: tick,
-				BPM:  bpmValue,
-			})
-			secStart += barLength * 60 / bpm * (tick - tickStart)
-			tickStart = tick
-			bpm = bpmValue
-		}
-
-		slices.SortFunc(pack.RawEvents, func(a, b *bmsRawEvent) int {
-			return -cmp.Compare(a.NoteType.NoteType(), b.NoteType.NoteType())
+	for _, sec := range noteSeconds {
+		events := parsedNoteEvents[sec]
+		slices.SortFunc(events, func(a, b *parsedNoteEvent) int {
+			return -cmp.Compare(a.noteType.NoteType(), b.noteType.NoteType())
 		})
 
-		for _, ev := range pack.RawEvents {
-			switch ev.Channel {
+		for _, ev := range events {
+			switch ev.channel {
 			case ChannelNoteTrack1, ChannelNoteTrack2, ChannelNoteTrack3, ChannelNoteTrack4, ChannelNoteTrack5, ChannelNoteTrack6, ChannelNoteTrack7:
-				trackID := float64(TRACKS_MAP[ev.Channel]) / 6
-				sec := secStart + barLength*60/bpm*(tick-tickStart)
-				switch ev.NoteType {
+				trackID := float64(TRACKS_MAP[ev.channel]) / 6
+				switch ev.noteType {
 				// normal note
 				case NoteTypeNote:
 					finalEvents = append(
@@ -600,13 +624,12 @@ func ParseBMS(chartText string) Chart {
 					slideB = nil
 				// unknown
 				default:
-					log.Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
+					log.Warnf("unknown note type %s on note track %d\n", ev.noteType, trackID)
 				}
 			case ChannelHoldTrack1, ChannelHoldTrack2, ChannelHoldTrack3, ChannelHoldTrack4, ChannelHoldTrack5, ChannelHoldTrack6, ChannelHoldTrack7:
-				trackID := TRACKS_MAP[ev.Channel]
+				trackID := TRACKS_MAP[ev.channel]
 				trackX := float64(trackID) / 6
-				sec := secStart + 240.0/bpm*(tick-tickStart)
-				switch ev.NoteType {
+				switch ev.noteType {
 				case NoteTypeNote:
 					startTick := holdTracks[trackID]
 					if math.IsNaN(startTick) {
@@ -640,12 +663,11 @@ func ParseBMS(chartText string) Chart {
 							markAsEnd())
 					holdTracks[trackID] = math.NaN()
 				default:
-					log.Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
+					log.Warnf("unknown note type %s at track %d, time %f s\n", ev.noteType, trackID, sec)
 				}
 			case ChannelSpecialTrack1, ChannelSpecialTrack2, ChannelSpecialTrack3, ChannelSpecialTrack4, ChannelSpecialTrack5, ChannelSpecialTrack6, ChannelSpecialTrack7:
-				trackID := float64(TRACKS_MAP[ev.Channel]) / 6
-				sec := secStart + 240.0/bpm*(tick-tickStart)
-				switch nt := ev.NoteType.(type) {
+				trackID := float64(TRACKS_MAP[ev.channel]) / 6
+				switch nt := ev.noteType.(type) {
 				case SpecialSlideNoteType:
 					switch nt.mark {
 					case "a":
@@ -690,10 +712,10 @@ func ParseBMS(chartText string) Chart {
 								chainsAfter(slideB)
 						}
 					default:
-						log.Warnf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
+						log.Warnf("%s should not appear at channel %d, time %f s", ev.noteType, ev.channel, sec)
 					}
 				default:
-					log.Warnf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
+					log.Warnf("%s should not appear at channel %d, time %f s", ev.noteType, ev.channel, sec)
 				}
 			}
 		}
