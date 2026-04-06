@@ -21,7 +21,7 @@ import (
 	"github.com/kvarenzn/ssm/controllers"
 )
 
-//go:embed static
+//go:embed frontend/dist
 var staticFiles embed.FS
 
 type PlayState int
@@ -552,7 +552,7 @@ done:
 // ─── Startup ──────────────────────────────────────
 
 func (s *Server) Start() (string, error) {
-	staticFS, err := fs.Sub(staticFiles, "static")
+	staticFS, err := fs.Sub(staticFiles, "frontend/dist")
 	if err != nil {
 		return "", err
 	}

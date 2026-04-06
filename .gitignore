@@ -1,5 +1,14 @@
 *.json
-!gui/static/locales/*.json
+!gui/frontend/public/locales/*.json
+!gui/frontend/package.json
+!gui/frontend/package-lock.json
+gui/frontend/node_modules/
+gui/frontend/dist/
+
+/ssm
+/ssm.exe
+/ssm-gui.exe
+
 /*.svg
 /assets/
 /data/
