@@ -10,7 +10,9 @@
 # SSM Web GUI (Star Stone Miner Web GUI Version)
 
 This project is an extended branch based on the core architecture of [kvarenzn/ssm](https://github.com/kvarenzn/ssm).
-Given that the original author has stopped development (I think?), I've adapted its core architecture, using AI to quickly and easily introduce a GUI interface for greater ease of use. Since my HID is unusable, I've only tested the ADB functionality. There are still a few bugs to fix, but overall, the operation is smoother.
+~~Given that the original author has stopped development (I think?)~~ , once again express my gratitude to kvarenzn for the excellent work. I’ve basically just wrapped a simple GUI shell  around the original core architecture to make the gameplay experience even more convenient and user-friendly.
+
+**If you're looking for an easier way to play, give this version a try!**
 
 ![Interface Features](/imgs/page.png "page")
 ##  What's new
@@ -44,6 +46,8 @@ Given that the original author has stopped development (I think?), I've adapted 
    - **Identify Device**: Enter your device ID (found via **`adb devices`**) and your screen resolution .
    - *Alternative*: You can skip the Settings page. When you click **LOAD & PLAY**, the terminal will prompt you to enter the connection type and resolution manually.
 6. **Start Playing**: Follow the workflow in the UI: **Song Setup → Play Control → Start**.
+
+* *Note*: Legacy command-line methods are still supported—simply append your parameters. For details, please refer to [kvarenzn's Usage Guide](https://github.com/kvarenzn/ssm/blob/main/docs/USAGE.md).
 
 ## Disclaimer
 This program was heavily developed with the assistance of AI. Please use it at your own discretion and feel free to report any unexpected bugs or issues.
