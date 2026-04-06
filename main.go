@@ -149,10 +149,32 @@ func runGUI(conf *config.Config) {
 				FlickFactor:         1.0 / 5,
 				FlickPow:            1,
 				SlideReportInterval: 10,
+				TimingJitter:        req.TimingJitter,
+				PositionJitter:      req.PositionJitter,
+				TapDurJitter:        req.TapDurJitter,
 			}
 			if pjskMode {
 				genConfig.FlickFactor = 1.0 / 6
 				genConfig.FlickDuration = 20
+			}
+			// Override defaults with user-supplied advanced params (0 = keep default)
+			if req.TapDuration > 0 {
+				genConfig.TapDuration = req.TapDuration
+			}
+			if req.FlickDuration > 0 {
+				genConfig.FlickDuration = req.FlickDuration
+			}
+			if req.FlickReportInterval > 0 {
+				genConfig.FlickReportInterval = req.FlickReportInterval
+			}
+			if req.SlideReportInterval > 0 {
+				genConfig.SlideReportInterval = req.SlideReportInterval
+			}
+			if req.FlickFactor > 0 {
+				genConfig.FlickFactor = req.FlickFactor
+			}
+			if req.FlickPow > 0 {
+				genConfig.FlickPow = req.FlickPow
 			}
 			rawEvents := scores.GenerateTouchEvent(genConfig, chart)
 

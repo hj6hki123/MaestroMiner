@@ -58,6 +58,14 @@ type RunRequest struct {
 	TimingJitter   int64   `json:"timingJitter"`   // Time jitter (ms), 0 = disabled
 	PositionJitter float64 `json:"positionJitter"` // Position jitter (track units), 0 = disabled
 	TapDurJitter   int64   `json:"tapDurJitter"`   // Tap duration jitter (ms), 0 = disabled
+
+	// Advanced VTE parameters (0 = use mode default)
+	TapDuration         int64   `json:"tapDuration"`
+	FlickDuration       int64   `json:"flickDuration"`
+	FlickReportInterval int64   `json:"flickReportInterval"`
+	SlideReportInterval int64   `json:"slideReportInterval"`
+	FlickFactor         float64 `json:"flickFactor"`
+	FlickPow            float64 `json:"flickPow"`
 }
 
 type Server struct {
@@ -305,6 +313,19 @@ func (s *Server) handleDevice(w http.ResponseWriter, r *http.Request) {
 			Height: body.Height,
 		}
 		s.conf.Save()
+		w.WriteHeader(http.StatusOK)
+	case http.MethodDelete:
+		var body struct {
+			Serial string `json:"serial"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if s.conf.Devices != nil {
+			delete(s.conf.Devices, body.Serial)
+			s.conf.Save()
+		}
 		w.WriteHeader(http.StatusOK)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
