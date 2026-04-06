@@ -299,18 +299,33 @@ input[type="text"]:focus, input[type="number"]:focus {
 .drop.open {
   @apply block animate-[fadeIn_0.2s_ease-out_forwards];
 }
+
+
+.dev-drop-style .di {
+  @apply flex items-center px-4 py-3 transition-colors;
+}
+
+.dev-drop-style .di-id {
+  @apply text-[11px] font-mono text-ssm-hint flex-none;
+}
+
+.dev-drop-style .di-info {
+  @apply flex-1 !text-right; 
+}
+
+.dev-drop-style .di-title {
+  @apply font-bold text-sm text-white font-mono;
+}
 .di {
   @apply flex items-center px-4 py-3 hover:bg-[#2a2a2a] cursor-pointer border-b border-ssm-border last:border-0 transition-colors;
 }
 .di.hi {
   @apply bg-[#2a2a2a] border-l-4 border-l-ssm-blue;
 }
-.di-id {
-  @apply text-[11px] font-mono text-ssm-hint;
-}
+.di-id { @apply text-xs font-mono text-ssm-muted w-12; }
 /* Let the text block in the dropdown fill remaining space and push difficulty tags to the right. */
-.di-info { @apply flex-1 text-right; }
-.di-title { @apply font-bold text-sm text-white font-mono; }
+.di-info { @apply flex-1 min-w-0; }
+.di-title { @apply font-bold text-sm text-white; }
 .di-band { @apply text-xs text-ssm-muted mt-0.5; }
 /* Ensure the difficulty tag group is right-aligned (using ml-auto). */
 .di-diffs {

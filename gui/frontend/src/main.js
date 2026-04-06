@@ -111,6 +111,7 @@ function loadDevOptions() {
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var drop = document.getElementById('dev-drop');
+      drop.classList.add('dev-drop-style');
       var keys = Object.keys(d);
 
       if (!keys.length) {
