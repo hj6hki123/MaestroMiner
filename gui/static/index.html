@@ -1655,8 +1655,14 @@
       if (id === 'settings') loadDevices();
     }
 
-    function setMode(m) {
+function setMode(m) {
       S.mode = m; S.db = null; if (S.songId) clearSong();
+      
+      // 新增：更新 UI 畫面的 active 狀態
+      ['bang', 'pjsk'].forEach(function (x) { 
+        document.getElementById('mode-' + x).classList.toggle('active', x === m); 
+      });
+
       if (m === 'pjsk') {
         ADV_DEFAULTS.flickDuration = 20; ADV_DEFAULTS.flickFactor = 17;
       } else {
