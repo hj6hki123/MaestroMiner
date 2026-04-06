@@ -98,6 +98,10 @@ Usage of ./ssm:
   - 歌曲 ID ↔ 封面 ID 列表
   - 乐队 ID ↔ 乐队名
 
+## 替代项目
+
+如果你在寻找一个易用的图形化界面，或是你希望在自动打歌时加上拟人的扰动，那么你可以尝试一下 [@hj6hki123](https://github.com/hj6hki123) 的项目 [ssm-phi](github.com/hj6hki123/ssm-gui)
+
 ## 开源协议
 
 本项目依据 GNU General Public License 版本 3 或（随您选择）任何更高版本的条款进行授权。
