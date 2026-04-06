@@ -27,15 +27,6 @@ Given that the original author has stopped development (I think?), I've adapted 
 - **Interrupt & restart instantly** — hit Stop, then Start again without re-loading anything
 - **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
-### 🎚️ Humanization & Advanced Tuning
-- **Jitter system** — adds randomized offsets to touch timing, position, and tap duration to simulate human play, keeping judgments in the Perfect–Good range instead of robotic all-Perfects
-- **Advanced parameter panel** — tune Flick speed and distance, Slide tracking density, Tap hold duration, and more directly from the Settings page to calibrate for your device's latency
-- **Device management** — add, edit, and delete saved device profiles from the Settings page
-
-### 🔧 Core Engine Fixes
-- **BMS chart parsing** — rewrote note classification logic; fixed directional Flicks (left/right) firing duplicate events when spanning multiple lanes, wide Flicks now correctly merge adjacent tracks
-- **Slide processing order** — Slide start, mid-point, and end nodes are now handled in the correct priority order, preventing mid-hold Taps from being misidentified as standalone notes and breaking combos
-- **Touch event generation** — wide Flicks automatically meet the minimum swipe distance; Slide path interpolation density is now adjustable via advanced parameters for smoother tracking on high-refresh-rate devices
 
 
 

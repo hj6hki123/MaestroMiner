@@ -1,3 +1,6 @@
+// Copyright (C) 2024, 2025, 2026 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package utils
 
 import (
