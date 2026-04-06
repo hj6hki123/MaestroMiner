@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"math"
+	"math/rand"
 	"os"
 	"slices"
 
@@ -16,6 +17,38 @@ import (
 )
 
 func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVirtualEvents {
+
+	// ── Jitter helpers ────────────────────────────────────────────────────────────
+
+	// Time jitter: uniformly random within ±TimingJitter ms
+	jitterMs := func(base int64) int64 {
+		if config.TimingJitter <= 0 {
+			return base
+		}
+		half := config.TimingJitter
+		return base + rand.Int63n(half*2+1) - half
+	}
+
+	// Position jitter: uniformly random within
+	jitterF := func(base float64) float64 {
+		if config.PositionJitter <= 0 {
+			return base
+		}
+		return base + (rand.Float64()*2-1)*config.PositionJitter
+	}
+
+	// Tap duration: TapDuration ± TapDurJitter,
+	tapDur := func() int64 {
+		if config.TapDurJitter <= 0 {
+			return config.TapDuration
+		}
+		half := config.TapDurJitter
+		dur := config.TapDuration + rand.Int63n(half*2+1) - half
+		if dur < 1 {
+			dur = 1
+		}
+		return dur
+	}
 	// sort events by start time
 	slices.SortFunc(events, func(a, b *star) int {
 		return cmp.Compare(a.start(), b.start())
@@ -428,93 +461,101 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		pointerID := pointers[idx]
 		switch event.kind() {
 		case tapNote:
-			ms := quantify(event.seconds)
+			// Apply timing jitter
+			ms := jitterMs(quantify(event.seconds))
+			x := jitterF(event.track)
+			dur := tapDur()
 			addEvent(ms, &common.VirtualTouchEvent{
-				X:         event.track,
+				X:         x,
 				Y:         0,
 				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
-			addEvent(ms+int64(config.TapDuration), &common.VirtualTouchEvent{
-				X:         event.track,
+			addEvent(ms+dur, &common.VirtualTouchEvent{
+				X:         x,
 				Y:         0,
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
 		case dragNote:
-			ms := quantify(event.seconds)
+			// Apply timing jitter
+			ms := jitterMs(quantify(event.seconds))
+			x := jitterF(event.track)
+			dur := tapDur()
 			addEvent(ms, &common.VirtualTouchEvent{
-				X:         event.track,
+				X:         x,
 				Y:         0,
 				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
-			addEvent(ms+int64(config.TapDuration), &common.VirtualTouchEvent{
-				X:         event.track,
+			addEvent(ms+dur, &common.VirtualTouchEvent{
+				X:         x,
 				Y:         0,
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
 		case throwNote, flickNote:
-			ms := quantify(event.seconds)
+			// Apply timing jitter
+			ms := jitterMs(quantify(event.seconds))
+			xs := event.track
+			if event.width > 1.0/6 && math.Abs(math.Cos(event.direction)) > 0.5 {
+				half := event.width / 2
+				if math.Cos(event.direction) > 0 {
+					xs = event.track - half
+				} else {
+					xs = event.track + half
+				}
+			}
 			addEvent(ms, &common.VirtualTouchEvent{
-				X:         event.track,
+				X:         jitterF(xs),
 				Y:         0,
 				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
-			addFlickTail(event, pointerID, ms, event.track)
+			addFlickTail(event, pointerID, ms, xs)
 		case slideNote:
 			var ms int64
 			var xStart float64
+			var lastStep *star
 
 			first := true
 			for step := range event.iterSlide() {
 				if first {
-					ms = quantify(step.seconds)
-					xStart = step.track
+					ms = jitterMs(quantify(step.seconds))
+					xStart = jitterF(step.track)
 					addEvent(ms, &common.VirtualTouchEvent{
-						X:         step.track,
-						Y:         0,
-						Action:    common.TouchDown,
-						PointerID: pointerID,
+						X: xStart, Y: 0, Action: common.TouchDown, PointerID: pointerID,
 					})
 					first = false
+					lastStep = step
+					//log.Debugf("[ITER] first step.seconds=%.4f isEnd=%v dir=%.4f", step.seconds, step.isEnd(), step.direction)
 					continue
 				}
-
 				nextMs := quantify(step.seconds)
 				for i := ms + config.SlideReportInterval; i < nextMs; i += config.SlideReportInterval {
 					factor := float64(i-ms) / float64(nextMs-ms)
 					currentX := xStart + (step.track-xStart)*factor
 					addEvent(i, &common.VirtualTouchEvent{
-						X:         currentX,
-						Y:         0,
-						Action:    common.TouchMove,
-						PointerID: pointerID,
+						X: currentX, Y: 0, Action: common.TouchMove, PointerID: pointerID,
 					})
 				}
 				ms = nextMs
-				xStart = step.track
+				xStart = jitterF(step.track)
 				addEvent(ms, &common.VirtualTouchEvent{
-					X:         step.track,
-					Y:         0,
-					Action:    common.TouchMove,
-					PointerID: pointerID,
+					X: xStart, Y: 0, Action: common.TouchMove, PointerID: pointerID,
 				})
+				lastStep = step
+				//log.Debugf("[ITER] first step.seconds=%.4f isEnd=%v dir=%.4f", step.seconds, step.isEnd(), step.direction)
 			}
 
-			if !event.isFlick() {
+			if lastStep == nil || !lastStep.isFlick() {
 				addEvent(ms+1, &common.VirtualTouchEvent{
-					X:         xStart,
-					Y:         0,
-					Action:    common.TouchUp,
-					PointerID: pointerID,
+					X: xStart, Y: 0, Action: common.TouchUp, PointerID: pointerID,
 				})
 				continue
 			}
 
-			addFlickTail(event, pointerID, ms, xStart)
+			addFlickTail(lastStep, pointerID, ms, xStart)
 		}
 	}
 

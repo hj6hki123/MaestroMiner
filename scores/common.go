@@ -87,6 +87,11 @@ type VTEGenerateConfig struct {
 	FlickFactor         float64
 	FlickReportInterval int64
 	SlideReportInterval int64
+
+	//  Jitter settings
+	TimingJitter   int64   // Time jitter range (ms)
+	PositionJitter float64 // Position jitter
+	TapDurJitter   int64   // Tap duration jitter
 }
 
 type noteKind uint8
