@@ -1,13 +1,17 @@
 <p align="center">
-    <img src="imgs/icon.svg" width="128" height="128" alt="ssm"/>
+    <a href="https://github.com/hj6hki123/ssm-gui">
+        <img src="imgs/ssm_gui_github_banner.svg" alt="ssm-gui-banner"/>
+    </a>
+    <br>
+    <strong>A Web-based GUI for automated mobile rhythm game playback and chart parsing.</strong>
 </p>
 
----
 
 # SSM Web GUI (Star Stone Miner Web GUI Version)
 
 This project is an extended branch based on the core architecture of [kvarenzn/ssm](https://github.com/kvarenzn/ssm).
 Given that the original author has stopped development (I think?), I've adapted its core architecture, using AI to quickly and easily introduce a GUI interface for greater ease of use. Since my HID is unusable, I've only tested the ADB functionality. There are still a few bugs to fix, but overall, the operation is smoother.
+
 ![Interface Features](/imgs/page.png "page")
 ##  What's new
 
