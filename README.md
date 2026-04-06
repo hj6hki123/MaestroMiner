@@ -41,8 +41,7 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 4. **Connect Device**: Connect your mobile device to your computer and ensure **ADB Debugging** is enabled.
 5. **Device Setup**: 
    - Go to the **Settings** page to add your device.
-   - **Select Connection Type**: Choose **ADB** (Highly Recommended). 
-   - **Note on HID**: Since my physical device is incompatible with HID mode, this feature remains **untested** and may not function as expected. Contributions are welcome if you can verify this.
+   - **Select Connection Type**: Choose **HID** or **ADB** . ( **HID** mode may not work on Windows due to protocol overrides; you can try running `adb kill-server` to resolve conflicts)
    - **Identify Device**: Enter your device ID (found via **`adb devices`**) and your screen resolution .
    - *Alternative*: You can skip the Settings page. When you click **LOAD & PLAY**, the terminal will prompt you to enter the connection type and resolution manually.
 6. **Start Playing**: Follow the workflow in the UI: **Song Setup → Play Control → Start**.
