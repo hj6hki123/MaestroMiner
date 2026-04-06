@@ -31,7 +31,9 @@ Given that the original author has stopped development (I think?), I've adapted 
 
 
 ## Quick Start
+
 1. **Download & Extract**: Get the latest release from [Releases](https://github.com/hj6hki123/ssm-gui/releases) and extract the archive.
+* *Note*: If you have already downloaded the original project, simply place the .exe version into the same folder.
 2. **Launch**: Double-click **ssm-gui.exe**, or run it from a terminal using the command **`./ssm-gui.exe`**.
 3. **Access UI**: Your browser should open automatically at **http://127.0.0.1:8765**. If it doesn't, open it manually.
 4. **Connect Device**: Connect your mobile device to your computer and ensure **ADB Debugging** is enabled.
@@ -45,8 +47,6 @@ Given that the original author has stopped development (I think?), I've adapted 
 
 ## Disclaimer
 This program was heavily developed with the assistance of AI. Please use it at your own discretion and feel free to report any unexpected bugs or issues.
-> [!CAUTION]
-> **For certain SPECIAL difficulty songs, such as [Game Changer](https://bestdori.com/info/songs/782/Game-Changer), some movements have already been handled. However, patterns like left-right directions after sustained presses are still frequently missed. A preliminary solution has been implemented, and further help is welcome from anyone willing to contribute.**
 
 > [!IMPORTANT]
 > **This project is developed for personal learning and research purposes only. The stability and applicability of its functions are not guaranteed.**
