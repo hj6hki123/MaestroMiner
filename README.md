@@ -100,7 +100,7 @@ Usage of ./ssm:
 
 ## 替代项目
 
-如果你在寻找一个易用的图形化界面，或是你希望在自动打歌时加上拟人的扰动，那么你可以尝试一下 [@hj6hki123](https://github.com/hj6hki123) 的项目 [ssm-phi](github.com/hj6hki123/ssm-gui)
+如果你在寻找一个易用的图形化界面，或是你希望在自动打歌时加上拟人的扰动，那么你可以尝试一下 [@hj6hki123](https://github.com/hj6hki123) 的项目 [ssm-phi](https://github.com/hj6hki123/ssm-gui)
 
 ## 开源协议
 
