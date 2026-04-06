@@ -1184,6 +1184,24 @@
       color: var(--hint);
       margin-top: 5px
     }
+
+
+    #dev-serial {
+      padding-right: 30px;
+    }
+
+    #btn-dev-drop {
+      right: 5px;
+      font-size: 10px;
+      color: var(--hint);
+      background: var(--bg);
+      border-radius: 4px;
+      height: 20px;
+      width: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   </style>
 </head>
 
@@ -1302,7 +1320,12 @@
           </div>
           <div class="field">
             <label data-i18n="song.serial.label">Device serial</label>
-            <input type="text" id="dev-serial" data-i18n-placeholder="song.serial.placeholder">
+            <div class="sw"> <input type="text" id="dev-serial" data-i18n-placeholder="song.serial.placeholder"
+                autocomplete="off">
+              <button class="sc" id="btn-dev-drop" style="display:block; transform:none;"
+                onclick="toggleDevDrop(event)">▾</button>
+              <div class="drop" id="dev-drop"></div>
+            </div>
           </div>
           <div id="orient-wrap">
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px"
@@ -1612,6 +1635,49 @@
     }
     document.addEventListener('click', function (e) { if (!e.target.closest('#lang-picker')) closeLangMenu(); });
 
+    function toggleDevDrop(e) {
+      e.stopPropagation();
+      var drop = document.getElementById('dev-drop');
+      if (drop.classList.contains('open')) {
+        drop.classList.remove('open');
+      } else {
+        loadDevOptions();
+      }
+    }
+
+
+    function loadDevOptions() {
+      fetch('/api/device')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var drop = document.getElementById('dev-drop');
+          var keys = Object.keys(d);
+
+          if (!keys.length) {
+            drop.innerHTML = '<div class="drop-hint">' + t('device.none') + '</div>';
+          } else {
+            drop.innerHTML = keys.map(function (s) {
+              return '<div class="di" onclick="selectDevSerial(\'' + s + '\')">'
+                + '<span class="di-id">' + s + '</span>'
+                + '<div class="di-info"><div class="di-title">' + d[s].width + ' × ' + d[s].height + '</div></div>'
+                + '</div>';
+            }).join('');
+          }
+          drop.classList.add('open');
+        });
+    }
+
+
+    function selectDevSerial(s) {
+      document.getElementById('dev-serial').value = s;
+      document.getElementById('dev-drop').classList.remove('open');
+    }
+
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#dev-drop') && e.target.id !== 'btn-dev-drop') {
+        document.getElementById('dev-drop').classList.remove('open');
+      }
+    });
     // ══ jitter ═════════════════════════════════════════════════
     var JITTER_POS_MAP = [0, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.15, 0.18, 0.22, 0.25];
 
@@ -1655,12 +1721,12 @@
       if (id === 'settings') loadDevices();
     }
 
-function setMode(m) {
+    function setMode(m) {
       S.mode = m; S.db = null; if (S.songId) clearSong();
-      
+
       // 新增：更新 UI 畫面的 active 狀態
-      ['bang', 'pjsk'].forEach(function (x) { 
-        document.getElementById('mode-' + x).classList.toggle('active', x === m); 
+      ['bang', 'pjsk'].forEach(function (x) {
+        document.getElementById('mode-' + x).classList.toggle('active', x === m);
       });
 
       if (m === 'pjsk') {
