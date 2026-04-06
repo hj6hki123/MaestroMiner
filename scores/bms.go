@@ -98,38 +98,62 @@ const (
 	NoteTypeSlideEndFlickB
 	NoteTypeFlickLeft
 	NoteTypeFlickRight
+	NoteTypeAddLongDirFlick
+	NoteTypeAddSlideDirFlick
+	NoteTypeContBezierFrontA
+	NoteTypeContBezierFrontB
+	NoteTypeContBezierBackA
+	NoteTypeContBezierBackB
+	NoteTypeLongEndDirFlickLeft
+	NoteTypeLongEndDirFlickRight
+	NoteTypeSlideEndDirFlickLeftA
+	NoteTypeSlideEndDirFlickLeftB
+	NoteTypeSlideEndDirFlickRightA
+	NoteTypeSlideEndDirFlickRightB
 )
 
 var wavNoteTypeMap map[string]BasicNoteType = map[string]BasicNoteType{
-	"":                           NoteTypeNote,
-	"bd.wav":                     NoteTypeNote,
-	"flick.wav":                  NoteTypeFlick,
-	"無音_flick.wav":               NoteTypeFlick,
-	"skill.wav":                  NoteTypeNote,
-	"slide_a.wav":                NoteTypeSlideA,
-	"slide_a_skill.wav":          NoteTypeSlideA,
-	"slide_a_fever.wav":          NoteTypeSlideA,
-	"skill_slide_a.wav":          NoteTypeSlideA,
-	"slide_end_a.wav":            NoteTypeSlideEndA,
-	"slide_end_flick_a.wav":      NoteTypeSlideEndFlickA,
-	"slide_b.wav":                NoteTypeSlideB,
-	"slide_b_skill.wav":          NoteTypeSlideB,
-	"slide_b_fever.wav":          NoteTypeSlideB,
-	"skill_slide_b.wav":          NoteTypeSlideB,
-	"slide_end_b.wav":            NoteTypeSlideEndB,
-	"slide_end_flick_b.wav":      NoteTypeSlideEndFlickB,
-	"fever_note.wav":             NoteTypeNote,
-	"fever_note_flick.wav":       NoteTypeFlick,
-	"fever_note_slide_a.wav":     NoteTypeSlideA,
-	"fever_note_slide_end_a.wav": NoteTypeSlideEndA,
-	"fever_note_slide_b.wav":     NoteTypeSlideB,
-	"fever_note_slide_end_b.wav": NoteTypeSlideEndB,
-	"fever_slide_a.wav":          NoteTypeSlideA,
-	"fever_slide_end_a.wav":      NoteTypeSlideEndA,
-	"fever_slide_b.wav":          NoteTypeSlideB,
-	"fever_slide_end_b.wav":      NoteTypeSlideEndB,
-	"directional_fl_l.wav":       NoteTypeFlickLeft,
-	"directional_fl_r.wav":       NoteTypeFlickRight,
+	"":                            NoteTypeNote,
+	"bd.wav":                      NoteTypeNote,
+	"flick.wav":                   NoteTypeFlick,
+	"無音_flick.wav":                NoteTypeFlick,
+	"skill.wav":                   NoteTypeNote,
+	"slide_a.wav":                 NoteTypeSlideA,
+	"slide_a_skill.wav":           NoteTypeSlideA,
+	"slide_a_fever.wav":           NoteTypeSlideA,
+	"skill_slide_a.wav":           NoteTypeSlideA,
+	"slide_end_a.wav":             NoteTypeSlideEndA,
+	"slide_end_flick_a.wav":       NoteTypeSlideEndFlickA,
+	"slide_end_dir_flick_l_a.wav": NoteTypeSlideEndDirFlickLeftA,
+	"slide_end_dir_flick_r_a.wav": NoteTypeSlideEndDirFlickRightA,
+	"slide_b.wav":                 NoteTypeSlideB,
+	"slide_b_skill.wav":           NoteTypeSlideB,
+	"slide_b_fever.wav":           NoteTypeSlideB,
+	"skill_slide_b.wav":           NoteTypeSlideB,
+	"slide_end_b.wav":             NoteTypeSlideEndB,
+	"slide_end_flick_b.wav":       NoteTypeSlideEndFlickB,
+	"slide_end_dir_flick_l_b.wav": NoteTypeSlideEndDirFlickLeftB,
+	"slide_end_dir_flick_r_b.wav": NoteTypeSlideEndDirFlickRightB,
+	"fever_note.wav":              NoteTypeNote,
+	"fever_note_flick.wav":        NoteTypeFlick,
+	"fever_note_slide_a.wav":      NoteTypeSlideA,
+	"fever_note_slide_end_a.wav":  NoteTypeSlideEndA,
+	"fever_note_slide_b.wav":      NoteTypeSlideB,
+	"fever_note_slide_end_b.wav":  NoteTypeSlideEndB,
+	"fever_slide_a.wav":           NoteTypeSlideA,
+	"fever_slide_end_a.wav":       NoteTypeSlideEndA,
+	"fever_slide_b.wav":           NoteTypeSlideB,
+	"fever_slide_end_b.wav":       NoteTypeSlideEndB,
+	"directional_fl_l.wav":        NoteTypeFlickLeft,
+	"directional_fl_r.wav":        NoteTypeFlickRight,
+	"add_long_dir_flick.wav":      NoteTypeAddLongDirFlick,
+	"add_slide_dir_flick.wav":     NoteTypeAddSlideDirFlick,
+	"cont_bezier_front_a.wav":     NoteTypeContBezierFrontA,
+	"cont_bezier_front_b.wav":     NoteTypeContBezierFrontB,
+	"cont_bezier_back_a.wav":      NoteTypeContBezierBackA,
+	"cont_bezier_back_b.wav":      NoteTypeContBezierBackB,
+	"long_end_dir_flick_l.wav":    NoteTypeLongEndDirFlickLeft,
+	"long_end_dir_flick_r.wav":    NoteTypeLongEndDirFlickRight,
 }
 
 type NoteType interface {
@@ -437,7 +461,7 @@ func ParseBMS(chartText string) Chart {
 		aux      int
 	}
 	parsedNoteEvents := map[float64][]*parsedNoteEvent{}
-	directionalFlickTicks := map[float64][7]byte{}
+	directionalFlickSeconds := map[float64][]byte{}
 	noteTicks := utils.SortedKeysOf(rawNoteEvents)
 	noteSeconds := []float64{}
 	for _, tick := range noteTicks {
@@ -458,27 +482,26 @@ func ParseBMS(chartText string) Chart {
 
 			// 收集带方向的滑动音符信息，以便在下一步中将其合并
 			if noteType == NoteTypeFlickLeft || noteType == NoteTypeFlickRight {
-				if _, ok := directionalFlickTicks[seconds]; !ok {
-					directionalFlickTicks[seconds] = [7]byte{}
+				if _, ok := directionalFlickSeconds[seconds]; !ok {
+					directionalFlickSeconds[seconds] = make([]byte, 7)
 				}
-				v := directionalFlickTicks[tick]
+				v := directionalFlickSeconds[seconds]
 				if noteType == NoteTypeFlickLeft {
 					v[TRACKS_MAP[ev.channel]] = '<'
 				} else {
 					v[TRACKS_MAP[ev.channel]] = '>'
 				}
-				directionalFlickTicks[tick] = v
 			}
 		}
 		parsedNoteEvents[seconds] = parsedEvents
 	}
 
 	// 第四步：合并相邻的同一方向的滑动按键为一个，比如>>>可以视作一个滑动长度为3的滑键
-	for seconds, v := range directionalFlickTicks {
+	for seconds, v := range directionalFlickSeconds {
 		start := -1
 		length := 0
-		newRawEvents := []*parsedNoteEvent{}
-		for i, c := range append(v[:], 0) {
+		newParsedEvents := []*parsedNoteEvent{}
+		for i, c := range append(v, 0) {
 			if c == '>' {
 				if start == -1 {
 					start = i
@@ -488,7 +511,7 @@ func ParseBMS(chartText string) Chart {
 				}
 			} else {
 				if start != -1 {
-					newRawEvents = append(newRawEvents, &parsedNoteEvent{
+					newParsedEvents = append(newParsedEvents, &parsedNoteEvent{
 						channel:  simpleTracks[start],
 						noteType: NoteTypeFlickRight,
 						aux:      length,
@@ -499,7 +522,7 @@ func ParseBMS(chartText string) Chart {
 			}
 		}
 
-		rev := append([]byte{0}, v[:]...)
+		rev := append([]byte{0}, v...)
 		for i := 6; i >= -1; i-- {
 			c := rev[i+1]
 			if c == '<' {
@@ -511,7 +534,7 @@ func ParseBMS(chartText string) Chart {
 				}
 			} else {
 				if start != -1 {
-					newRawEvents = append(newRawEvents, &parsedNoteEvent{
+					newParsedEvents = append(newParsedEvents, &parsedNoteEvent{
 						channel:  simpleTracks[start],
 						noteType: NoteTypeFlickLeft,
 						aux:      length,
@@ -524,11 +547,11 @@ func ParseBMS(chartText string) Chart {
 
 		for _, ev := range parsedNoteEvents[seconds] {
 			if ev.noteType != NoteTypeFlickLeft && ev.noteType != NoteTypeFlickRight {
-				newRawEvents = append(newRawEvents, ev)
+				newParsedEvents = append(newParsedEvents, ev)
 			}
 		}
 
-		parsedNoteEvents[seconds] = newRawEvents
+		parsedNoteEvents[seconds] = newParsedEvents
 	}
 
 	// 第五步：将每个音符事件转换为手法规划器支持的结构（star）
@@ -597,6 +620,22 @@ func ParseBMS(chartText string) Chart {
 							flickToIfOk(true, 90).
 							markAsEnd())
 					slideA = nil
+				case NoteTypeSlideEndDirFlickLeftA:
+					finalEvents = append(
+						finalEvents,
+						newStar(sec, trackID, 1.0/6).
+							chainsAfter(slideA).
+							flickToIfOk(true, 180).
+							markAsEnd())
+					slideA = nil
+				case NoteTypeSlideEndDirFlickRightA:
+					finalEvents = append(
+						finalEvents,
+						newStar(sec, trackID, 1.0/6).
+							chainsAfter(slideA).
+							flickToIfOk(true, 0).
+							markAsEnd())
+					slideA = nil
 				// slide b
 				case NoteTypeSlideB:
 					if slideB == nil {
@@ -622,6 +661,33 @@ func ParseBMS(chartText string) Chart {
 							flickToIfOk(true, 90).
 							markAsEnd())
 					slideB = nil
+				case NoteTypeSlideEndDirFlickLeftB:
+					finalEvents = append(
+						finalEvents,
+						newStar(sec, trackID, 1.0/6).
+							chainsAfter(slideB).
+							flickToIfOk(true, 180).
+							markAsEnd())
+					slideB = nil
+				case NoteTypeSlideEndDirFlickRightB:
+					finalEvents = append(
+						finalEvents,
+						newStar(sec, trackID, 1.0/6).
+							chainsAfter(slideB).
+							flickToIfOk(true, 0).
+							markAsEnd())
+					slideB = nil
+
+				case NoteTypeAddLongDirFlick:
+					// do nothing
+				case NoteTypeAddSlideDirFlick:
+					// do nothing
+
+				case NoteTypeContBezierFrontA:
+				case NoteTypeContBezierFrontB:
+				case NoteTypeContBezierBackA:
+				case NoteTypeContBezierBackB:
+
 				// unknown
 				default:
 					log.Warnf("unknown note type %s on note track %d\n", ev.noteType, trackID)
@@ -660,6 +726,38 @@ func ParseBMS(chartText string) Chart {
 									markAsHead(),
 							).
 							flickToIfOk(true, 90).
+							markAsEnd())
+					holdTracks[trackID] = math.NaN()
+				case NoteTypeLongEndDirFlickLeft:
+					startTick := holdTracks[trackID]
+					if math.IsNaN(startTick) {
+						log.Fatalf("no hold start data on track %d", trackID)
+					}
+					finalEvents = append(
+						finalEvents,
+						newStar(sec, trackX, 1.0/6).
+							chainsAfter(
+								newStar(startTick, trackX, 1.0/6).
+									markAsTap().
+									markAsHead(),
+							).
+							flickToIfOk(true, 180).
+							markAsEnd())
+					holdTracks[trackID] = math.NaN()
+				case NoteTypeLongEndDirFlickRight:
+					startTick := holdTracks[trackID]
+					if math.IsNaN(startTick) {
+						log.Fatalf("no hold start data on track %d", trackID)
+					}
+					finalEvents = append(
+						finalEvents,
+						newStar(sec, trackX, 1.0/6).
+							chainsAfter(
+								newStar(startTick, trackX, 1.0/6).
+									markAsTap().
+									markAsHead(),
+							).
+							flickToIfOk(true, 0).
 							markAsEnd())
 					holdTracks[trackID] = math.NaN()
 				default:
