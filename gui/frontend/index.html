@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSM — Star Stone Miner</title>
+</head>
+
+<body>
+  <div class="layout">
+    <!-- ══ sidebar ══ -->
+    <div class="sidebar">
+      <div class="sidebar-top">
+        <div class="logo"><em></em> SSM</div>
+        <div class="lang-picker" id="lang-picker">
+          <button class="lang-btn" id="lang-btn" onclick="toggleLangMenu()">
+            <span class="lb-flag" id="lb-flag">🇺🇸</span>
+            <span class="lb-name" id="lb-name">EN</span>
+            <span class="lb-arrow">▾</span>
+          </button>
+          <div class="lang-menu" id="lang-menu"></div>
+        </div>
+      </div>
+      <div class="nav-sec" data-i18n="nav.menu">Menu</div>
+      <button class="nav-btn active" id="nav-song" onclick="nav('song')"><span class="ico">♪</span><span
+          data-i18n="nav.song">Song Setup</span></button>
+      <button class="nav-btn" id="nav-play" onclick="nav('play')"><span class="ico">▶</span><span
+          data-i18n="nav.play">Play Control</span></button>
+      <button class="nav-btn" id="nav-settings" onclick="nav('settings')"><span class="ico">⚙</span><span
+          data-i18n="nav.settings">Settings</span></button>
+      <button class="nav-btn" id="nav-extract" onclick="nav('extract')"><span class="ico">📦</span><span
+          data-i18n="nav.extract">Extract Assets</span></button>
+      <div class="np-card" id="np-card" style="display:none">
+        <div class="np-jacket">
+          <img id="np-img" src="" alt="" style="display:none"
+            onerror="this.style.display='none';document.getElementById('np-no').style.display='flex'">
+          <div class="np-no-img" id="np-no">♪</div>
+        </div>
+        <div class="np-info">
+          <div class="np-title" id="np-title">—</div>
+          <div class="np-artist" id="np-artist"></div>
+          <div class="np-meta">
+            <span class="np-diff" id="np-diff"></span>
+            <span class="np-lv" id="np-lv"></span>
+            <span class="np-state"><span class="dot" id="np-dot"></span><span id="np-state-txt"></span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ main ══ -->
+    <div class="main">
+
+      <!-- Song Setup -->
+      <div class="pane active" id="pane-song">
+        <div class="pg-title" data-i18n="nav.song">Song Setup</div>
+        <div class="card">
+          <div class="ct" data-i18n="song.mode">Game Mode</div>
+          <div class="bg">
+            <div class="bc active" id="mode-bang" onclick="setMode('bang')">
+              <div class="bcn">BanG Dream!</div>
+              <div class="bcs" data-i18n="song.mode.bang">Girls Band Party</div>
+            </div>
+
+            <div class="bc" id="mode-pjsk" onclick="setMode('pjsk')">
+              <div class="bcn">Project Sekai</div>
+              <div class="bcs" data-i18n="song.mode.pjsk">Colorful Stage!</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="song.search">Song Search</div>
+          <div class="sel-bar" id="sel-bar">
+            <span class="sb-id" id="sb-id"></span>
+            <span class="sb-title" id="sb-title"></span>
+            <button class="sb-x" onclick="clearSong()">✕</button>
+          </div>
+          <div class="field">
+            <label data-i18n="song.search.label">Search by name</label>
+            <div class="sw">
+              <input type="text" id="q" data-i18n-placeholder="song.search.placeholder" autocomplete="off"
+                oninput="onQInput()" onkeydown="onQKey(event)" onfocus="onQFocus()">
+              <button class="sc" id="sc" onclick="clearQ()">✕</button>
+              <div class="drop" id="drop"></div>
+            </div>
+          </div>
+          <div class="field">
+            <label data-i18n="song.id.label">Or enter Song ID directly</label>
+            <input type="number" id="song-id" data-i18n-placeholder="song.id.placeholder" min="1"
+              oninput="onManualId()">
+          </div>
+          <div class="field">
+            <label data-i18n="song.diff">Difficulty</label>
+            <div class="diff-row">
+              <button class="db easy" onclick="setDiff(0)">EASY</button>
+              <button class="db normal" onclick="setDiff(1)">NORMAL</button>
+              <button class="db hard" onclick="setDiff(2)">HARD</button>
+              <button class="db expert active" onclick="setDiff(3)">EXPERT</button>
+              <button class="db special" onclick="setDiff(4)">SPECIAL</button>
+            </div>
+          </div>
+          <div class="field">
+            <label data-i18n="song.chart.label">Custom chart path</label>
+            <input type="text" id="chart-path" data-i18n-placeholder="song.chart.placeholder">
+          </div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="song.backend">Backend &amp; Connection</div>
+          <div class="bg">
+            <div class="bc active" id="backend-hid" onclick="setBackend('hid')">
+              <div class="bcn">HID</div>
+              <div class="bcs" data-i18n="song.backend.hid">No USB debugging needed</div>
+            </div>
+            <div class="bc" id="backend-adb" onclick="setBackend('adb')">
+              <div class="bcn">ADB</div>
+              <div class="bcs" data-i18n="song.backend.adb">Emulator / wireless</div>
+            </div>
+          </div>
+          <div class="field">
+            <label data-i18n="song.serial.label">Device serial</label>
+            <div class="sw"> <input type="text" id="dev-serial" data-i18n-placeholder="song.serial.placeholder"
+                autocomplete="off">
+              <button class="sc" id="btn-dev-drop" style="display:block; transform:none;"
+                onclick="toggleDevDrop(event)">▾</button>
+              <div class="drop" id="dev-drop"></div>
+            </div>
+          </div>
+          <div id="orient-wrap">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px"
+              data-i18n="song.orient">Screen rotation</label>
+            <div class="seg">
+              <button class="sg active" id="ol" onclick="setOrient('left')" data-i18n="song.orient.left">↺
+                Counter-clockwise</button>
+              <button class="sg" id="or" onclick="setOrient('right')" data-i18n="song.orient.right">↻ Clockwise</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn pri btn-b" onclick="submitRun()" data-i18n="song.load">▶ Load &amp; Prepare</button>
+        <div class="log" id="song-log"></div>
+      </div>
+
+      <!-- Device -->
+      <div class="pane" id="pane-settings">
+        <div class="pg-title" data-i18n="nav.settings">Settings</div>
+        <div class="card">
+          <div class="ct" data-i18n="settings.device">Device Management</div>
+          <div id="dev-list">
+            <div style="font-size:12px;color:var(--hint)" data-i18n="device.loading">Loading...</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="device.add">Add / Update Device</div>
+          <div class="step">
+            <div class="sn">1</div>
+            <div class="st" data-i18n="device.step1">Hold phone in portrait.</div>
+          </div>
+          <div class="row">
+            <div class="field"><label data-i18n="device.serial">Serial</label><input type="text" id="dc-s"
+                placeholder="R58M1234ABC"></div>
+            <div class="field"><label data-i18n="device.width">Width (px)</label><input type="number" id="dc-w"
+                placeholder="1080" min="1"></div>
+            <div class="field"><label data-i18n="device.height">Height (px)</label><input type="number" id="dc-h"
+                placeholder="2340" min="1"></div>
+          </div>
+          <button class="btn pri" onclick="saveDevice()" data-i18n="device.save">Save</button>
+          <div class="hint" id="dc-hint"></div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="jitter.title">Humanization (Jitter)</div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.timing">Timing ±ms</span>
+            <input type="range" id="sld-timing" min="0" max="200" step="1" value="0" oninput="onJitter('timing')">
+            <span class="jitter-val" id="val-timing" style="color:var(--hint)">OFF</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.position">Position ±%</span>
+            <input type="range" id="sld-position" min="0" max="10" step="1" value="0" oninput="onJitter('position')">
+            <span class="jitter-val" id="val-position" style="color:var(--hint)">OFF</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.tapDur">Tap duration ±ms</span>
+            <input type="range" id="sld-tapDur" min="0" max="40" step="1" value="0" oninput="onJitter('tapDur')">
+            <span class="jitter-val" id="val-tapDur" style="color:var(--hint)">OFF</span>
+          </div>
+          <div class="jitter-hint" data-i18n="jitter.hint"></div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="settings.advanced">Advanced Parameters</div>
+          <div style="font-size:11px;color:var(--hint);margin-bottom:10px" data-i18n="settings.advanced.hint"></div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="settings.tapDuration">Tap Duration (ms)</span>
+            <input type="range" id="sld-tapDuration" min="1" max="50" step="1" value="10"
+              oninput="onAdvanced('tapDuration')">
+            <span class="jitter-val" id="val-tapDuration" style="color:var(--blue)">10</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="settings.flickDuration">Flick Duration (ms)</span>
+            <input type="range" id="sld-flickDuration" min="5" max="120" step="1" value="60"
+              oninput="onAdvanced('flickDuration')">
+            <span class="jitter-val" id="val-flickDuration" style="color:var(--blue)">60</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="settings.flickReportInterval">Flick Report Interval (ms)</span>
+            <input type="range" id="sld-flickReportInterval" min="1" max="20" step="1" value="5"
+              oninput="onAdvanced('flickReportInterval')">
+            <span class="jitter-val" id="val-flickReportInterval" style="color:var(--blue)">5</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="settings.slideReportInterval">Slide Report Interval (ms)</span>
+            <input type="range" id="sld-slideReportInterval" min="1" max="30" step="1" value="10"
+              oninput="onAdvanced('slideReportInterval')">
+            <span class="jitter-val" id="val-slideReportInterval" style="color:var(--blue)">10</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="settings.flickFactor">Flick Factor</span>
+            <input type="range" id="sld-flickFactor" min="5" max="50" step="1" value="20"
+              oninput="onAdvanced('flickFactor')">
+            <span class="jitter-val" id="val-flickFactor" style="color:var(--blue)">0.20</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="settings.flickPow">Flick Curve Exponent</span>
+            <input type="range" id="sld-flickPow" min="5" max="30" step="1" value="10" oninput="onAdvanced('flickPow')">
+            <span class="jitter-val" id="val-flickPow" style="color:var(--blue)">1.0</span>
+          </div>
+          <div style="text-align:center;margin-top:8px">
+            <button class="btn" onclick="resetAdvanced()" data-i18n="settings.defaults">Reset to Defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Play Control -->
+      <div class="pane" id="pane-play">
+        <div class="pg-title" data-i18n="nav.play">Play Control</div>
+        <div class="play-now">
+          <div class="pn-none" id="pn-none" data-i18n="play.none">No song loaded.</div>
+          <div id="pn-loaded" style="display:none">
+            <div class="pn-top">
+              <div class="pn-jacket">
+                <img id="pn-img" src="" alt=""
+                  onerror="this.style.display='none';document.getElementById('pn-no').style.display='flex'">
+                <div class="pn-no" id="pn-no" style="display:none">♪</div>
+              </div>
+              <div class="pn-meta">
+                <div class="pn-title" id="pn-title-big"></div>
+                <div class="pn-artist" id="pn-artist-big"></div>
+                <div class="pn-badges"><span class="np-diff" id="pn-diff-badge"></span><span class="pn-lv"
+                    id="pn-lv-big"></span></div>
+              </div>
+            </div>
+            <div class="pn-status">
+              <div class="dot" id="pn-dot"></div>
+              <div class="pn-state-label" id="pn-state-label"></div>
+              <div style="flex:1"></div>
+              <button class="btn" style="font-size:12px;padding:5px 10px" onclick="nav('song')"
+                data-i18n="play.change">Change Song</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="play.start.title">Start Playback</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7" data-i18n="play.start.hint">
+          </div>
+          <button class="start-btn" id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶
+            Start</button>
+          <div class="kh"><span data-i18n="play.start.kbd">Click, or press</span> <kbd>Enter</kbd> / <kbd>Space</kbd>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="play.offset.title">Offset Adjustment</div>
+          <div style="font-size:11px;color:var(--hint);margin-bottom:8px" data-i18n="play.offset.hint"></div>
+          <div class="oc">
+            <button class="adj" onclick="adj(-100)">«</button>
+            <button class="adj" onclick="adj(-50)">‹‹</button>
+            <button class="adj" onclick="adj(-10)">‹</button>
+            <div>
+              <div class="ov" id="ov">0</div>
+              <div class="ou">ms</div>
+            </div>
+            <button class="adj" onclick="adj(10)">›</button>
+            <button class="adj" onclick="adj(50)">››</button>
+            <button class="adj" onclick="adj(100)">»</button>
+          </div>
+          <div style="text-align:center;margin-top:2px">
+            <button class="btn" onclick="resetOff()" data-i18n="play.offset.reset">Reset</button>
+          </div>
+        </div>
+        <div class="card">
+          <button class="btn dan btn-b" onclick="apiStop()" data-i18n="play.stop">■ Stop</button>
+          <div class="kh" style="margin-top:5px"><span data-i18n="play.stop.hint">Or press</span>
+            <kbd>Ctrl</kbd>+<kbd>C</kbd> <span data-i18n="play.stop.hint2">in terminal</span>
+          </div>
+        </div>
+        <div class="log" id="play-log"></div>
+      </div>
+
+      <!-- Extract -->
+      <div class="pane" id="pane-extract">
+        <div class="pg-title" data-i18n="nav.extract">Extract Assets</div>
+        <div class="card">
+          <div class="ct" data-i18n="extract.title">Extract from game folder</div>
+          <div class="step">
+            <div class="sn">1</div>
+            <div class="st" data-i18n="extract.step1"></div>
+          </div>
+          <div class="step">
+            <div class="sn">2</div>
+            <div class="st" data-i18n="extract.step2"></div>
+          </div>
+          <div class="field" style="margin-top:6px">
+            <label data-i18n="extract.path">Asset folder path</label>
+            <input type="text" id="ex-path" placeholder="./gamedata">
+          </div>
+          <button class="btn pri" onclick="doExtract()" data-i18n="extract.btn">Extract</button>
+          <div class="log" id="ex-log"></div>
+        </div>
+        <div class="card">
+          <div class="ct" data-i18n="extract.alt">Or download charts from Bestdori</div>
+          <div class="step">
+            <div class="sn">1</div>
+            <div class="st"><span data-i18n="extract.alt.step1">Go to</span> <a
+                href="https://bestdori.com/tool/explorer" target="_blank"
+                style="color:var(--blue)">bestdori.com/tool/explorer</a> → musicscore →
+              <code>{ID}_{name}_{diff}.txt</code>
+            </div>
+          </div>
+          <div class="step">
+            <div class="sn">2</div>
+            <div class="st" data-i18n="extract.alt.step2"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+<script type="module" src="src/main.js"></script>
+</body>
+
+</html>
