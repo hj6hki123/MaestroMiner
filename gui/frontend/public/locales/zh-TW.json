@@ -20,8 +20,6 @@
   "song.chart.label":        "自訂譜面路徑(選填，填了忽略歌曲 ID)",
   "song.chart.placeholder":  "./325_exist_expert.txt",
   "song.backend":            "後端與連線",
-  "song.backend.hid":        "無需 USB 偵錯，實機首選",
-  "song.backend.adb":        "支援模擬器 / 無線",
   "song.serial.label":       "設備序列號(留空自動偵測)",
   "song.serial.placeholder": "R58M1234ABC",
   "song.orient":             "螢幕旋轉(HID 適用)",

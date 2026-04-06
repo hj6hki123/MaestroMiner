@@ -39,7 +39,12 @@ body {
 
 /* === 2. Sidebar === */
 .sidebar {
-  @apply w-64 bg-ssm-surface border-r border-ssm-border flex flex-col p-5 shadow-[4px_0_24px_rgba(0,0,0,0.2)] z-10;
+  /* 使用帶有透明度的背景與 backdrop-blur 製造毛玻璃效果 */
+  @apply w-64 flex flex-col p-5 z-10;
+  background: rgba(18, 18, 20, 0.65);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
 }
 .sidebar-top {
   @apply flex justify-between items-center mb-8 px-2 mt-2;
@@ -76,13 +81,21 @@ body {
 
 /* === 4. Card design === */
 .card {
-  @apply bg-ssm-surface border border-ssm-border rounded-2xl shadow-sm p-6 mb-6 transition-all duration-300;
+  @apply rounded-2xl p-6 mb-6 transition-all duration-300;
+  background: linear-gradient(145deg, rgba(30, 30, 34, 0.7) 0%, rgba(20, 20, 22, 0.4) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 .card:hover {
-  @apply shadow-lg border-[#444] transform -translate-y-0.5;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 15px rgba(59, 130, 246, 0.1);
+  transform: translateY(-2px);
 }
 .ct {
-  @apply text-lg font-bold mb-5 flex items-center text-white border-b border-ssm-border pb-3;
+  @apply text-lg font-bold mb-5 flex items-center text-white pb-3;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.05em; 
 }
 
 /* === 5. Button design === */
@@ -140,50 +153,107 @@ body {
   @apply block text-sm font-semibold text-ssm-muted mb-2;
 }
 input[type="text"], input[type="number"] {
-  @apply w-full px-4 py-3 rounded-xl border border-ssm-border bg-[#121212] focus:bg-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-ssm-blue/30 focus:border-ssm-blue transition-all duration-300 font-medium text-white placeholder-ssm-hint;
+  @apply w-full px-4 py-3 rounded-xl transition-all duration-300 font-medium text-white placeholder-ssm-hint;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
-input[type="range"] {
-  @apply flex-1 mx-4 accent-ssm-blue h-2 bg-[#333] rounded-lg appearance-none cursor-pointer;
+input[type="text"]:focus, input[type="number"]:focus {
+  @apply outline-none;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3), inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 /* === 7. Difficulty buttons === */
+/* === 7. 難度按鈕 (Cyberpunk Tech Style - Fixed for v4) === */
 .diff-row {
   @apply flex flex-wrap gap-2;
 }
-.db {
-  @apply flex-1 min-w-[64px] py-2 px-1 rounded-xl border-[1.5px] border-ssm-border font-bold text-xs text-center cursor-pointer transition-all duration-300 bg-transparent text-ssm-muted hover:border-[#555] hover:text-white active:scale-90;
-}
-.db.active {
-  @apply transform scale-95;
-}
-/* Disabled difficulties: reduce opacity, use not-allowed cursor, and disable hover/click animations. */
-.db.dis {
-  @apply opacity-25 cursor-not-allowed border-transparent active:scale-100;
-}
-.db.dis:hover {
-  @apply border-transparent text-ssm-muted;
-}
-.db.easy.active { @apply bg-diff-easy-bg border-diff-easy text-diff-easy; }
-.db.normal.active { @apply bg-diff-normal-bg border-diff-normal text-diff-normal; }
-.db.hard.active { @apply bg-diff-hard-bg border-diff-hard text-diff-hard; }
-.db.expert.active { @apply bg-diff-expert-bg border-diff-expert text-diff-expert; }
-.db.special.active { @apply bg-diff-special-bg border-diff-special text-diff-special; }
 
+.db {
+  /* 基礎狀態：深色背景、加粗邊框、微縮放動畫 */
+  @apply flex-1 min-w-[64px] py-2 px-1 rounded-xl border-2 font-black text-[10px] tracking-tighter text-center cursor-pointer transition-all duration-300 active:scale-95 uppercase;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+}
+
+/* 禁用狀態：完全熄滅感 */
+.db.dis {
+  @apply opacity-10 cursor-not-allowed active:scale-100 grayscale;
+  background: transparent;
+  border-color: #333 !important;
+  text-shadow: none !important;
+}
+
+/* === 預設狀態 (未選中)：使用 v4 顏色透明度語法 (例如 /0.3) === */
+.db.easy    { @apply border-[#5ba3e0]/30 text-[#5ba3e0]/60; }
+.db.normal  { @apply border-[#7ab84a]/30 text-[#7ab84a]/60; }
+.db.hard    { @apply border-[#d4921e]/30 text-[#d4921e]/60; }
+.db.expert  { @apply border-[#e06060]/30 text-[#e06060]/60; }
+.db.special { @apply border-[#9b95e0]/30 text-[#9b95e0]/60; }
+
+/* 懸停時略微點亮 (Hover Glow) */
+.db:hover:not(.dis):not(.active) {
+  @apply bg-white/5;
+  /* v4 直接改邊框顏色顏色即可 */
+}
+.db.easy:hover:not(.dis):not(.active)   { @apply border-[#5ba3e0] text-[#5ba3e0]; }
+.db.normal:hover:not(.dis):not(.active) { @apply border-[#7ab84a] text-[#7ab84a]; }
+.db.hard:hover:not(.dis):not(.active)   { @apply border-[#d4921e] text-[#d4921e]; }
+.db.expert:hover:not(.dis):not(.active) { @apply border-[#e06060] text-[#e06060]; }
+.db.special:hover:not(.dis):not(.active){ @apply border-[#9b95e0] text-[#9b95e0]; }
+
+/* === 選中狀態 (Active)：霓虹全開 === */
+.db.active {
+  @apply scale-100 text-white;
+}
+
+.db.easy.active { 
+  background: #0c2a45;
+  border-color: #5ba3e0;
+  box-shadow: 0 0 15px rgba(91, 163, 224, 0.5), inset 0 0 10px rgba(91, 163, 224, 0.3);
+  text-shadow: 0 0 8px #5ba3e0;
+}
+.db.normal.active { 
+  background: #192e09;
+  border-color: #7ab84a;
+  box-shadow: 0 0 15px rgba(122, 184, 74, 0.5), inset 0 0 10px rgba(122, 184, 74, 0.3);
+  text-shadow: 0 0 8px #7ab84a;
+}
+.db.hard.active { 
+  background: #2c1e04;
+  border-color: #d4921e;
+  box-shadow: 0 0 15px rgba(212, 146, 30, 0.5), inset 0 0 10px rgba(212, 146, 30, 0.3);
+  text-shadow: 0 0 8px #d4921e;
+}
+.db.expert.active { 
+  background: #2c0909;
+  border-color: #e06060;
+  box-shadow: 0 0 15px rgba(224, 96, 96, 0.5), inset 0 0 10px rgba(224, 96, 96, 0.3);
+  text-shadow: 0 0 8px #e06060;
+}
+.db.special.active { 
+  background: #1c1a42;
+  border-color: #9b95e0;
+  box-shadow: 0 0 15px rgba(155, 149, 224, 0.5), inset 0 0 10px rgba(155, 149, 224, 0.3);
+  text-shadow: 0 0 8px #9b95e0;
+}
 /* === 8. Mode and backend options === */
 .bg {
-  @apply grid grid-cols-2 gap-4 mb-4;
+  @apply grid grid-cols-2 gap-3 mb-4; /* 將 gap-4 縮小為 gap-3，讓按鈕更緊湊 */
 }
 .bc {
-  @apply p-4 rounded-xl border-[1.5px] border-ssm-border cursor-pointer transition-all duration-300 text-center bg-transparent hover:border-ssm-muted/40 hover:-translate-y-0.5 active:scale-95;
+  @apply p-3 rounded-xl border-[1.5px] border-ssm-border cursor-pointer transition-all duration-300 text-center bg-transparent hover:border-ssm-muted/40 hover:-translate-y-0.5 active:scale-95;
 }
 .bc.active {
   @apply border-ssm-blue bg-ssm-blue-bg shadow-[0_0_15px_rgba(59,130,246,0.1)] transform scale-[0.98];
 }
 .bcn {
-  @apply font-bold text-lg mb-1 text-white;
+  @apply font-bold text-sm mb-0.5 text-white;
 }
 .bcs {
-  @apply text-xs text-ssm-muted font-medium;
+  @apply text-[11px] text-ssm-muted font-medium;
 }
 
 /* === 9. Parameter tuning rows === */
@@ -199,12 +269,15 @@ input[type="range"] {
 
 /* === 10. Log terminal === */
 .log {
-  @apply mt-6 bg-[#09090b] text-[#d4d4d8] font-mono text-xs p-4 rounded-xl h-48 overflow-y-auto shadow-inner border border-[#27272a] leading-relaxed;
+  @apply mt-6 font-mono text-xs p-4 rounded-xl h-48 overflow-y-auto leading-relaxed;
+  background: #030303; 
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8), 0 0 10px rgba(59, 130, 246, 0.05);
+  color: #00ff41; 
 }
-.ll { @apply mb-1 break-words; }
-.ll.info { @apply text-[#60a5fa]; }
-.ll.ok { @apply text-[#4ade80]; }
-.ll.err { @apply text-[#f87171] font-bold; }
+.ll.info { color: #3b82f6; }
+.ll.ok { color: #00ff41; text-shadow: 0 0 5px rgba(0, 255, 65, 0.5); } /* 發光綠 */
+.ll.err { color: #ef4444; text-shadow: 0 0 5px rgba(239, 68, 68, 0.5); font-weight: bold; }
 
 /* === 11. Animations === */
 @keyframes fadeIn {
@@ -212,7 +285,7 @@ input[type="range"] {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* === 12. Song search and dropdown (fix section) === */
+/* === 12. Song search and dropdown  === */
 .sel-bar {
   @apply flex items-center gap-3 bg-ssm-blue-bg p-3 rounded-xl border border-ssm-blue/30 text-white mb-4;
 }
@@ -232,10 +305,12 @@ input[type="range"] {
 .di.hi {
   @apply bg-[#2a2a2a] border-l-4 border-l-ssm-blue;
 }
-.di-id { @apply text-xs font-mono text-ssm-muted w-12; }
+.di-id {
+  @apply text-[11px] font-mono text-ssm-hint;
+}
 /* Let the text block in the dropdown fill remaining space and push difficulty tags to the right. */
-.di-info { @apply flex-1 min-w-0; }
-.di-title { @apply font-bold text-sm text-white; }
+.di-info { @apply flex-1 text-right; }
+.di-title { @apply font-bold text-sm text-white font-mono; }
 .di-band { @apply text-xs text-ssm-muted mt-0.5; }
 /* Ensure the difficulty tag group is right-aligned (using ml-auto). */
 .di-diffs {
@@ -296,3 +371,5 @@ input[type="range"] {
   0% { transform: scale(1); opacity: 0.6; }
   100% { transform: scale(3.5); opacity: 0; }
 }
+
+

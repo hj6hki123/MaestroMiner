@@ -20,8 +20,6 @@
   "song.chart.label":        "自定义谱面路径(可选，填写后忽略歌曲 ID)",
   "song.chart.placeholder":  "./325_exist_expert.txt",
   "song.backend":            "后端与连接",
-  "song.backend.hid":        "无需 USB 调试，实机首选",
-  "song.backend.adb":        "支持模拟器 / 无线",
   "song.serial.label":       "设备序列号(留空自动检测)",
   "song.serial.placeholder": "R58M1234ABC",
   "song.orient":             "屏幕旋转(HID 适用)",

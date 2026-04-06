@@ -39,25 +39,34 @@
         <span class="ico">📦</span><span data-i18n="nav.extract">Extract Assets</span>
       </button>
 
-      <div class="np-card mt-auto bg-ssm-bg p-3 rounded-xl border border-ssm-border flex items-center gap-3"
+      <div
+        class="np-card mt-auto bg-[#18181b] p-3 rounded-xl border border-ssm-border flex flex-col shadow-lg relative overflow-hidden"
         id="np-card" style="display:none">
-        <div
-          class="np-jacket w-12 h-12 bg-ssm-surface rounded-lg overflow-hidden flex items-center justify-center shrink-0">
-          <img id="np-img" src="" alt="" style="display:none" class="w-full h-full object-cover"
-            onerror="this.style.display='none';document.getElementById('np-no').style.display='flex'">
-          <div class="np-no-img text-ssm-muted font-bold text-xl" id="np-no">♪</div>
-        </div>
-        <div class="np-info flex-1 overflow-hidden">
-          <div class="np-title text-sm font-bold text-white truncate" id="np-title">—</div>
-          <div class="np-artist text-xs text-ssm-muted truncate" id="np-artist"></div>
-          <div class="np-meta flex items-center gap-2 mt-1">
-            <span class="np-diff" id="np-diff"></span>
-            <span class="np-lv text-xs font-mono text-white" id="np-lv"></span>
-            <span class="np-state text-xs flex items-center gap-1 text-ssm-hint"><span
-                class="dot w-1.5 h-1.5 rounded-full bg-green-500" id="np-dot"></span><span
-                id="np-state-txt"></span></span>
+
+        <div class="flex items-center gap-3">
+          <div
+            class="w-12 h-12 bg-[#121212] rounded-md overflow-hidden shrink-0 border border-ssm-border/50 flex items-center justify-center shadow-sm">
+            <img id="np-img" src="" alt="" class="w-full h-full object-cover"
+              onerror="this.style.display='none';document.getElementById('np-no').style.display='flex'">
+            <div class="text-ssm-muted font-bold text-lg" id="np-no" style="display:none">♪</div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-bold text-white truncate leading-tight" id="np-title">—</div>
+            <div class="text-[11px] text-ssm-muted truncate mt-1" id="np-artist"></div>
           </div>
         </div>
+
+        <div class="flex items-center justify-between mt-3 pt-2 border-t border-[#333333]">
+          <div class="flex items-center gap-1.5">
+            <span class="np-diff !px-1.5 !py-0.5" id="np-diff"></span>
+            <span class="text-[11px] font-mono font-bold text-ssm-hint" id="np-lv"></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="dot" id="np-dot"></span>
+            <span id="np-state-txt" class="text-[10px] text-ssm-muted whitespace-nowrap font-medium"></span>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -130,11 +139,9 @@
           <div class="bg">
             <div class="bc active" id="backend-hid" onclick="setBackend('hid')">
               <div class="bcn">HID</div>
-              <div class="bcs" data-i18n="song.backend.hid">No USB debugging needed</div>
             </div>
             <div class="bc" id="backend-adb" onclick="setBackend('adb')">
               <div class="bcn">ADB</div>
-              <div class="bcs" data-i18n="song.backend.adb">Emulator / wireless</div>
             </div>
           </div>
 
@@ -259,16 +266,15 @@
         </div>
       </div>
 
-      <div class="pane" id="pane-play">
+    <div class="pane" id="pane-play">
         <div class="pg-title" data-i18n="nav.play">Play Control</div>
+        
         <div class="play-now mb-6 bg-ssm-surface border border-ssm-border rounded-2xl p-6 shadow-sm">
           <div class="pn-none text-ssm-muted text-center py-4" id="pn-none" data-i18n="play.none">No song loaded.</div>
           <div id="pn-loaded" style="display:none">
             <div class="pn-top flex gap-6 items-center">
-              <div
-                class="pn-jacket w-32 h-32 bg-ssm-bg rounded-xl overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.5)] border border-ssm-border shrink-0 flex items-center justify-center">
-                <img id="pn-img" src="" alt="" class="w-full h-full object-cover"
-                  onerror="this.style.display='none';document.getElementById('pn-no').style.display='flex'">
+              <div class="pn-jacket w-32 h-32 bg-ssm-bg rounded-xl overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.5)] border border-ssm-border shrink-0 flex items-center justify-center">
+                <img id="pn-img" src="" alt="" class="w-full h-full object-cover" onerror="this.style.display='none';document.getElementById('pn-no').style.display='flex'">
                 <div class="pn-no text-5xl text-ssm-muted font-bold" id="pn-no" style="display:none">♪</div>
               </div>
               <div class="pn-meta flex-1">
@@ -276,74 +282,56 @@
                 <div class="pn-artist text-sm text-ssm-muted mb-4" id="pn-artist-big"></div>
                 <div class="pn-badges flex items-center gap-2">
                   <span class="np-diff text-xs px-3 py-1" id="pn-diff-badge"></span>
-                  <span class="pn-lv font-mono font-bold text-white bg-[#333] px-3 py-1 rounded text-xs"
-                    id="pn-lv-big"></span>
+                  <span class="pn-lv font-mono font-bold text-white bg-[#333] px-3 py-1 rounded text-xs" id="pn-lv-big"></span>
                 </div>
               </div>
             </div>
             <div class="pn-status flex items-center gap-3 mt-6 pt-4 border-t border-ssm-border">
               <div class="dot" id="pn-dot"></div>
               <div class="pn-state-label text-sm font-bold text-white" id="pn-state-label">Ready</div>
-              <div class="flex-1"></div>
-              <button class="btn !text-xs !py-1.5 !px-3" onclick="nav('song')" data-i18n="play.change">Change
-                Song</button>
+              <div class="flex:1"></div>
+              <button class="btn !text-xs !py-1.5 !px-3" onclick="nav('song')" data-i18n="play.change">Change Song</button>
             </div>
           </div>
         </div>
-
+        
         <div class="card">
-          <div class="ct" data-i18n="play.start.title">Start Playback</div>
-          <div class="text-xs text-ssm-hint mb-4 leading-relaxed" data-i18n="play.start.hint"></div>
-          <button
-            class="start-btn btn pri w-full py-4 text-xl tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
-            id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶ Start</button>
-          <div class="kh text-center mt-3 text-sm text-ssm-muted"><span data-i18n="play.start.kbd">Click, or
-              press</span> <kbd
-              class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">Enter</kbd> / <kbd
-              class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">Space</kbd></div>
+          <div class="ct" data-i18n="play.start.title">Playback Control</div>
+          
+          
+          <button class="start-btn btn pri w-full py-4 text-xl tracking-wider disabled:opacity-50 disabled:cursor-not-allowed" id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶ Start</button>
+          <div class="text-xs text-ssm-hint mb-4 leading-relaxed text-center" data-i18n="play.start.hint"></div>
+          <div class="kh text-center mt-2 text-[11px] text-ssm-hint"><span data-i18n="play.start.kbd">Click, or press</span> <kbd class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">Enter</kbd> / <kbd class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">Space</kbd></div>
+          
+          <div class="h-[1px] bg-ssm-border my-5 w-1/4 mx-auto"></div>
+
+          <button class="btn dan btn-b !mt-0" onclick="apiStop()" data-i18n="play.stop">■ Stop</button>
+          <div class="kh text-center mt-2 text-[11px] text-ssm-hint"></div>
+
+            
+          
         </div>
 
         <div class="card">
           <div class="ct" data-i18n="play.offset.title">Offset Adjustment</div>
-          <div class="text-[11px] text-ssm-hint mb-3" data-i18n="play.offset.hint"></div>
+          <div class="text-[11px] text-ssm-hint mb-3 text-center" data-i18n="play.offset.hint"></div>
           <div class="oc flex items-center justify-center gap-2 bg-ssm-bg p-4 rounded-xl border border-ssm-border">
-            <button
-              class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90"
-              onclick="adj(-100)">«</button>
-            <button
-              class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90"
-              onclick="adj(-50)">‹‹</button>
-            <button
-              class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90"
-              onclick="adj(-10)">‹</button>
+            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(-100)">«</button>
+            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(-50)">‹‹</button>
+            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(-10)">‹</button>
             <div class="text-center w-20">
               <div class="ov text-xl font-mono font-black text-white" id="ov">0</div>
               <div class="ou text-xs text-ssm-hint font-bold uppercase tracking-widest">ms</div>
             </div>
-            <button
-              class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90"
-              onclick="adj(10)">›</button>
-            <button
-              class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90"
-              onclick="adj(50)">››</button>
-            <button
-              class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90"
-              onclick="adj(100)">»</button>
+            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(10)">›</button>
+            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(50)">››</button>
+            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(100)">»</button>
           </div>
           <div class="text-center mt-4">
             <button class="btn" onclick="resetOff()" data-i18n="play.offset.reset">Reset</button>
           </div>
         </div>
 
-        <div class="card">
-          <button class="btn dan btn-b !mt-0" onclick="apiStop()" data-i18n="play.stop">■ Stop</button>
-          <div class="kh text-center mt-3 text-sm text-ssm-muted">
-            <span data-i18n="play.stop.hint">Or press</span>
-            <kbd class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">Ctrl</kbd>+<kbd
-              class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">C</kbd>
-            <span data-i18n="play.stop.hint2">in terminal</span>
-          </div>
-        </div>
         <div class="log" id="play-log"></div>
       </div>
 

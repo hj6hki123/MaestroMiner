@@ -20,8 +20,6 @@
   "song.chart.label":        "Custom chart path (optional, overrides Song ID)",
   "song.chart.placeholder":  "./325_exist_expert.txt",
   "song.backend":            "Backend & Connection",
-  "song.backend.hid":        "No USB debugging needed",
-  "song.backend.adb":        "Emulator / wireless",
   "song.serial.label":       "Device serial (leave blank to auto-detect)",
   "song.serial.placeholder": "R58M1234ABC",
   "song.orient":             "Screen rotation (HID only)",

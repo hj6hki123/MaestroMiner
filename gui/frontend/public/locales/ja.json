@@ -20,8 +20,6 @@
   "song.chart.label":        "カスタム譜面パス(任意、指定時は楽曲 ID を無視)",
   "song.chart.placeholder":  "./325_exist_expert.txt",
   "song.backend":            "バックエンドと接続",
-  "song.backend.hid":        "USB デバッグ不要・実機向け",
-  "song.backend.adb":        "エミュレーター / 無線接続",
   "song.serial.label":       "デバイスシリアル(空白で自動検出)",
   "song.serial.placeholder": "R58M1234ABC",
   "song.orient":             "画面回転(HID のみ)",
