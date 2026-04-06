@@ -40,6 +40,13 @@ This program was heavily developed with the assistance of AI. Please use it at y
 > [!CAUTION]
 > **For certain SPECIAL difficulty songs, such as [Game Changer](https://bestdori.com/info/songs/782/Game-Changer), some movements have already been handled. However, patterns like left-right directions after sustained presses are still frequently missed. A preliminary solution has been implemented, and further help is welcome from anyone willing to contribute.**
 
+> [!IMPORTANT]
+> **This project is developed for personal learning and research purposes only. The stability and applicability of its functions are not guaranteed.**
+>
+> * **Non-Affiliation**: This project is an independent third-party tool and is **not** affiliated with, authorized by, or associated with any game developers, publishers, or related organizations.
+> * **Risk of Use**: Use of this project may violate the service terms of the games or platforms involved, potentially leading to account suspension, bans, or data corruption.
+> * **Limitation of Liability**: The author assumes no responsibility for any consequences resulting from the use of this project. Users are advised to evaluate the risks and use the software with caution.
+
 ## Future Projects
 1. Mobile Porting & Deployment: Porting the application to mobile devices for use on non-rooted hardware (leveraging ADB tools such as Shizuku).
 
