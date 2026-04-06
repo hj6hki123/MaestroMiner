@@ -119,7 +119,7 @@ func runGUI(conf *config.Config) {
 						fmt.Sprintf("musicscore*/%03d/*_%s.txt", songID, difficulty)))
 				}
 				if err != nil || len(pathResults) < 1 {
-					srv.SetError("找不到譜面，請先解包素材或改用自訂譜面路徑")
+					srv.SetError("Musicscore not found. Please extract assets first or use a custom chart path.")
 					return
 				}
 				chartText, err = os.ReadFile(pathResults[0])
@@ -127,7 +127,7 @@ func runGUI(conf *config.Config) {
 				chartText, err = os.ReadFile(chartPath)
 			}
 			if err != nil {
-				srv.SetError("讀取譜面失敗：" + err.Error())
+				srv.SetError("Failed to read musicscore: " + err.Error())
 				return
 			}
 
@@ -135,7 +135,7 @@ func runGUI(conf *config.Config) {
 			if pjskMode {
 				chart, err = scores.ParseSUS(string(chartText))
 				if err != nil {
-					srv.SetError("解析 SUS 失敗：" + err.Error())
+					srv.SetError("Failed to parse SUS: " + err.Error())
 					return
 				}
 			} else {
@@ -185,13 +185,13 @@ func runGUI(conf *config.Config) {
 			case "adb":
 				checkOrDownload()
 				if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
-					srv.SetError("ADB server 啟動失敗：" + err.Error())
+					srv.SetError("Failed to start ADB server: " + err.Error())
 					return
 				}
 				client := adb.NewDefaultClient()
 				devices, err := client.Devices()
 				if err != nil || len(devices) == 0 {
-					srv.SetError("找不到 ADB 裝置，請確認已連線")
+					srv.SetError("No ADB devices found. Please make sure the device is connected.")
 					return
 				}
 				var device *adb.Device
@@ -206,12 +206,12 @@ func runGUI(conf *config.Config) {
 					}
 				}
 				if device == nil {
-					srv.SetError("找不到授權的 ADB 裝置")
+					srv.SetError("No authorized ADB device found.")
 					return
 				}
 				scrcpy := controllers.NewScrcpyController(device)
 				if err := scrcpy.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
-					srv.SetError("連線裝置失敗：" + err.Error())
+					srv.SetError("Failed to connect to device: " + err.Error())
 					return
 				}
 				defer scrcpy.Close()
@@ -223,7 +223,7 @@ func runGUI(conf *config.Config) {
 				if deviceSerial == "" {
 					serials := controllers.FindHIDDevices()
 					if len(serials) == 0 {
-						srv.SetError("找不到 HID 裝置，請確認 USB 已連線")
+						srv.SetError("No HID devices found. Please make sure USB is connected.")
 						return
 					}
 					deviceSerial = serials[0]
@@ -277,18 +277,18 @@ func runGUI(conf *config.Config) {
 
 	addr, err := srv.Start()
 	if err != nil {
-		log.Die("GUI server 啟動失敗：", err)
+		log.Die("Failed to start GUI server:", err)
 	}
 
-	fmt.Printf("\n  SSM GUI 已啟動\n")
-	fmt.Printf("   請用瀏覽器開啟：%s\n\n", addr)
+	fmt.Printf("\n  SSM GUI started\n")
+	fmt.Printf("   Open this URL in your browser: %s\n\n", addr)
 
 	openBrowser(addr)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
-	fmt.Println("\nSSM GUI 已關閉")
+	fmt.Println("\nSSM GUI closed")
 }
 
 // ─────────────────────────────────────────────
@@ -751,8 +751,8 @@ func main() {
 	flag.BoolVar(&showDebugLog, "g", false, p.Sprintf("usage.g"))
 	flag.BoolVar(&showVersion, "v", false, p.Sprintf("usage.v"))
 
-	flag.BoolVar(&guiMode, "gui", false, "啟動圖形化介面(瀏覽器 GUI)")
-	flag.IntVar(&guiPort, "port", 8765, "GUI 使用的 port(預設 8765)")
+	flag.BoolVar(&guiMode, "gui", false, "Start the graphical interface (browser GUI)")
+	flag.IntVar(&guiPort, "port", 8765, "Port used by the GUI (default 8765)")
 
 	flag.Parse()
 	// If no arguments are provided, enable GUI mode by default.
