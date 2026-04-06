@@ -25,7 +25,7 @@ Given that the original author has stopped development (I think?), I've adapted 
 
 ### 🎚️ Humanization & Advanced Tuning
 - **Jitter system** — adds randomized offsets to touch timing, position, and tap duration to simulate human play, keeping judgments in the Perfect–Good range instead of robotic all-Perfects
-- **Advanced parameter panel** — tune Flick speed and distance, Slide tracking density, Tap hold duration, and more directly from the Settings page to calibrate for your device's latency; defaults auto-switch between BanG Dream and PJSK modes
+- **Advanced parameter panel** — tune Flick speed and distance, Slide tracking density, Tap hold duration, and more directly from the Settings page to calibrate for your device's latency
 - **Device management** — add, edit, and delete saved device profiles from the Settings page
 
 ### 🔧 Core Engine Fixes
