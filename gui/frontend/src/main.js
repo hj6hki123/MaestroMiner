@@ -95,6 +95,34 @@ function closeLangMenu() {
 }
 document.addEventListener('click', function (e) { if (!e.target.closest('#lang-picker')) closeLangMenu(); });
 
+var THEME_KEY = 'ssm-theme';
+
+function applyTheme(theme, save) {
+  var t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.classList.toggle('dark', t === 'dark');
+  var ico = document.getElementById('theme-ico');
+  if (ico) ico.textContent = t === 'dark' ? '☾' : '☀';
+  if (save) {
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) { }
+  }
+}
+
+function initTheme() {
+  var saved;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) { }
+  if (saved === 'light' || saved === 'dark') {
+    applyTheme(saved, false);
+    return;
+  }
+  applyTheme('dark', false);
+}
+
+function toggleTheme() {
+  var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(cur === 'dark' ? 'light' : 'dark', true);
+}
+
 function toggleDevDrop(e) {
   e.stopPropagation();
   var drop = document.getElementById('dev-drop');
@@ -169,6 +197,22 @@ var DN = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
 var DOT_CLS = { 1: 'ready', 2: 'playing', 3: 'done', 4: 'error' };
 
+function diffName(i) {
+  if (i === 4 && S.mode === 'pjsk') return 'master';
+  return DN[i] || DN[3];
+}
+
+function diffLabel(i) {
+  if (i === 4 && S.mode === 'pjsk') return 'MASTER';
+  return DL_BANG[i] || DL_BANG[3];
+}
+
+function updateDiffLabels() {
+  var btns = document.querySelectorAll('.db');
+  if (!btns || !btns.length) return;
+  if (btns[4]) btns[4].textContent = diffLabel(4);
+}
+
 function updateDynamicTexts() {
   var stateMap = { 0: 'state.idle', 1: 'state.ready.full', 2: 'state.playing.full', 3: 'state.done.full', 4: 'state.error.full' };
   var txt = t(stateMap[S.state] || 'state.idle');
@@ -214,6 +258,7 @@ function setMode(m) {
   } else {
     ADV_DEFAULTS.flickDuration = 60; ADV_DEFAULTS.flickFactor = 20;
   }
+  updateDiffLabels();
   resetAdvanced();
 }
 function setBackend(b) {
@@ -247,6 +292,9 @@ function setDiff(i) {
   btns.forEach(function (b, j) {
     b.classList.toggle('active', j === i);
   });
+
+  // Keep play-panel glow synced with current difficulty even before playback starts.
+  applyJacketColor(getDiffThemeColor(diffName(i)));
 }
 function setDiffAvail(avail) {
   document.querySelectorAll('.db').forEach(function (b, i) {
@@ -271,8 +319,62 @@ function loadDB(cb) {
   if (S.db) { cb(S.db); return; }
   fetch('/api/songdb?mode=' + S.mode)
     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function (d) { S.db = d; cb(d); })
+    .then(function (d) {
+      S.db = normalizeSongDB(d);
+      cb(S.db);
+    })
     .catch(function (e) { log('song-log', t('log.conn.fail') + e, 'err'); });
+}
+
+function normalizeSong(rawSong) {
+  if (!rawSong) return null;
+
+  // Bestdori payload is already close to the UI schema.
+  if (rawSong.musicTitle) {
+    return rawSong;
+  }
+
+  var id = rawSong.id || rawSong.ID;
+  if (!id) return null;
+
+  var title = rawSong.title || rawSong.Title || '';
+  var pronunciation = rawSong.pronunciation || rawSong.Pronunciation || '';
+  var lyricist = rawSong.lyricist || rawSong.Lyricist || '';
+  var composer = rawSong.composer || rawSong.Composer || '';
+  var arranger = rawSong.arranger || rawSong.Arranger || '';
+
+  return {
+    id: id,
+    musicTitle: [title, pronunciation],
+    difficulty: rawSong.difficulty || {},
+    jacketImage: rawSong.jacketImage || null,
+    __artist: [lyricist, composer, arranger].filter(Boolean).join(' / '),
+    __raw: rawSong,
+  };
+}
+
+function normalizeSongDB(payload) {
+  if (!payload || !payload.songs) {
+    return { songs: {}, bands: {} };
+  }
+
+  var songs = {};
+  if (Array.isArray(payload.songs)) {
+    payload.songs.forEach(function (s) {
+      var n = normalizeSong(s);
+      if (n && n.id) songs[n.id] = n;
+    });
+  } else {
+    Object.keys(payload.songs).forEach(function (sid) {
+      var n = normalizeSong(payload.songs[sid]);
+      if (n) songs[parseInt(sid)] = n;
+    });
+  }
+
+  return {
+    songs: songs,
+    bands: payload.bands || {},
+  };
 }
 
 function pickName(arr) { if (!arr) return ''; return arr[2] || arr[1] || arr[0] || arr[3] || arr[4] || ''; }
@@ -303,7 +405,7 @@ function renderDrop(res) {
   if (!res.length) { drop.innerHTML = '<div class="drop-hint">' + t('drop.none') + '</div>'; drop.classList.add('open'); return; }
   drop.innerHTML = res.map(function (r) {
     var title = pickName(r.song.musicTitle);
-    var dh = Object.keys(r.song.difficulty || {}).map(Number).sort().map(function (d) { return '<span class="di-d d-' + DN[d] + '">' + DL_BANG[d] + '</span>'; }).join('');
+    var dh = Object.keys(r.song.difficulty || {}).map(Number).sort().map(function (d) { return '<span class="di-d d-' + diffName(d) + '">' + diffLabel(d) + '</span>'; }).join('');
     return '<div class="di" onclick="selSong(' + r.id + ')">'
       + '<span class="di-id">#' + r.id + '</span>'
       + '<div class="di-info"><div class="di-title">' + esc(title) + '</div>'
@@ -334,7 +436,8 @@ function selSong(id) {
     document.getElementById('sel-bar').classList.add('show');
     document.getElementById('q').value = ''; document.getElementById('sc').style.display = 'none';
     document.getElementById('song-id').value = id; closeDrop();
-    setDiffAvail(Object.keys(song.difficulty || {}).map(Number).sort());
+    var avail = Object.keys(song.difficulty || {}).map(Number).sort();
+    setDiffAvail(avail.length ? avail : null);
     log('song-log', '#' + id + ' ' + title, 'ok');
   });
 }
@@ -364,8 +467,19 @@ es.onmessage = function (e) { var d = JSON.parse(e.data); S.state = d.state; S.o
 
 function updateUI(d) {
   var st = d.state, dotCls = DOT_CLS[st] || '';
-  document.getElementById('np-dot').className = 'dot ' + dotCls;
+  var npDot = document.getElementById('np-dot');
+  if (npDot) npDot.className = 'dot ' + dotCls;
   document.getElementById('pn-dot').className = 'dot ' + dotCls;
+
+  var npCard = document.getElementById('np-card');
+  if (npCard) {
+    npCard.classList.remove('np-state-idle', 'np-state-ready', 'np-state-playing', 'np-state-done', 'np-state-error');
+    if (st === 1) npCard.classList.add('np-state-ready');
+    else if (st === 2) npCard.classList.add('np-state-playing');
+    else if (st === 3) npCard.classList.add('np-state-done');
+    else if (st === 4) npCard.classList.add('np-state-error');
+    else npCard.classList.add('np-state-idle');
+  }
   
   // Sync jacket-wrap playing class
   var jw = document.getElementById('pn-jacket-wrap');
@@ -402,28 +516,53 @@ function showNP(np) {
   if (np.jacketUrl) { var img = document.getElementById('np-img'); img.src = np.jacketUrl; img.style.display = 'block'; document.getElementById('np-no').style.display = 'none'; }
   document.getElementById('np-title').textContent = np.title || '—';
   document.getElementById('np-artist').textContent = np.artist || '';
-  var db = document.getElementById('np-diff'); db.className = 'np-diff d-' + (np.diff || 'expert'); db.textContent = (np.diff || '').toUpperCase();
+  var npDiffRaw = np.diff || 'expert';
+  var npDiffKey = normalizeDiffKey(npDiffRaw);
+  var db = document.getElementById('np-diff'); db.className = 'np-diff d-' + npDiffKey; db.textContent = String(npDiffRaw || '').toUpperCase();
   document.getElementById('np-lv').textContent = np.diffLevel ? 'Lv.' + np.diffLevel : '';
 }
+
+function normalizeDiffKey(diff) {
+  var key = String(diff || '').toLowerCase();
+  if (key === 'master') return 'special';
+  return key;
+}
+
+function getDiffThemeColor(diff) {
+  var diffColors = {
+    easy: '#5ba3e0',
+    normal: '#7ab84a',
+    hard: '#d4921e',
+    expert: '#e06060',
+    special: '#9b95e0'
+  };
+  var key = normalizeDiffKey(diff);
+  return diffColors[key] || '#3b82f6';
+}
+
+function applyJacketColor(themeColor) {
+  var wrap = document.getElementById('pn-jacket-wrap');
+  if (wrap) wrap.style.setProperty('--jacket-color', themeColor);
+
+  var deck = document.querySelector('.player-deck');
+  if (deck) deck.style.setProperty('--jacket-color', themeColor);
+
+  // Mirror to root so all descendants and pseudo-elements resolve the same value.
+  document.documentElement.style.setProperty('--jacket-color', themeColor);
+}
+
 function updatePlayCard(np) {
   document.getElementById('pn-none').style.display = 'none'; document.getElementById('pn-loaded').style.display = 'block';
   var pimg = document.getElementById('pn-img');
   if (np.jacketUrl) { pimg.src = np.jacketUrl; pimg.style.display = 'block'; document.getElementById('pn-no').style.display = 'none'; }
   document.getElementById('pn-title-big').textContent = np.title || '—';
   document.getElementById('pn-artist-big').textContent = np.artist || '';
-  var badge = document.getElementById('pn-diff-badge'); badge.className = 'np-diff d-' + (np.diff || 'expert'); badge.textContent = (np.diff || '').toUpperCase();
+  var rawDiff = np.diff || 'expert';
+  var diffKey = normalizeDiffKey(rawDiff);
+  var badge = document.getElementById('pn-diff-badge'); badge.className = 'np-diff d-' + diffKey; badge.textContent = String(rawDiff || '').toUpperCase();
   document.getElementById('pn-lv-big').textContent = np.diffLevel ? 'Lv.' + np.diffLevel : '';
-  var diffColors = {
-    'easy': '#5ba3e0', 'normal': '#7ab84a', 'hard': '#d4921e',
-    'expert': '#e06060', 'special': '#9b95e0'
-  };
-  var themeColor = diffColors[np.diff] || '#3b82f6';
-  var wrap = document.getElementById('pn-jacket-wrap');
-  if (wrap) wrap.style.setProperty('--jacket-color', themeColor);
-  
-  // Sync --jacket-color to player-deck for background glow
-  var deck = document.querySelector('.player-deck');
-  if (deck) deck.style.setProperty('--jacket-color', themeColor);
+  var themeColor = getDiffThemeColor(diffKey);
+  applyJacketColor(themeColor);
 }
 
 // ══ keyboard ═══════════════════════════════════════════════
@@ -439,13 +578,14 @@ document.addEventListener('keydown', function (e) {
 
 // ══ API ════════════════════════════════════════════════════
 function buildNowPlaying() {
-  var np = { songId: S.songId, diff: DN[S.diff], mode: S.mode, title: '', artist: '', diffLevel: 0, jacketUrl: '' };
+  var np = { songId: S.songId, diff: diffName(S.diff), mode: S.mode, title: '', artist: '', diffLevel: 0, jacketUrl: '' };
   if (S.songData) {
     np.title = pickName(S.songData.musicTitle) || '';
     var di = S.songData.difficulty; if (di && di[S.diff]) np.diffLevel = di[S.diff].playLevel || 0;
     var ji = S.songData.jacketImage;
     if (ji && ji[0]) { var n = Math.ceil(S.songId / 10) * 10 || 10; np.jacketUrl = 'https://bestdori.com/assets/jp/musicjacket/musicjacket' + n + '_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket' + n + '-' + ji[0] + '-jacket.png'; }
     if (S.db && S.db.bands && S.songData.bandId) { var band = S.db.bands[S.songData.bandId]; if (band && band.bandName) np.artist = pickName(band.bandName); }
+    if (!np.artist && S.songData.__artist) np.artist = S.songData.__artist;
   }
   return np;
 }
@@ -505,7 +645,7 @@ function submitRun() {
   var pRaw = parseInt(document.getElementById('sld-position').value) || 0;
   var dRaw = parseInt(document.getElementById('sld-tapDur').value) || 0;
   var adv = getAdvancedValues();
-  var body = { mode: S.mode, backend: S.backend, diff: DN[S.diff], orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
@@ -618,7 +758,10 @@ function doExtract() {
 }
 // ══ initialization ═════════════════════════════════════════
 I18n.init();
+initTheme();
+applyJacketColor(getDiffThemeColor(diffName(S.diff)));
 setBackend(S.backend);
+updateDiffLabels();
 resetAdvanced();
 loadDevices();
 
@@ -628,6 +771,7 @@ loadDevices();
 Object.assign(window, {
   I18n,
   toggleLangMenu,
+  toggleTheme,
   nav,
   navToSearch,
   killAdbServer,

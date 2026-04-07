@@ -14,14 +14,19 @@
     <div class="sidebar">
       <div class="sidebar-top">
         <div class="logo">SSM</div>
-        <div class="lang-picker" id="lang-picker">
-          <button
-            class="lang-btn border border-ssm-border bg-ssm-bg rounded-lg px-2 py-1 text-sm text-white flex items-center gap-1 hover:bg-[#2a2a2a] transition-all duration-300 shadow-sm active:scale-95"
-            id="lang-btn" onclick="toggleLangMenu()">
-            <span class="lb-name font-bold tracking-wider" id="lb-name">EN</span>
-            <span class="lb-arrow text-ssm-muted">▾</span>
+        <div class="top-actions">
+          <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">
+            <span id="theme-ico">☾</span>
           </button>
-          <div class="lang-menu" id="lang-menu"></div>
+          <div class="lang-picker" id="lang-picker">
+            <button
+              class="lang-btn border border-ssm-border bg-ssm-bg rounded-lg px-2 py-1 text-sm text-white flex items-center gap-1 hover:bg-[#2a2a2a] transition-all duration-300 shadow-sm active:scale-95"
+              id="lang-btn" onclick="toggleLangMenu()">
+              <span class="lb-name font-bold tracking-wider" id="lb-name">EN</span>
+              <span class="lb-arrow text-ssm-muted">▾</span>
+            </button>
+            <div class="lang-menu" id="lang-menu"></div>
+          </div>
         </div>
       </div>
 
@@ -43,27 +48,36 @@
         class="np-card mt-auto bg-[#18181b] p-3 rounded-xl border border-ssm-border flex flex-col shadow-lg relative overflow-hidden"
         id="np-card" style="display:none">
 
-        <div class="flex items-center gap-3">
-          <div
-            class="w-12 h-12 bg-[#121212] rounded-md overflow-hidden shrink-0 border border-ssm-border/50 flex items-center justify-center shadow-sm">
+        <div class="np-main flex items-center gap-3">
+          <div class="np-cover w-12 h-12 bg-[#121212] rounded-md overflow-hidden shrink-0 border border-ssm-border/50 flex items-center justify-center shadow-sm">
             <img id="np-img" src="" alt="" class="w-full h-full object-cover"
               onerror="this.style.display='none';document.getElementById('np-no').style.display='flex'">
             <div class="text-ssm-muted font-bold text-lg" id="np-no" style="display:none">♪</div>
           </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-[13px] font-bold text-white truncate leading-tight" id="np-title">—</div>
-            <div class="text-[11px] text-ssm-muted truncate mt-1" id="np-artist"></div>
+          <div class="np-text flex-1 min-w-0">
+            <div class="text-[13px] font-bold text-white leading-tight" id="np-title">—</div>
+            <div class="text-[11px] text-ssm-muted mt-1" id="np-artist"></div>
           </div>
         </div>
 
-        <div class="flex items-center justify-between mt-3 pt-2 border-t border-[#333333]">
-          <div class="flex items-center gap-1.5">
+        <div class="np-meta-row mt-3 pt-2 border-t border-[#333333]">
+          <div class="np-diff-row flex items-center gap-2">
             <span class="np-diff !px-1.5 !py-0.5" id="np-diff"></span>
             <span class="text-[11px] font-mono font-bold text-ssm-hint" id="np-lv"></span>
           </div>
-          <div class="flex items-center gap-1.5">
-            <span class="dot" id="np-dot"></span>
-            <span id="np-state-txt" class="text-[10px] text-ssm-muted whitespace-nowrap font-medium"></span>
+          <div class="np-state-row flex items-center mt-2">
+            <div class="viz-bar" id="vbar" aria-hidden="true">
+              <span style="--h:10px;--d:0.7s"></span><span style="--h:22px;--d:0.5s"></span>
+              <span style="--h:16px;--d:0.9s"></span><span style="--h:28px;--d:0.6s"></span>
+              <span style="--h:12px;--d:0.8s"></span><span style="--h:24px;--d:0.55s"></span>
+              <span style="--h:18px;--d:0.7s"></span><span style="--h:8px;--d:0.65s"></span>
+              <span style="--h:26px;--d:0.9s"></span><span style="--h:14px;--d:0.75s"></span>
+              <span style="--h:20px;--d:0.5s"></span><span style="--h:28px;--d:0.6s"></span>
+              <span style="--h:10px;--d:0.8s"></span><span style="--h:18px;--d:0.7s"></span>
+              <span style="--h:24px;--d:0.55s"></span><span style="--h:14px;--d:0.9s"></span>
+              <span style="--h:28px;--d:0.65s"></span><span style="--h:8px;--d:0.75s"></span>
+            </div>
+            <span id="np-state-txt" class="np-state-a11y"></span>
           </div>
         </div>
 
@@ -72,71 +86,74 @@
 
     <div class="main">
 
-      <div class="pane active" id="pane-song">
+      <div class="pane active song-setup" id="pane-song">
         <div class="pg-title" data-i18n="nav.song">Song Setup</div>
 
-        <div class="card">
-          <div class="ct" data-i18n="song.mode">Game Mode</div>
-          <div class="bg">
-            <div class="bc active" id="mode-bang" onclick="setMode('bang')">
-              <div class="bcn">BanG Dream!</div>
-              <div class="bcs" data-i18n="song.mode.bang">Girls Band Party</div>
+        <div class="song-top-grid">
+          <div class="card song-card mode-card">
+            <div class="ct" data-i18n="song.mode">Game Mode</div>
+            <div class="bg mode-bg">
+              <div class="bc active" id="mode-bang" onclick="setMode('bang')">
+                <div class="bcn">BanG Dream!</div>
+                <div class="bcs" data-i18n="song.mode.bang">Girls Band Party</div>
+              </div>
+              <div class="bc" id="mode-pjsk" onclick="setMode('pjsk')">
+                <div class="bcn">Project Sekai</div>
+                <div class="bcs" data-i18n="song.mode.pjsk">Colorful Stage!</div>
+              </div>
             </div>
-            <div class="bc" id="mode-pjsk" onclick="setMode('pjsk')">
-              <div class="bcn">Project Sekai</div>
-              <div class="bcs" data-i18n="song.mode.pjsk">Colorful Stage!</div>
+          </div>
+          <div class="card song-card">
+            <div class="ct flex items-center justify-between">
+              <span data-i18n="song.backend">Backend & Connection</span>
+              <div id="hid-warn-box" data-i18n="song.backend.hid_warn"
+                class="text-[10px] bg-red-950/20 text-red-400 p-2.5 rounded-lg border border-red-900/30 leading-relaxed font-medium">
+              </div>
+            </div>
+
+            <div class="bg">
+              <div class="bc" id="backend-hid" onclick="setBackend('hid')">
+                <div class="bcn">HID</div>
+              </div>
+              <div class="bc active" id="backend-adb" onclick="setBackend('adb')">
+                <div class="bcn">ADB</div>
+              </div>
+            </div>
+
+            <div class="field !mb-4">
+              <div class="flex items-end justify-between mb-2">
+                <label class="!mb-0" data-i18n="song.serial.label">Device serial</label>
+                <button
+                  class="auto-detect-btn text-[10px] bg-[#27272a] text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded border border-[#3f3f46] transition-all font-bold flex items-center gap-1 active:scale-95"
+                  onclick="autoDetectDevice()">
+                  🔍 Auto Detect
+                </button>
+              </div>
+
+              <div class="sw relative">
+                <input type="text" id="dev-serial" autocomplete="off" class="pr-10">
+                <button
+                  class="sc absolute right-3 top-1/2 -translate-y-1/2 text-ssm-muted hover:text-white transition-colors"
+                  id="btn-dev-drop" onclick="toggleDevDrop(event)">▾</button>
+                <div class="drop" id="dev-drop"></div>
+              </div>
+            </div>
+
+            <div id="orient-wrap" class="field !mb-0">
+              <label data-i18n="song.orient">Screen rotation (HID only)</label>
+              <div class="grid grid-cols-2 gap-3 mt-2">
+                <button class="bc active !p-3 flex items-center justify-center" id="ol" onclick="setOrient('left')">
+                  <div class="bcs !text-sm !font-bold" data-i18n="song.orient.left">↺ CCW</div>
+                </button>
+                <button class="bc !p-3 flex items-center justify-center" id="or" onclick="setOrient('right')">
+                  <div class="bcs !text-sm !font-bold" data-i18n="song.orient.right">↻ CW</div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
-        <div class="card">
-          <div class="ct flex items-center justify-between">
-            <span data-i18n="song.backend">Backend & Connection</span>
-            <div id="hid-warn-box" data-i18n="song.backend.hid_warn"
-              class="text-[10px] bg-red-950/20 text-red-400 p-2.5 rounded-lg border border-red-900/30 leading-relaxed font-medium">
-            </div>
-          </div>
 
-          <div class="bg">
-            <div class="bc" id="backend-hid" onclick="setBackend('hid')">
-              <div class="bcn">HID</div>
-            </div>
-            <div class="bc active" id="backend-adb" onclick="setBackend('adb')">
-              <div class="bcn">ADB</div>
-            </div>
-          </div>
-
-          <div class="field">
-            <div class="flex items-end justify-between mb-2">
-              <label class="!mb-0" data-i18n="song.serial.label">Device serial</label>
-              <button
-                class="text-[10px] bg-[#27272a] text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded border border-[#3f3f46] transition-all font-bold flex items-center gap-1 active:scale-95"
-                onclick="autoDetectDevice()">
-                🔍 Auto Detect
-              </button>
-            </div>
-
-            <div class="sw relative">
-              <input type="text" id="dev-serial" autocomplete="off" class="pr-10">
-              <button
-                class="sc absolute right-3 top-1/2 -translate-y-1/2 text-ssm-muted hover:text-white transition-colors"
-                id="btn-dev-drop" onclick="toggleDevDrop(event)">▾</button>
-              <div class="drop" id="dev-drop"></div>
-            </div>
-          </div>
-
-          <div id="orient-wrap" class="field mt-4">
-            <label data-i18n="song.orient">Screen rotation (HID only)</label>
-            <div class="grid grid-cols-2 gap-4 mt-2">
-              <button class="bc active !p-3 flex items-center justify-center" id="ol" onclick="setOrient('left')">
-                <div class="bcs !text-sm !font-bold" data-i18n="song.orient.left">↺ CCW</div>
-              </button>
-              <button class="bc !p-3 flex items-center justify-center" id="or" onclick="setOrient('right')">
-                <div class="bcs !text-sm !font-bold" data-i18n="song.orient.right">↻ CW</div>
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="card">
+        <div class="card song-search-card">
           <div class="ct" data-i18n="song.search">Song Search</div>
           <div
             class="sel-bar mb-4 flex items-center gap-3 bg-ssm-blue-bg p-3 rounded-xl border border-ssm-blue/30 text-white"
@@ -158,13 +175,20 @@
             </div>
           </div>
 
-          <div class="field">
-            <label data-i18n="song.id.label">Or enter Song ID directly</label>
-            <input type="number" id="song-id" data-i18n-placeholder="song.id.placeholder" min="1"
-              oninput="onManualId()">
+          <div class="song-input-grid">
+            <div class="field">
+              <label data-i18n="song.id.label">Or enter Song ID directly</label>
+              <input type="number" id="song-id" data-i18n-placeholder="song.id.placeholder" min="1"
+                oninput="onManualId()">
+            </div>
+
+            <div class="field">
+              <label data-i18n="song.chart.label">Custom chart path</label>
+              <input type="text" id="chart-path" data-i18n-placeholder="song.chart.placeholder">
+            </div>
           </div>
 
-          <div class="field">
+          <div class="field !mb-0">
             <label data-i18n="song.diff">Difficulty</label>
             <div class="diff-row">
               <button class="db easy" onclick="setDiff(0)">EASY</button>
@@ -173,11 +197,6 @@
               <button class="db expert active" onclick="setDiff(3)">EXPERT</button>
               <button class="db special" onclick="setDiff(4)">SPECIAL</button>
             </div>
-          </div>
-
-          <div class="field">
-            <label data-i18n="song.chart.label">Custom chart path</label>
-            <input type="text" id="chart-path" data-i18n-placeholder="song.chart.placeholder">
           </div>
         </div>
         <button class="btn pri btn-b" onclick="submitRun()" data-i18n="song.load">▶ Load &amp; Prepare</button>
