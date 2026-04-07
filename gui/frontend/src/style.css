@@ -281,9 +281,9 @@ input[type="number"]:focus {
 
 .backend-warn-box {
   @apply text-[10px] p-3 rounded-xl border transition-all duration-500;
-  background: rgba(127, 29, 29, 0.15); /* 深紅透明背景 */
+  background: rgba(127, 29, 29, 0.15); /* Dark red transparent background. */
   border-color: rgba(127, 29, 29, 0.3);
-  color: #f87171; /* 亮紅字 */
+  color: #f87171; /* Bright red text. */
   box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
 }
 

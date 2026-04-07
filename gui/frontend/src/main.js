@@ -525,7 +525,6 @@ function deleteDevice(serial) {
 // ══ ADB & Device Utilities ════════════════════════════════
 function killAdbServer() {
   log('song-log', 'Killing ADB server...', 'info');
-  // 💡 這裡需要你在後端寫一個 /api/kill-adb 的路由，執行 `adb kill-server`
   fetch('/api/kill-adb', { method: 'POST' })
     .then(function (r) {
       if (r.ok) log('song-log', 'ADB server killed successfully.', 'ok');
@@ -644,45 +643,40 @@ Object.assign(window, {
 });
 
 
-// ══ 開發模式 ════════════════════════════════
+// ══ Development mode ════════════════════════════════
 if (import.meta.env.DEV) {
-  console.log("🛠️ 開發模式已啟動！按下 [Ctrl + Shift + D] 載入測試歌曲。");
+  console.log("🛠️ Development mode enabled. Press [Ctrl + Shift + D] to load the test song.");
 
   document.addEventListener('keydown', function (e) {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
       e.preventDefault();
-      console.log("🛠️ 觸發 Debug 模式：載入假資料...");
+      console.log("🛠️ Debug mode triggered: loading mock data...");
 
-      // 建立一筆測試用的假歌資料
       var mockNp = {
         songId: 999,
-        title: 'DEBUG MOCK SONG ~測試用曲目~',
+        title: 'DEBUG MOCK SONG ~Test Track~',
         artist: 'System Tester',
         diff: 'expert',
         diffLevel: 28,
-        // 隨便抓一張 Bestdori 的圖作為測試
         jacketUrl: 'https://bestdori.com/assets/jp/musicjacket/musicjacket10_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket10-10-jacket.png'
       };
 
-      // 強制寫入狀態
       S.songId = 999;
       S.diff = 3;
-      S.state = 1; // 1 = 準備就緒
+      S.state = 1; 
 
-      // 呼叫原本的 UI 更新函數
+
       showNP(mockNp);
       updatePlayCard(mockNp);
 
-      // 模擬從後端推播 SSE 事件過來 (狀態變為 Ready，Offset = 0)
       updateUI({
         state: 1,
         offset: 0,
         nowPlaying: mockNp
       });
 
-      // 切換到播放面板方便查看
       nav('play');
-      log('play-log', '已載入 Debug 測試歌曲', 'info');
+      log('play-log', 'Debug test song loaded.', 'info');
     }
   });
 }
