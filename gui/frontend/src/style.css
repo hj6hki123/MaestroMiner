@@ -94,6 +94,12 @@ html {
   --ui-pd-jacket-playing-shadow: 0 20px 60px color-mix(in srgb, var(--jacket-color, #3b82f6) 40%, rgba(0, 0, 0, 0.85)), 0 0 50px color-mix(in srgb, var(--jacket-color, #3b82f6) 50%, transparent);
   --ui-pd-wrap-hover-filter: drop-shadow(0 20px 40px rgba(0,0,0,0.7)) drop-shadow(0 0 24px var(--jacket-color, #3b82f6));
   --ui-pd-wrap-playing-filter: drop-shadow(0 0 36px var(--jacket-color, #3b82f6));
+
+  /* APPEND special gradient shadow */
+  --ui-pd-jacket-shadow-append: 0 20px 50px rgba(79, 143, 247, 0.28), 0 12px 35px rgba(242, 110, 201, 0.22), inset 0 0 20px rgba(0, 0, 0, 0.3);
+  --ui-pd-jacket-playing-shadow-append: 0 20px 60px rgba(79, 143, 247, 0.35), 0 0 50px rgba(242, 110, 201, 0.3), inset 0 0 25px rgba(0, 0, 0, 0.4);
+  --ui-pd-wrap-hover-filter-append: drop-shadow(0 20px 40px rgba(0,0,0,0.7)) drop-shadow(0 0 20px rgba(79, 143, 247, 0.6)) drop-shadow(0 0 20px rgba(242, 110, 201, 0.4));
+  --ui-pd-wrap-playing-filter-append: drop-shadow(0 0 30px rgba(79, 143, 247, 0.7)) drop-shadow(0 0 24px rgba(242, 110, 201, 0.5));
   --ui-pd-subsection-bg: transparent;
 
   --ui-pd-change-btn-bg: rgba(28, 28, 34, 0.82);
@@ -391,6 +397,12 @@ html[data-theme='light'] {
   --ui-pd-jacket-playing-shadow: 0 18px 36px color-mix(in srgb, var(--jacket-color, #3b82f6) 48%, rgba(0,0,0,0.1)), 0 0 36px color-mix(in srgb, var(--jacket-color, #3b82f6) 55%, transparent);
   --ui-pd-wrap-hover-filter: drop-shadow(0 14px 24px color-mix(in srgb, var(--jacket-color, #3b82f6) 28%, rgba(0,0,0,0.3))) drop-shadow(0 0 18px var(--jacket-color, #3b82f6));
   --ui-pd-wrap-playing-filter: drop-shadow(0 0 28px var(--jacket-color, #3b82f6));
+
+  /* APPEND special gradient shadow for light theme */
+  --ui-pd-jacket-shadow-append: 0 14px 28px rgba(79, 143, 247, 0.18), 0 8px 24px rgba(242, 110, 201, 0.14), inset 0 0 12px rgba(0, 0, 0, 0.08);
+  --ui-pd-jacket-playing-shadow-append: 0 18px 36px rgba(79, 143, 247, 0.22), 0 0 36px rgba(242, 110, 201, 0.18), inset 0 0 16px rgba(0, 0, 0, 0.12);
+  --ui-pd-wrap-hover-filter-append: drop-shadow(0 14px 24px rgba(0,0,0,0.15)) drop-shadow(0 0 16px rgba(79, 143, 247, 0.4)) drop-shadow(0 0 16px rgba(242, 110, 201, 0.3));
+  --ui-pd-wrap-playing-filter-append: drop-shadow(0 0 24px rgba(79, 143, 247, 0.5)) drop-shadow(0 0 20px rgba(242, 110, 201, 0.4));
   --ui-pd-subsection-bg: rgba(255, 255, 255, 0.22);
 
   --ui-pd-change-btn-bg: rgba(255, 255, 255, 0.72);
@@ -563,6 +575,17 @@ html[data-theme='light'] .db.normal { @apply border-[#7ab84a]/50 text-[#4c8d20];
 html[data-theme='light'] .db.hard { @apply border-[#d4921e]/55 text-[#9c6610]; }
 html[data-theme='light'] .db.expert { @apply border-[#e06060]/50 text-[#a73e3e]; }
 html[data-theme='light'] .db.special { @apply border-[#9b95e0]/55 text-[#6259c8]; }
+html[data-theme='light'] .db.append {
+  border-color: transparent;
+  color: #5d4c90;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.52), rgba(240, 248, 255, 0.38)) padding-box,
+    linear-gradient(135deg, rgba(88, 168, 255, 0.62), rgba(255, 122, 210, 0.66)) border-box;
+}
+
+html[data-theme='light'] .db.append:hover:not(.dis):not(.active) {
+  @apply border-[#4f8ff7]/80 text-[#4f8ff7];
+}
 
 html[data-theme='light'] .db.easy.active {
   background: linear-gradient(135deg, rgba(91, 163, 224, 0.9), rgba(66, 125, 187, 0.82));
@@ -583,6 +606,10 @@ html[data-theme='light'] .db.expert.active {
 html[data-theme='light'] .db.special.active {
   background: linear-gradient(135deg, rgba(155, 149, 224, 0.94), rgba(111, 105, 198, 0.86));
   box-shadow: 0 0 0 1px rgba(155, 149, 224, 0.42), 0 8px 20px rgba(155, 149, 224, 0.3);
+}
+html[data-theme='light'] .db.append.active {
+  background: linear-gradient(135deg, rgba(88, 168, 255, 0.94), rgba(255, 122, 210, 0.9));
+  box-shadow: 0 0 0 1px rgba(120, 170, 255, 0.45), 0 8px 20px rgba(207, 79, 164, 0.24);
 }
 
 /* Light mode: Play Control panel */
@@ -681,6 +708,10 @@ html[data-theme='light'] .d-normal { background: rgba(122, 184, 74, 0.18); color
 html[data-theme='light'] .d-hard { background: rgba(212, 146, 30, 0.18); color: #9c6610; }
 html[data-theme='light'] .d-expert { background: rgba(224, 96, 96, 0.18); color: #a73e3e; }
 html[data-theme='light'] .d-special { background: rgba(155, 149, 224, 0.2); color: #6259c8; }
+html[data-theme='light'] .d-append {
+  background: linear-gradient(135deg, rgba(88, 168, 255, 0.2), rgba(255, 122, 210, 0.24));
+  color: #365083;
+}
 
 /* === 3. Main content area === */
 .main {
@@ -876,6 +907,14 @@ input[type="number"]:focus {
   @apply border-[#9b95e0]/30 text-[#9b95e0]/60;
 }
 
+.db.append {
+  border-color: transparent;
+  color: rgba(214, 228, 255, 0.86);
+  background:
+    linear-gradient(145deg, rgba(0, 0, 0, 0.45), rgba(18, 20, 28, 0.52)) padding-box,
+    linear-gradient(135deg, rgba(79, 143, 247, 0.62), rgba(242, 110, 201, 0.66)) border-box;
+}
+
 /* Slight glow on hover. */
 .db:hover:not(.dis):not(.active) {
   @apply bg-white/5;
@@ -899,6 +938,22 @@ input[type="number"]:focus {
 
 .db.special:hover:not(.dis):not(.active) {
   @apply border-[#9b95e0] text-[#9b95e0];
+}
+
+html[data-theme='light'] .db.append:hover:not(.dis):not(.active) {
+  border-color: transparent;
+  color: #4f8ff7;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.65), rgba(250, 252, 255, 0.45)) padding-box,
+    linear-gradient(135deg, rgba(88, 168, 255, 0.75), rgba(255, 122, 210, 0.75)) border-box;
+}
+
+.db.append:hover:not(.dis):not(.active) {
+  border-color: transparent;
+  color: #f2f6ff;
+  background:
+    linear-gradient(145deg, rgba(16, 22, 36, 0.75), rgba(34, 18, 42, 0.72)) padding-box,
+    linear-gradient(135deg, rgba(97, 166, 255, 0.9), rgba(251, 123, 213, 0.92)) border-box;
 }
 
 .backend-warn-box {
@@ -948,6 +1003,13 @@ input[type="number"]:focus {
   border-color: #9b95e0;
   box-shadow: 0 0 15px rgba(155, 149, 224, 0.5), inset 0 0 10px rgba(155, 149, 224, 0.3);
   text-shadow: 0 0 8px #9b95e0;
+}
+
+.db.append.active {
+  background: linear-gradient(135deg, #4f8ff7 0%, #f26ec9 100%);
+  border-color: #b9c9ff;
+  box-shadow: 0 0 15px rgba(114, 154, 255, 0.4), inset 0 0 10px rgba(255, 122, 210, 0.28);
+  text-shadow: 0 0 8px rgba(228, 236, 255, 0.85);
 }
 
 /* === 8. Mode and backend options === */
@@ -1294,6 +1356,11 @@ html[data-theme='light'] .sel-bar .sb-title {
 
 .d-special {
   @apply bg-diff-special-bg text-diff-special;
+}
+
+.d-append {
+  background: linear-gradient(135deg, rgba(79, 143, 247, 0.25), rgba(242, 110, 201, 0.28));
+  color: #eaf0ff;
 }
 
 /* === 14. Language switcher menu === */
@@ -1723,6 +1790,24 @@ html[data-theme='light'] .sel-bar .sb-title {
   box-shadow: var(--ui-pd-jacket-playing-shadow) !important;
 }
 
+/* APPEND special gradient shadow for dark theme */
+html.is-append-diff .pd-jacket {
+  box-shadow: var(--ui-pd-jacket-shadow-append) !important;
+}
+
+html.is-append-diff .pd-jacket-wrap.playing .pd-jacket {
+  box-shadow: var(--ui-pd-jacket-playing-shadow-append) !important;
+}
+
+/* APPEND wrap filter shadow for dark theme */
+html.is-append-diff .pd-jacket-wrap:hover {
+  filter: var(--ui-pd-wrap-hover-filter-append) !important;
+}
+
+html.is-append-diff .pd-jacket-wrap.playing {
+  filter: var(--ui-pd-wrap-playing-filter-append) !important;
+}
+
 /* --- 歌名動畫（ready→playing 閃爍一次） --- */
 .pd-title {
   transition: text-shadow 0.5s ease, color 0.5s ease;
@@ -1823,6 +1908,24 @@ html[data-theme='light'] .pd-jacket {
 
 html[data-theme='light'] .pd-jacket-wrap.playing .pd-jacket {
   box-shadow: var(--ui-pd-jacket-playing-shadow) !important;
+}
+
+/* APPEND special gradient shadow for light theme */
+html[data-theme='light'].is-append-diff .pd-jacket {
+  box-shadow: var(--ui-pd-jacket-shadow-append) !important;
+}
+
+html[data-theme='light'].is-append-diff .pd-jacket-wrap.playing .pd-jacket {
+  box-shadow: var(--ui-pd-jacket-playing-shadow-append) !important;
+}
+
+/* APPEND wrap filter shadow for light theme */
+html[data-theme='light'].is-append-diff .pd-jacket-wrap:hover {
+  filter: var(--ui-pd-wrap-hover-filter-append) !important;
+}
+
+html[data-theme='light'].is-append-diff .pd-jacket-wrap.playing {
+  filter: var(--ui-pd-wrap-playing-filter-append) !important;
 }
 
 html[data-theme='light'] .pd-offset-sec,

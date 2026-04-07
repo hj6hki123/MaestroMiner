@@ -193,24 +193,30 @@ function onJitter(key) { renderJitter(key); }
 
 // ══ state ══════════════════════════════════════════════════
 var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1 };
-var DN = ['easy', 'normal', 'hard', 'expert', 'special'];
+var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
+var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
+var DL_PJSK = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'MASTER', 'APPEND'];
 var DOT_CLS = { 1: 'ready', 2: 'playing', 3: 'done', 4: 'error' };
 
 function diffName(i) {
-  if (i === 4 && S.mode === 'pjsk') return 'master';
-  return DN[i] || DN[3];
+  var dn = S.mode === 'pjsk' ? DN_PJSK : DN_BANG;
+  return dn[i] || dn[3];
 }
 
 function diffLabel(i) {
-  if (i === 4 && S.mode === 'pjsk') return 'MASTER';
-  return DL_BANG[i] || DL_BANG[3];
+  var dl = S.mode === 'pjsk' ? DL_PJSK : DL_BANG;
+  return dl[i] || dl[3];
 }
 
 function updateDiffLabels() {
   var btns = document.querySelectorAll('.db');
   if (!btns || !btns.length) return;
   if (btns[4]) btns[4].textContent = diffLabel(4);
+  if (btns[5]) {
+    btns[5].textContent = diffLabel(5);
+    btns[5].style.display = S.mode === 'pjsk' ? '' : 'none';
+  }
 }
 
 function updateDynamicTexts() {
@@ -257,6 +263,7 @@ function setMode(m) {
     ADV_DEFAULTS.flickDuration = 20; ADV_DEFAULTS.flickFactor = 17;
   } else {
     ADV_DEFAULTS.flickDuration = 60; ADV_DEFAULTS.flickFactor = 20;
+    if (S.diff === 5) S.diff = 3;
   }
   updateDiffLabels();
   resetAdvanced();
@@ -348,14 +355,31 @@ function normalizeSong(rawSong) {
     musicTitle: [title, pronunciation],
     difficulty: rawSong.difficulty || {},
     jacketImage: rawSong.jacketImage || null,
+    creatorArtistId: rawSong.creatorArtistId || rawSong.CreatorArtistID || 0,
     __artist: [lyricist, composer, arranger].filter(Boolean).join(' / '),
+    __searchNames: [title, pronunciation].filter(Boolean),
     __raw: rawSong,
   };
 }
 
 function normalizeSongDB(payload) {
   if (!payload || !payload.songs) {
-    return { songs: {}, bands: {} };
+    return { songs: {}, bands: {}, artists: {} };
+  }
+
+  function normalizeSearchText(s) {
+    // Normalize for search: lowercase and remove common punctuation (including CJK and full-width symbols)
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[\s\-_.,:;!?\[\]{}'"""~`・，。；！？「」『』（）]/g, '');
+  }
+
+  function addSearchName(song, name) {
+    if (!song || !name) return;
+    if (!song.__searchNames) song.__searchNames = [];
+    if (song.__searchNames.indexOf(name) < 0) song.__searchNames.push(name);
+    var compact = normalizeSearchText(name);
+    if (compact && song.__searchNames.indexOf(compact) < 0) song.__searchNames.push(compact);
   }
 
   var songs = {};
@@ -371,27 +395,127 @@ function normalizeSongDB(payload) {
     });
   }
 
+  // Handle songsJp for adding Japanese search names
+  if (payload.songsJp) {
+    var jpArray = Array.isArray(payload.songsJp) ? payload.songsJp : [];
+    var jpObject = (typeof payload.songsJp === 'object' && !Array.isArray(payload.songsJp)) ? payload.songsJp : {};
+    
+    // Process array format
+    jpArray.forEach(function (jp) {
+      if (!jp || !jp.id) return;
+      var songId = parseInt(jp.id);
+      var song = songs[songId];
+      if (!song) return;
+      var jpTitle = jp.title || jp.musicTitle || '';
+      var jpPronunciation = jp.pronunciation || '';
+      if (jpTitle) addSearchName(song, jpTitle);
+      if (jpPronunciation) addSearchName(song, jpPronunciation);
+    });
+    
+    // Process object format (key = id)
+    Object.keys(jpObject).forEach(function (id) {
+      var jp = jpObject[id];
+      if (!jp) return;
+      var songId = parseInt(id);
+      var song = songs[songId];
+      if (!song) return;
+      var jpTitle = jp.title || jp.musicTitle || '';
+      var jpPronunciation = jp.pronunciation || '';
+      if (jpTitle) addSearchName(song, jpTitle);
+      if (jpPronunciation) addSearchName(song, jpPronunciation);
+    });
+  }
+
+  function diffIndexByName(name) {
+    switch (String(name || '').toLowerCase()) {
+      case 'easy': return 0;
+      case 'normal': return 1;
+      case 'hard': return 2;
+      case 'expert': return 3;
+      case 'special': return 4;
+      case 'master': return 4;
+      case 'append': return 5;
+      default: return -1;
+    }
+  }
+
+  if (Array.isArray(payload.musicDifficulties)) {
+    payload.musicDifficulties.forEach(function (md) {
+      if (!md) return;
+      var songId = md.musicId || md.musicID || md.songId || 0;
+      var song = songs[songId];
+      if (!song) return;
+      var idx = diffIndexByName(md.musicDifficulty);
+      if (idx < 0) return;
+      if (!song.difficulty) song.difficulty = {};
+      song.difficulty[idx] = {
+        playLevel: md.playLevel || 0,
+        totalNoteCount: md.totalNoteCount || 0,
+      };
+    });
+  }
+
+  var artists = {};
+  if (Array.isArray(payload.artists)) {
+    payload.artists.forEach(function (a) {
+      if (!a || !a.id) return;
+      artists[a.id] = a.name || a.pronunciation || '';
+    });
+  } else if (payload.artists) {
+    Object.keys(payload.artists).forEach(function (aid) {
+      var a = payload.artists[aid];
+      if (!a) return;
+      artists[parseInt(aid)] = a.name || a.pronunciation || '';
+    });
+  }
+
   return {
     songs: songs,
     bands: payload.bands || {},
+    artists: artists,
   };
 }
 
-function pickName(arr) { if (!arr) return ''; return arr[2] || arr[1] || arr[0] || arr[3] || arr[4] || ''; }
+function pickName(arr, preferFirst) {
+  if (!arr) return '';
+  if (preferFirst) return arr[0] || arr[2] || arr[1] || arr[3] || arr[4] || '';
+  return arr[2] || arr[1] || arr[0] || arr[3] || arr[4] || '';
+}
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function normalizeForSearch(s) {
+  // Remove spaces and common punctuation (including full-width and half-width)
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[\s\-_.,:;!?\[\]{}'"""~`・，。；！？「」『』（）]/g, '');
+}
 
 function doSearch(q) {
   loadDB(function (db) {
-    var ql = q.toLowerCase(), res = [];
+    var ql = q.toLowerCase(), qc = normalizeForSearch(q), res = [];
     Object.keys(db.songs).forEach(function (sid) {
       var id = parseInt(sid), song = db.songs[sid];
       if (!song || !song.musicTitle) return;
-      if (!song.musicTitle.some(function (n) { return n && n.toLowerCase().indexOf(ql) >= 0; })) return;
+      var names = (song.__searchNames && song.__searchNames.length) ? song.__searchNames : song.musicTitle;
+      var hit = names.some(function (n) {
+        if (!n) return false;
+        var low = String(n).toLowerCase();
+        var lowNorm = normalizeForSearch(n);
+        return low.indexOf(ql) >= 0 || (qc && lowNorm.indexOf(qc) >= 0);
+      });
+      if (!hit) return;
       var band = db.bands[song.bandId];
-      res.push({ id: id, song: song, band: band && band.bandName ? pickName(band.bandName) : '' });
+      var artist = '';
+      if (S.mode === 'pjsk' && db.artists && song.creatorArtistId) {
+        artist = db.artists[song.creatorArtistId] || '';
+      }
+      if (!artist && band && band.bandName) {
+        artist = pickName(band.bandName);
+      }
+      res.push({ id: id, song: song, band: artist });
     });
     res.sort(function (a, b) {
-      var at = pickName(a.song.musicTitle).toLowerCase(), bt = pickName(b.song.musicTitle).toLowerCase();
+      var at = pickName(a.song.musicTitle, S.mode === 'pjsk').toLowerCase(), bt = pickName(b.song.musicTitle, S.mode === 'pjsk').toLowerCase();
       var ae = at === ql, be = bt === ql; if (ae && !be) return -1; if (!ae && be) return 1;
       var as = at.startsWith(ql), bs = bt.startsWith(ql); if (as && !bs) return -1; if (!as && bs) return 1;
       return a.id - b.id;
@@ -404,7 +528,7 @@ function renderDrop(res) {
   var drop = document.getElementById('drop');
   if (!res.length) { drop.innerHTML = '<div class="drop-hint">' + t('drop.none') + '</div>'; drop.classList.add('open'); return; }
   drop.innerHTML = res.map(function (r) {
-    var title = pickName(r.song.musicTitle);
+    var title = pickName(r.song.musicTitle, S.mode === 'pjsk');
     var dh = Object.keys(r.song.difficulty || {}).map(Number).sort().map(function (d) { return '<span class="di-d d-' + diffName(d) + '">' + diffLabel(d) + '</span>'; }).join('');
     return '<div class="di" onclick="selSong(' + r.id + ')">'
       + '<span class="di-id">#' + r.id + '</span>'
@@ -430,7 +554,7 @@ function selSong(id) {
   loadDB(function (db) {
     var song = db.songs[id]; if (!song) return;
     S.songId = id; S.songData = song;
-    var title = pickName(song.musicTitle);
+    var title = pickName(song.musicTitle, S.mode === 'pjsk');
     document.getElementById('sb-id').textContent = '#' + id;
     document.getElementById('sb-title').textContent = title;
     document.getElementById('sel-bar').classList.add('show');
@@ -513,7 +637,17 @@ function updateUI(d) {
 
 function showNP(np) {
   document.getElementById('np-card').style.display = 'block';
-  if (np.jacketUrl) { var img = document.getElementById('np-img'); img.src = np.jacketUrl; img.style.display = 'block'; document.getElementById('np-no').style.display = 'none'; }
+  var img = document.getElementById('np-img');
+  if (np.jacketUrl) {
+    setImageWithFallback(img, np.jacketUrls && np.jacketUrls.length ? np.jacketUrls : [np.jacketUrl]);
+    img.style.display = 'block';
+    document.getElementById('np-no').style.display = 'none';
+  } else {
+    img.onerror = null;
+    img.removeAttribute('src');
+    img.style.display = 'none';
+    document.getElementById('np-no').style.display = 'flex';
+  }
   document.getElementById('np-title').textContent = np.title || '—';
   document.getElementById('np-artist').textContent = np.artist || '';
   var npDiffRaw = np.diff || 'expert';
@@ -525,6 +659,7 @@ function showNP(np) {
 function normalizeDiffKey(diff) {
   var key = String(diff || '').toLowerCase();
   if (key === 'master') return 'special';
+  if (key === 'append') return 'append';
   return key;
 }
 
@@ -534,7 +669,8 @@ function getDiffThemeColor(diff) {
     normal: '#7ab84a',
     hard: '#d4921e',
     expert: '#e06060',
-    special: '#9b95e0'
+    special: '#9b95e0',
+    append: '#4f8ff7'
   };
   var key = normalizeDiffKey(diff);
   return diffColors[key] || '#3b82f6';
@@ -542,19 +678,35 @@ function getDiffThemeColor(diff) {
 
 function applyJacketColor(themeColor) {
   var wrap = document.getElementById('pn-jacket-wrap');
-  if (wrap) wrap.style.setProperty('--jacket-color', themeColor);
+  if (wrap) {
+    wrap.style.setProperty('--jacket-color', themeColor);
+    wrap.classList.toggle('is-append', themeColor === '#4f8ff7' || themeColor === '#f26ec9');
+  }
 
   var deck = document.querySelector('.player-deck');
-  if (deck) deck.style.setProperty('--jacket-color', themeColor);
+  if (deck) {
+    deck.style.setProperty('--jacket-color', themeColor);
+    deck.classList.toggle('is-append', themeColor === '#4f8ff7' || themeColor === '#f26ec9');
+  }
 
   // Mirror to root so all descendants and pseudo-elements resolve the same value.
   document.documentElement.style.setProperty('--jacket-color', themeColor);
+  document.documentElement.classList.toggle('is-append-diff', themeColor === '#4f8ff7' || themeColor === '#f26ec9');
 }
 
 function updatePlayCard(np) {
   document.getElementById('pn-none').style.display = 'none'; document.getElementById('pn-loaded').style.display = 'block';
   var pimg = document.getElementById('pn-img');
-  if (np.jacketUrl) { pimg.src = np.jacketUrl; pimg.style.display = 'block'; document.getElementById('pn-no').style.display = 'none'; }
+  if (np.jacketUrl) {
+    setImageWithFallback(pimg, np.jacketUrls && np.jacketUrls.length ? np.jacketUrls : [np.jacketUrl]);
+    pimg.style.display = 'block';
+    document.getElementById('pn-no').style.display = 'none';
+  } else {
+    pimg.onerror = null;
+    pimg.removeAttribute('src');
+    pimg.style.display = 'none';
+    document.getElementById('pn-no').style.display = 'flex';
+  }
   document.getElementById('pn-title-big').textContent = np.title || '—';
   document.getElementById('pn-artist-big').textContent = np.artist || '';
   var rawDiff = np.diff || 'expert';
@@ -563,6 +715,20 @@ function updatePlayCard(np) {
   document.getElementById('pn-lv-big').textContent = np.diffLevel ? 'Lv.' + np.diffLevel : '';
   var themeColor = getDiffThemeColor(diffKey);
   applyJacketColor(themeColor);
+}
+
+function setImageWithFallback(imgEl, urls) {
+  var i = 0;
+  function tryNext() {
+    if (i >= urls.length) {
+      imgEl.onerror = null;
+      return;
+    }
+    var u = urls[i++];
+    imgEl.onerror = tryNext;
+    imgEl.src = u;
+  }
+  tryNext();
 }
 
 // ══ keyboard ═══════════════════════════════════════════════
@@ -578,12 +744,27 @@ document.addEventListener('keydown', function (e) {
 
 // ══ API ════════════════════════════════════════════════════
 function buildNowPlaying() {
-  var np = { songId: S.songId, diff: diffName(S.diff), mode: S.mode, title: '', artist: '', diffLevel: 0, jacketUrl: '' };
+  var np = { songId: S.songId, diff: diffName(S.diff), mode: S.mode, title: '', artist: '', diffLevel: 0, jacketUrl: '', jacketUrls: [] };
   if (S.songData) {
-    np.title = pickName(S.songData.musicTitle) || '';
+    np.title = pickName(S.songData.musicTitle, S.mode === 'pjsk') || '';
     var di = S.songData.difficulty; if (di && di[S.diff]) np.diffLevel = di[S.diff].playLevel || 0;
     var ji = S.songData.jacketImage;
-    if (ji && ji[0]) { var n = Math.ceil(S.songId / 10) * 10 || 10; np.jacketUrl = 'https://bestdori.com/assets/jp/musicjacket/musicjacket' + n + '_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket' + n + '-' + ji[0] + '-jacket.png'; }
+    if (S.mode === 'pjsk') {
+      var raw = S.songData.__raw || {};
+      var bundle = raw.assetbundleName || ('jacket_s_' + String(S.songId || 0).padStart(3, '0'));
+      np.jacketUrls = [
+        'https://storage.sekai.best/sekai-jp-assets/music/jacket/' + bundle + '/' + bundle + '.png',
+        'https://assets.pjsek.ai/file/pjsekai-assets/startapp/music/jacket/' + bundle + '/' + bundle + '.png'
+      ];
+      np.jacketUrl = np.jacketUrls[0];
+    } else if (ji && ji[0]) {
+      var n = Math.ceil(S.songId / 10) * 10 || 10;
+      np.jacketUrl = 'https://bestdori.com/assets/jp/musicjacket/musicjacket' + n + '_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket' + n + '-' + ji[0] + '-jacket.png';
+      np.jacketUrls = [np.jacketUrl];
+    }
+    if (S.mode === 'pjsk' && S.db && S.db.artists && S.songData.creatorArtistId) {
+      np.artist = S.db.artists[S.songData.creatorArtistId] || '';
+    }
     if (S.db && S.db.bands && S.songData.bandId) { var band = S.db.bands[S.songData.bandId]; if (band && band.bandName) np.artist = pickName(band.bandName); }
     if (!np.artist && S.songData.__artist) np.artist = S.songData.__artist;
   }

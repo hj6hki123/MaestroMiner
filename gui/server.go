@@ -4,6 +4,7 @@
 package gui
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -13,9 +14,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
-	"os/exec"
+
 	"github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
@@ -353,30 +355,50 @@ func (s *Server) handleSongDB(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprintf(w, `{"songs":%s,"bands":%s}`, songs, bands)
 	} else {
-		songs, err := fetchOrLoad("./sekai_songs.json", "https://sekai-world.github.io/sekai-master-db-en-diff/musics.json")
+		const sekaiMusicsURL = "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-diff/main/musics.json"
+		const sekaiMusicDifficultiesURL = "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-diff/main/musicDifficulties.json"
+		const sekaiMusicArtistsURL = "https://raw.githubusercontent.com/Sekai-World/sekai-master-db-diff/main/musicArtists.json"
+
+		songs, err := fetchOrLoad("./sekai_master_db_diff_musics.json", sekaiMusicsURL)
 		if err != nil {
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
+			http.Error(w, `{"error":"songs EN fetch failed: `+err.Error()+`"}`, http.StatusBadGateway)
 			return
 		}
-		fmt.Fprintf(w, `{"songs":%s,"bands":{}}`, songs)
+		difficulties, err := fetchOrLoad("./sekai_master_db_diff_music_difficulties.json", sekaiMusicDifficultiesURL)
+		if err != nil {
+			http.Error(w, `{"error":"difficulties fetch failed: `+err.Error()+`"}`, http.StatusBadGateway)
+			return
+		}
+		artists, err := fetchOrLoad("./sekai_master_db_diff_music_artists.json", sekaiMusicArtistsURL)
+		if err != nil {
+			http.Error(w, `{"error":"artists fetch failed: `+err.Error()+`"}`, http.StatusBadGateway)
+			return
+		}
+		fmt.Fprintf(w, `{"songs":%s,"songsJp":%s,"bands":{},"artists":%s,"musicDifficulties":%s}`, songs, songs, artists, difficulties)
 	}
 }
 
 func fetchOrLoad(localPath, url string) ([]byte, error) {
-	if data, err := os.ReadFile(localPath); err == nil {
+	resp, err := http.Get(url)
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			data, readErr := io.ReadAll(resp.Body)
+			if readErr == nil {
+				if localData, localErr := os.ReadFile(localPath); localErr != nil || !bytes.Equal(localData, data) {
+					go os.WriteFile(localPath, data, 0o644)
+				}
+				return data, nil
+			}
+		}
+	}
+	if data, readErr := os.ReadFile(localPath); readErr == nil {
 		return data, nil
 	}
-	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	go os.WriteFile(localPath, data, 0o644)
-	return data, nil
+	return nil, fmt.Errorf("failed to fetch %s and local cache missing", url)
 }
 
 func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
@@ -549,6 +571,7 @@ done:
 		s.mu.Unlock()
 	}
 }
+
 // ─── ADB Utils ──────────────────────────────────────
 
 func (s *Server) handleKillAdb(w http.ResponseWriter, r *http.Request) {
@@ -556,10 +579,10 @@ func (s *Server) handleKillAdb(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	cmd := exec.Command("adb", "kill-server")
-	_ = cmd.Run() 
-	
+	_ = cmd.Run()
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -572,7 +595,7 @@ func (s *Server) handleDetectAdb(w http.ResponseWriter, r *http.Request) {
 
 	client := adb.NewDefaultClient()
 	devices, err := client.Devices()
-	
+
 	if err != nil || len(devices) == 0 {
 		json.NewEncoder(w).Encode(map[string]string{"serial": ""})
 		return
@@ -585,6 +608,7 @@ func (s *Server) handleDetectAdb(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"serial": ""})
 	}
 }
+
 // ─── Startup ──────────────────────────────────────
 
 func (s *Server) Start() (string, error) {
