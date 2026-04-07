@@ -745,11 +745,11 @@ input[type="range"]::-moz-range-thumb {
 
 /* --- Bottom area: playback actions --- */
 .pd-actions-sec {
-  @apply p-8 bg-[#09090b] flex flex-col items-center justify-center;
+  @apply px-8 py-6 bg-[#09090b] flex flex-col items-center justify-center gap-4;
 }
 
 .pd-actions-row {
-  @apply flex items-center justify-center gap-6 w-full max-w-sm mb-6;
+  @apply flex items-center justify-center gap-5 w-full max-w-lg;
 }
 
 /* Circular stop button. */
@@ -769,43 +769,239 @@ input[type="range"]::-moz-range-thumb {
 /* Pill-shaped start button. */
 .pd-btn-start {
   @apply flex-1 h-16 rounded-full flex items-center justify-center text-xl font-black transition-all cursor-pointer uppercase tracking-[0.15em];
-  @apply border border-blue-500 text-white bg-blue-600 active:scale-95;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(37, 99, 235, 0.4);
+  @apply border border-cyan-400/60 text-white active:scale-95;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
+  backdrop-filter: blur(12px);
+  box-shadow: 
+    inset 0 1px 2px rgba(255, 255, 255, 0.2),
+    0 0 20px rgba(34, 211, 238, 0.3),
+    0 8px 32px rgba(59, 130, 246, 0.2);
+  border-color: rgba(34, 211, 238, 0.6);
 }
 
 .pd-btn-start:hover:not(:disabled) {
-  @apply bg-blue-500 border-blue-400;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 6px 20px rgba(37, 99, 235, 0.6);
+  @apply border-cyan-300/80;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%);
+  box-shadow: 
+    inset 0 1px 2px rgba(255, 255, 255, 0.3),
+    0 0 30px rgba(34, 211, 238, 0.5),
+    0 12px 48px rgba(59, 130, 246, 0.3);
 }
 
 .pd-btn-start:disabled {
-  @apply bg-[#18181b] border-[#27272a] text-[#52525b] cursor-not-allowed scale-100;
+  @apply bg-[#18181b] border-[#27272a] text-[#52525b] cursor-not-allowed scale-100 backdrop-blur-none;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-  /* Keep inset shadow explicitly for disabled appearance consistency. */
 }
 
 /* --- Keyboard shortcut hint styling --- */
-.pd-instruction-box {
-  @apply flex items-center justify-center gap-6 font-mono opacity-80 mt-2;
-}
-
 .ins-group {
-  @apply flex items-center gap-2;
+  @apply flex items-center gap-3 px-0 justify-center font-mono text-[12px] text-white/60 w-full max-w-lg;
 }
 
 .ins-label {
-  @apply text-[10px] text-ssm-hint uppercase tracking-widest font-black mr-1;
+  @apply text-[11px] text-blue-400 uppercase tracking-[0.1em] font-bold;
 }
 
 .ins-sep {
-  @apply text-ssm-hint/30 text-xs;
+  @apply text-[#52525b] text-xs;
 }
 
 .ins-divider {
   @apply w-[1px] h-4 bg-ssm-border;
 }
 
+/* ═══════════════════════════════════════════════
+   PLAY PANEL OVERHAUL
+   ═══════════════════════════════════════════════ */
 
+/* --- Jacket 浮動 + 鏈移效果 --- */
+.pd-jacket-wrap {
+  position: relative;
+  flex-shrink: 0;
+  /* 浮動動畫：上下緩慢搖擺 */
+  animation: jacketFloat 6s ease-in-out infinite;
+  transition: filter 0.5s ease, transform 0.4s ease;
+  cursor: default;
+  z-index: 2;
+}
+
+/* 鼠標移入時微微放大 + 光暈增強 */
+.pd-jacket-wrap:hover {
+  transform: translateY(-6px) scale(1.04);
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.7)) drop-shadow(0 0 20px var(--jacket-color, #3b82f6));
+}
+
+@keyframes jacketFloat {
+  0%, 100% { transform: translateY(0px) rotate(-0.5deg); }
+  33%       { transform: translateY(-8px) rotate(0.3deg); }
+  66%       { transform: translateY(-4px) rotate(-0.8deg); }
+}
+
+/* Playing 狀態：加速浮動 + 呼吸光暈 */
+.pd-jacket-wrap.playing {
+  animation: jacketFloatFast 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 30px var(--jacket-color, #3b82f6));
+}
+
+@keyframes jacketFloatFast {
+  0%, 100% { transform: translateY(0px) rotate(-0.3deg) scale(1); }
+  50%       { transform: translateY(-10px) rotate(0.5deg) scale(1.02); }
+}
+
+/* Ripple 波紋（playing 狀態） */
+.pd-jacket-wrap::before,
+.pd-jacket-wrap::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  border: 2px solid var(--jacket-color, #3b82f6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.pd-jacket-wrap.playing::before {
+  animation: jacketRipple 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+.pd-jacket-wrap.playing::after {
+  animation: jacketRipple 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) 1.2s infinite;
+}
+
+@keyframes jacketRipple {
+  0%   { transform: scale(1);    opacity: 0.7; border-width: 2px; }
+  100% { transform: scale(1.45); opacity: 0;   border-width: 0px; }
+}
+
+/* --- 播放頁主背景：動態氛圍色 --- */
+.player-deck {
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.8s ease;
+}
+
+/* 根據 jacket 顏色渲染背景光暈 */
+.player-deck::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 80% 60% at 20% 30%,
+    color-mix(in srgb, var(--jacket-color, #3b82f6) 12%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+  transition: background 1s ease;
+}
+
+/* 確保所有子元素在光暈之上 */
+.pd-info,
+.pd-offset-sec,
+.pd-actions-sec,
+.pd-none {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- pd-info 背景改良 --- */
+.pd-info {
+  background: linear-gradient(
+    135deg,
+    rgba(10, 10, 14, 0.6) 0%,
+    rgba(20, 20, 26, 0.3) 100%
+  ) !important;
+  backdrop-filter: blur(20px);
+  gap: 40px;
+}
+
+/* --- Jacket 本體圓角微調 --- */
+.pd-jacket {
+  border-radius: 16px !important;
+  width: 160px !important;
+  height: 160px !important;
+  transition: box-shadow 0.6s ease;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.8) !important;
+}
+
+.pd-jacket-wrap.playing .pd-jacket {
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.9),
+    0 0 40px color-mix(in srgb, var(--jacket-color, #3b82f6) 40%, transparent) !important;
+}
+
+/* --- 歌名動畫（ready→playing 閃爍一次） --- */
+.pd-title {
+  transition: text-shadow 0.5s ease, color 0.5s ease;
+}
+.playing-glow .pd-title {
+  text-shadow: 0 0 30px color-mix(in srgb, var(--jacket-color, #3b82f6) 60%, transparent);
+}
+
+/* --- 狀態 badge 增強 --- */
+.pd-state {
+  transition: all 0.4s ease;
+  border-radius: 999px !important;
+}
+
+/* --- offset bar 按鈕按壓感強化 --- */
+.pd-offset-bar button:active {
+  transform: scale(0.88) !important;
+  background: #1a1a1e !important;
+}
+
+/* --- START 按鈕 playing 中震動 --- */
+@keyframes btnReadyPulse {
+  0%, 100% { box-shadow: inset 0 1px 1px rgba(255,255,255,0.3), 0 4px 15px rgba(37,99,235,0.4); }
+  50%       { box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), 0 8px 30px rgba(37,99,235,0.8); }
+}
+.pd-btn-start.rdy:not(:disabled) {
+  animation: btnReadyPulse 2s ease-in-out infinite;
+}
+
+/* --- 底部 action 區光暈與互動 --- */
+.pd-actions-sec {
+  position: relative;
+}
+
+.pd-actions-sec::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--jacket-color, #3b82f6),
+    transparent
+  );
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+/* Hover 時光暈變亮 */
+.pd-actions-sec:hover::before {
+  opacity: 0.7;
+}
+
+/* --- STOP 按鈕 hover 震動 --- */
+.pd-btn-stop:hover {
+  animation: stopShake 0.3s ease;
+}
+@keyframes stopShake {
+  0%,100% { transform: rotate(0deg); }
+  25%      { transform: rotate(-4deg); }
+  75%      { transform: rotate(4deg); }
+}
+
+/* --- log box 改良 --- */
+#play-log {
+  height: 120px;
+  border-color: color-mix(in srgb, var(--jacket-color, #3b82f6) 30%, transparent);
+}
 
 /* Core keyboard keycap style. */
 kbd {

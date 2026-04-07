@@ -311,6 +311,19 @@
               <button class="pd-change-btn" onclick="navToSearch()" data-i18n="play.change">Change</button>
             </div>
 
+            <div class="pd-actions-sec">
+              <div class="pd-actions-row">
+                <button class="pd-btn-stop" onclick="apiStop()" title="Stop"></button>
+                <button class="pd-btn-start" id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶
+                  START</button>
+              </div>
+
+              <div class="ins-group">
+                <span class="ins-label">PLAY</span>
+                <kbd>Enter</kbd> <span class="ins-sep">/</span> <kbd>Space</kbd>
+              </div>
+            </div>
+
             <div class="pd-offset-sec">
               <div class="pd-offset-container">
                 <div class="pd-offset-header">
@@ -340,21 +353,6 @@
                   </div>
                   <span><kbd class="!bg-transparent !shadow-none opacity-60">Shift</kbd> ±50ms</span>
                   <span><kbd class="!bg-transparent !shadow-none opacity-60">Ctrl</kbd> ±100ms</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="pd-actions-sec">
-              <div class="pd-actions-row">
-                <button class="pd-btn-stop" onclick="apiStop()" title="Stop"></button>
-                <button class="pd-btn-start" id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶
-                  START</button>
-              </div>
-
-              <div class="pd-instruction-box">
-                <div class="ins-group">
-                  <span class="ins-label">PLAY</span>
-                  <kbd>Enter</kbd> <span class="ins-sep">/</span> <kbd>Space</kbd>
                 </div>
               </div>
             </div>

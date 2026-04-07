@@ -14,7 +14,6 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 
 **If you're looking for an easier way to play, give this version a try!**
 
-![Interface Features](/imgs/page.png "page")
 ##  What's new
 
 ### 🎵 Smart Song Search

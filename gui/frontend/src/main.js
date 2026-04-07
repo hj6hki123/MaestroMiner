@@ -366,6 +366,19 @@ function updateUI(d) {
   var st = d.state, dotCls = DOT_CLS[st] || '';
   document.getElementById('np-dot').className = 'dot ' + dotCls;
   document.getElementById('pn-dot').className = 'dot ' + dotCls;
+  
+  // Sync jacket-wrap playing class
+  var jw = document.getElementById('pn-jacket-wrap');
+  if (jw) {
+    jw.classList.toggle('playing', st === 2);  // 2 = StatePlaying
+  }
+  
+  // Add playing-glow class to player-deck when playing
+  var deck = document.querySelector('.player-deck');
+  if (deck) {
+    deck.classList.toggle('playing-glow', st === 2);
+  }
+  
   var stateMap = { 0: 'state.idle', 1: 'state.ready.full', 2: 'state.playing.full', 3: 'state.done.full', 4: 'state.error.full' };
   var txt = t(stateMap[st] || 'state.idle');
   document.getElementById('np-state-txt').textContent = txt;
@@ -407,6 +420,10 @@ function updatePlayCard(np) {
   var themeColor = diffColors[np.diff] || '#3b82f6';
   var wrap = document.getElementById('pn-jacket-wrap');
   if (wrap) wrap.style.setProperty('--jacket-color', themeColor);
+  
+  // Sync --jacket-color to player-deck for background glow
+  var deck = document.querySelector('.player-deck');
+  if (deck) deck.style.setProperty('--jacket-color', themeColor);
 }
 
 // ══ keyboard ═══════════════════════════════════════════════
