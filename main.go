@@ -216,6 +216,10 @@ func runGUI(conf *config.Config) {
 				}
 				defer scrcpy.Close()
 				dc := conf.Get(device.Serial())
+				if dc == nil {
+					srv.SetError(fmt.Sprintf("Device [%s] not configured. Please add it in Settings first.", device.Serial()))
+					return
+				}
 				events = scrcpy.Preprocess(rawEvents, direction == "right", dc, getJudgeLineCalculator())
 				ctrl = scrcpy
 
@@ -766,6 +770,7 @@ func main() {
 
 	//  GUI mode has priority.
 	if guiMode {
+		config.DisablePrompt = true
 		const CONFIG_PATH = "./config.json"
 		conf, err := config.Load(CONFIG_PATH)
 		if err != nil {

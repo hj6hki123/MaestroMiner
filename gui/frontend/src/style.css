@@ -10,7 +10,7 @@ html {
   --color-ssm-surface: #1e1e1e;
   --color-ssm-border: #333333;
   --color-ssm-text: #e8e6df;
-  --color-ssm-blue: #3b82f6; 
+  --color-ssm-blue: #3b82f6;
   --color-ssm-blue-bg: rgba(59, 130, 246, 0.15);
   --color-ssm-hint: #6b7280;
   --color-ssm-muted: #9ca3af;
@@ -33,34 +33,41 @@ body {
   @apply bg-ssm-bg text-ssm-text h-screen overflow-hidden antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
+
 .layout {
   @apply flex h-full w-full;
 }
 
 /* === 2. Sidebar === */
 .sidebar {
-  /* 使用帶有透明度的背景與 backdrop-blur 製造毛玻璃效果 */
+  /* Semi-transparent background + blur for a glassmorphism sidebar. */
   @apply w-64 flex flex-col p-5 z-10;
   background: rgba(18, 18, 20, 0.65);
   backdrop-filter: blur(12px);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
 }
+
 .sidebar-top {
   @apply flex justify-between items-center mb-8 px-2 mt-2;
 }
+
 .logo {
   @apply font-black text-2xl tracking-tighter text-ssm-blue flex items-center gap-2;
 }
+
 .nav-sec {
   @apply text-xs font-bold text-ssm-hint uppercase tracking-widest mb-3 px-2;
 }
+
 .nav-btn {
   @apply flex items-center w-full px-4 py-3 mb-2 rounded-xl text-ssm-muted hover:bg-[#2a2a2a] hover:text-white transition-all duration-300 font-medium cursor-pointer border border-transparent;
 }
+
 .nav-btn.active {
   @apply bg-ssm-blue-bg text-ssm-blue font-bold shadow-sm border border-ssm-blue/20;
 }
+
 .nav-btn .ico {
   @apply mr-3 text-lg opacity-80;
 }
@@ -69,12 +76,15 @@ body {
 .main {
   @apply flex-1 overflow-y-auto p-6 md:p-10 relative scroll-smooth;
 }
+
 .pane {
   @apply hidden;
 }
+
 .pane.active {
   @apply block animate-[fadeIn_0.3s_ease-out_forwards];
 }
+
 .pg-title {
   @apply text-3xl font-extrabold tracking-tight mb-8 text-white;
 }
@@ -87,15 +97,17 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
+
 .card:hover {
   border: 1px solid rgba(59, 130, 246, 0.3);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 15px rgba(59, 130, 246, 0.1);
   transform: translateY(-2px);
 }
+
 .ct {
   @apply text-lg font-bold mb-5 flex items-center text-white pb-3;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  letter-spacing: 0.05em; 
+  letter-spacing: 0.05em;
 }
 
 /* === 5. Button design === */
@@ -105,6 +117,7 @@ body {
 
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
+
 .btn:hover:not(:disabled) {
   @apply bg-[#3f3f46] border-[#52525b] text-white;
 }
@@ -113,14 +126,15 @@ body {
 .btn.pri {
   @apply bg-blue-600 text-white border-blue-500;
 
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.25), 
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
     0 4px 15px rgba(59, 130, 246, 0.4);
 }
+
 .btn.pri:hover:not(:disabled) {
   @apply bg-blue-500 border-blue-400;
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.35), 
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
     0 6px 20px rgba(59, 130, 246, 0.6);
 }
 
@@ -129,6 +143,7 @@ body {
   @apply bg-red-950/40 text-red-400 border-red-900/60;
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
 }
+
 .btn.dan:hover:not(:disabled) {
   @apply bg-red-900/60 text-red-300 border-red-500/80;
   box-shadow: 0 4px 16px rgba(220, 38, 38, 0.3);
@@ -142,43 +157,75 @@ body {
 
 .btn:disabled {
   @apply bg-[#18181b] text-[#52525b] border-[#27272a] cursor-not-allowed transform-none;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* === 6. Forms and inputs === */
 .field {
   @apply mb-5;
 }
+
 .field label {
   @apply block text-sm font-semibold text-ssm-muted mb-2;
 }
-input[type="text"], input[type="number"] {
+
+input[type="text"],
+input[type="number"] {
   @apply w-full px-4 py-3 rounded-xl transition-all duration-300 font-medium text-white placeholder-ssm-hint;
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
-input[type="text"]:focus, input[type="number"]:focus {
+
+input[type="text"]:focus,
+input[type="number"]:focus {
   @apply outline-none;
   background: rgba(0, 0, 0, 0.6);
   border: 1px solid #3b82f6;
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.3), inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
+/* --- Device Management --- */
+.dev-row {
+  @apply flex items-center px-4 py-3 mb-2 bg-[#0c0c0e] rounded-xl border border-[#27272a] shadow-inner transition-colors hover:border-[#3f3f46];
+}
 
-/* === 7. Difficulty buttons === */
-/* === 7. 難度按鈕 (Cyberpunk Tech Style - Fixed for v4) === */
+.dev-s {
+  @apply font-mono text-[13px] font-bold text-white;
+}
+
+.dev-row span:nth-of-type(2) {
+  @apply font-mono text-xs text-ssm-muted ml-4;
+}
+
+
+.btn-del {
+
+  @apply ml-auto px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all cursor-pointer;
+  
+  @apply bg-transparent text-ssm-hint border border-transparent;
+}
+
+.btn-del:hover {
+  @apply bg-red-950/40 text-red-400 border-red-900/60;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.15);
+}
+
+.btn-del:active {
+  @apply scale-95;
+}
+/* === 7. Difficulty buttons (cyberpunk style) === */
 .diff-row {
   @apply flex flex-wrap gap-2;
 }
 
 .db {
-  /* 基礎狀態：深色背景、加粗邊框、微縮放動畫 */
+  /* Base state: dark background, bold border, subtle press animation. */
   @apply flex-1 min-w-[64px] py-2 px-1 rounded-xl border-2 font-black text-[10px] tracking-tighter text-center cursor-pointer transition-all duration-300 active:scale-95 uppercase;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
 }
 
-/* 禁用狀態：完全熄滅感 */
+/* Disabled state: fully dimmed. */
 .db.dis {
   @apply opacity-10 cursor-not-allowed active:scale-100 grayscale;
   background: transparent;
@@ -186,115 +233,243 @@ input[type="text"]:focus, input[type="number"]:focus {
   text-shadow: none !important;
 }
 
-/* === 預設狀態 (未選中)：使用 v4 顏色透明度語法 (例如 /0.3) === */
-.db.easy    { @apply border-[#5ba3e0]/30 text-[#5ba3e0]/60; }
-.db.normal  { @apply border-[#7ab84a]/30 text-[#7ab84a]/60; }
-.db.hard    { @apply border-[#d4921e]/30 text-[#d4921e]/60; }
-.db.expert  { @apply border-[#e06060]/30 text-[#e06060]/60; }
-.db.special { @apply border-[#9b95e0]/30 text-[#9b95e0]/60; }
+/* Default (not selected) state. */
+.db.easy {
+  @apply border-[#5ba3e0]/30 text-[#5ba3e0]/60;
+}
 
-/* 懸停時略微點亮 (Hover Glow) */
+.db.normal {
+  @apply border-[#7ab84a]/30 text-[#7ab84a]/60;
+}
+
+.db.hard {
+  @apply border-[#d4921e]/30 text-[#d4921e]/60;
+}
+
+.db.expert {
+  @apply border-[#e06060]/30 text-[#e06060]/60;
+}
+
+.db.special {
+  @apply border-[#9b95e0]/30 text-[#9b95e0]/60;
+}
+
+/* Slight glow on hover. */
 .db:hover:not(.dis):not(.active) {
   @apply bg-white/5;
-  /* v4 直接改邊框顏色顏色即可 */
 }
-.db.easy:hover:not(.dis):not(.active)   { @apply border-[#5ba3e0] text-[#5ba3e0]; }
-.db.normal:hover:not(.dis):not(.active) { @apply border-[#7ab84a] text-[#7ab84a]; }
-.db.hard:hover:not(.dis):not(.active)   { @apply border-[#d4921e] text-[#d4921e]; }
-.db.expert:hover:not(.dis):not(.active) { @apply border-[#e06060] text-[#e06060]; }
-.db.special:hover:not(.dis):not(.active){ @apply border-[#9b95e0] text-[#9b95e0]; }
 
-/* === 選中狀態 (Active)：霓虹全開 === */
+.db.easy:hover:not(.dis):not(.active) {
+  @apply border-[#5ba3e0] text-[#5ba3e0];
+}
+
+.db.normal:hover:not(.dis):not(.active) {
+  @apply border-[#7ab84a] text-[#7ab84a];
+}
+
+.db.hard:hover:not(.dis):not(.active) {
+  @apply border-[#d4921e] text-[#d4921e];
+}
+
+.db.expert:hover:not(.dis):not(.active) {
+  @apply border-[#e06060] text-[#e06060];
+}
+
+.db.special:hover:not(.dis):not(.active) {
+  @apply border-[#9b95e0] text-[#9b95e0];
+}
+
+.backend-warn-box {
+  @apply text-[10px] p-3 rounded-xl border transition-all duration-500;
+  background: rgba(127, 29, 29, 0.15); /* 深紅透明背景 */
+  border-color: rgba(127, 29, 29, 0.3);
+  color: #f87171; /* 亮紅字 */
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+
+/* Active state with stronger neon effects. */
 .db.active {
   @apply scale-100 text-white;
 }
 
-.db.easy.active { 
+.db.easy.active {
   background: #0c2a45;
   border-color: #5ba3e0;
   box-shadow: 0 0 15px rgba(91, 163, 224, 0.5), inset 0 0 10px rgba(91, 163, 224, 0.3);
   text-shadow: 0 0 8px #5ba3e0;
 }
-.db.normal.active { 
+
+.db.normal.active {
   background: #192e09;
   border-color: #7ab84a;
   box-shadow: 0 0 15px rgba(122, 184, 74, 0.5), inset 0 0 10px rgba(122, 184, 74, 0.3);
   text-shadow: 0 0 8px #7ab84a;
 }
-.db.hard.active { 
+
+.db.hard.active {
   background: #2c1e04;
   border-color: #d4921e;
   box-shadow: 0 0 15px rgba(212, 146, 30, 0.5), inset 0 0 10px rgba(212, 146, 30, 0.3);
   text-shadow: 0 0 8px #d4921e;
 }
-.db.expert.active { 
+
+.db.expert.active {
   background: #2c0909;
   border-color: #e06060;
   box-shadow: 0 0 15px rgba(224, 96, 96, 0.5), inset 0 0 10px rgba(224, 96, 96, 0.3);
   text-shadow: 0 0 8px #e06060;
 }
-.db.special.active { 
+
+.db.special.active {
   background: #1c1a42;
   border-color: #9b95e0;
   box-shadow: 0 0 15px rgba(155, 149, 224, 0.5), inset 0 0 10px rgba(155, 149, 224, 0.3);
   text-shadow: 0 0 8px #9b95e0;
 }
+
 /* === 8. Mode and backend options === */
 .bg {
-  @apply grid grid-cols-2 gap-3 mb-4; /* 將 gap-4 縮小為 gap-3，讓按鈕更緊湊 */
+  @apply grid grid-cols-2 gap-3 mb-4;
+  /* Use tighter spacing to make controls denser. */
 }
+
 .bc {
   @apply p-3 rounded-xl border-[1.5px] border-ssm-border cursor-pointer transition-all duration-300 text-center bg-transparent hover:border-ssm-muted/40 hover:-translate-y-0.5 active:scale-95;
 }
+
 .bc.active {
-  @apply border-ssm-blue bg-ssm-blue-bg shadow-[0_0_15px_rgba(59,130,246,0.1)] transform scale-[0.98];
+  @apply border-ssm-blue bg-ssm-blue-bg transform scale-[0.98];
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
 }
+
 .bcn {
   @apply font-bold text-sm mb-0.5 text-white;
 }
+
 .bcs {
   @apply text-[11px] text-ssm-muted font-medium;
 }
 
 /* === 9. Parameter tuning rows === */
 .jitter-row {
-  @apply flex items-center justify-between mb-3 bg-ssm-bg p-3 rounded-xl border border-transparent hover:border-ssm-border transition-colors;
+  @apply flex items-center mb-3 bg-[#08080a] p-3 px-5 rounded-xl border border-ssm-border/50 shadow-inner gap-4;
 }
+
 .jitter-label {
-  @apply text-sm font-bold text-white;
+  @apply text-[11px] font-bold text-ssm-muted uppercase tracking-widest w-36 shrink-0;
 }
+
 .jitter-val {
-  @apply text-sm font-black w-16 text-right font-mono text-white;
+  @apply text-[13px] font-black w-20 text-right font-mono text-blue-400 shrink-0 whitespace-nowrap;
+  text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+input[type="range"] {
+  @apply flex-1 h-2 appearance-none cursor-pointer rounded-full m-0;
+  
+  --val: 0%;
+  
+  border: 1px solid #27272a;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+  
+  background-image: 
+    linear-gradient(to right, transparent var(--val), #1a1a1e var(--val)),
+    linear-gradient(135deg, #0369a1 0%, #1d4ed8 25%, #4c1d95 50%, #6d28d9 75%, #0284c7 100%);
+  background-size: 100% 100%, 600% 100%;
+  
+  animation: auroraFlow 12s ease-in-out infinite alternate;
+}
+
+@keyframes auroraFlow {
+  0%   { background-position: 0% 0%, 0% 50%; }
+  100% { background-position: 0% 0%, 100% 50%; }
+}
+
+
+input[type="range"]::-webkit-slider-runnable-track {
+  @apply w-full h-2 rounded-full bg-transparent;
+}
+
+
+input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none w-3.5 h-5 bg-blue-400 rounded-[3px] relative z-10;
+  margin-top: -6px; 
+  border: 1px solid #ffffff;
+  box-shadow: 0 0 10px rgba(96,165,250,0.8), inset 0 0 4px rgba(255,255,255,0.8);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  @apply bg-blue-300 scale-110;
+  box-shadow: 0 0 15px rgba(96,165,250,1), inset 0 0 6px rgba(255,255,255,1);
+}
+
+
+input[type="range"]::-moz-range-track {
+  @apply w-full h-2 rounded-full bg-transparent;
+}
+input[type="range"]::-moz-range-progress {
+  @apply h-2 rounded-l-full;
+  background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 25%, #4c1d95 50%, #6d28d9 75%, #0284c7 100%);
+  background-size: 600% 100%;
+  animation: auroraFlow 12s ease-in-out infinite alternate;
+}
+input[type="range"]::-moz-range-thumb {
+  @apply appearance-none w-3.5 h-5 bg-blue-400 rounded-[3px] border border-white cursor-pointer;
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
 }
 
 /* === 10. Log terminal === */
 .log {
   @apply mt-6 font-mono text-xs p-4 rounded-xl h-48 overflow-y-auto leading-relaxed;
-  background: #030303; 
+  background: #030303;
   border: 1px solid rgba(59, 130, 246, 0.2);
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8), 0 0 10px rgba(59, 130, 246, 0.05);
-  color: #00ff41; 
+  color: #00ff41;
 }
-.ll.info { color: #3b82f6; }
-.ll.ok { color: #00ff41; text-shadow: 0 0 5px rgba(0, 255, 65, 0.5); } /* 發光綠 */
-.ll.err { color: #ef4444; text-shadow: 0 0 5px rgba(239, 68, 68, 0.5); font-weight: bold; }
+
+.ll.info {
+  color: #3b82f6;
+}
+
+.ll.ok {
+  color: #00ff41;
+  text-shadow: 0 0 5px rgba(0, 255, 65, 0.5);
+}
+
+.ll.err {
+  color: #ef4444;
+  text-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+  font-weight: bold;
+}
 
 /* === 11. Animations === */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* === 12. Song search and dropdown  === */
 .sel-bar {
   @apply flex items-center gap-3 bg-ssm-blue-bg p-3 rounded-xl border border-ssm-blue/30 text-white mb-4;
 }
+
 .sel-bar.show {
-  display: flex !important; 
+  display: flex !important;
 }
+
 .drop {
-  @apply absolute top-full left-0 right-0 mt-2 bg-ssm-surface rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] border border-ssm-border z-50;
+  @apply absolute top-full left-0 right-0 mt-2 bg-ssm-surface rounded-xl border border-ssm-border z-50;
   @apply max-h-60 overflow-y-auto hidden; 
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 .drop.open {
   @apply block animate-[fadeIn_0.2s_ease-out_forwards];
@@ -310,27 +485,43 @@ input[type="text"]:focus, input[type="number"]:focus {
 }
 
 .dev-drop-style .di-info {
-  @apply flex-1 !text-right; 
+  @apply flex-1 !text-right;
 }
 
 .dev-drop-style .di-title {
   @apply font-bold text-sm text-white font-mono;
 }
+
 .di {
   @apply flex items-center px-4 py-3 hover:bg-[#2a2a2a] cursor-pointer border-b border-ssm-border last:border-0 transition-colors;
 }
+
 .di.hi {
   @apply bg-[#2a2a2a] border-l-4 border-l-ssm-blue;
 }
-.di-id { @apply text-xs font-mono text-ssm-muted w-12; }
+
+.di-id {
+  @apply text-xs font-mono text-ssm-muted w-12;
+}
+
 /* Let the text block in the dropdown fill remaining space and push difficulty tags to the right. */
-.di-info { @apply flex-1 min-w-0; }
-.di-title { @apply font-bold text-sm text-white; }
-.di-band { @apply text-xs text-ssm-muted mt-0.5; }
+.di-info {
+  @apply flex-1 min-w-0;
+}
+
+.di-title {
+  @apply font-bold text-sm text-white;
+}
+
+.di-band {
+  @apply text-xs text-ssm-muted mt-0.5;
+}
+
 /* Ensure the difficulty tag group is right-aligned (using ml-auto). */
 .di-diffs {
-  @apply flex items-center gap-1.5 flex-shrink-0 ml-auto; 
+  @apply flex items-center gap-1.5 flex-shrink-0 ml-auto;
 }
+
 .di-d {
   @apply px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider border border-transparent;
 }
@@ -339,31 +530,53 @@ input[type="text"]:focus, input[type="number"]:focus {
 .np-diff {
   @apply px-2 py-0.5 rounded text-[10px] font-black tracking-wider;
 }
-.d-easy { @apply bg-diff-easy-bg text-diff-easy; }
-.d-normal { @apply bg-diff-normal-bg text-diff-normal; }
-.d-hard { @apply bg-diff-hard-bg text-diff-hard; }
-.d-expert { @apply bg-diff-expert-bg text-diff-expert; }
-.d-special { @apply bg-diff-special-bg text-diff-special; }
+
+.d-easy {
+  @apply bg-diff-easy-bg text-diff-easy;
+}
+
+.d-normal {
+  @apply bg-diff-normal-bg text-diff-normal;
+}
+
+.d-hard {
+  @apply bg-diff-hard-bg text-diff-hard;
+}
+
+.d-expert {
+  @apply bg-diff-expert-bg text-diff-expert;
+}
+
+.d-special {
+  @apply bg-diff-special-bg text-diff-special;
+}
 
 /* === 14. Language switcher menu === */
 .lang-picker {
   @apply relative;
 }
+
 .lang-menu {
-  @apply absolute top-full right-0 mt-2 w-28 bg-ssm-surface rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] border border-ssm-border z-50 overflow-hidden hidden;
+  @apply absolute top-full right-0 mt-2 w-28 bg-ssm-surface rounded-xl border border-ssm-border z-50 overflow-hidden hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
+
 .lang-menu.open {
   @apply block animate-[fadeIn_0.2s_ease-out_forwards];
 }
+
 .lang-opt {
   @apply flex flex-col px-4 py-2 hover:bg-[#2a2a2a] cursor-pointer border-b border-ssm-border last:border-0 transition-colors active:bg-[#333];
 }
+
 .lang-opt.active {
   @apply bg-[#2a2a2a] border-l-4 border-l-ssm-blue;
 }
+
 .lo-name {
   @apply text-sm font-bold text-white;
 }
+
 .lo-native {
   @apply text-[10px] text-ssm-muted;
 }
@@ -372,19 +585,231 @@ input[type="text"]:focus, input[type="number"]:focus {
 .dot {
   @apply w-3 h-3 rounded-full flex-shrink-0 transition-colors duration-300 relative;
 }
-.dot.ready { @apply bg-green-500 shadow-[0_0_8px_#22c55e]; }
-.dot.playing { @apply bg-ssm-blue shadow-[0_0_12px_var(--color-ssm-blue)]; }
-.dot.done { @apply bg-green-600; }
-.dot.error { @apply bg-red-500 shadow-[0_0_8px_#ef4444]; }
+
+.dot.ready {
+  @apply bg-green-500 shadow-[0_0_8px_#22c55e];
+}
+
+.dot.playing {
+  @apply bg-ssm-blue shadow-[0_0_12px_var(--color-ssm-blue)];
+}
+
+.dot.done {
+  @apply bg-green-600;
+}
+
+.dot.error {
+  @apply bg-red-500 shadow-[0_0_8px_#ef4444];
+}
 
 .dot.playing::after {
   content: '';
   @apply absolute inset-0 rounded-full bg-ssm-blue opacity-0;
   animation: playingRipple 1.5s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
 @keyframes playingRipple {
-  0% { transform: scale(1); opacity: 0.6; }
-  100% { transform: scale(3.5); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: scale(3.5);
+    opacity: 0;
+  }
+}
+
+/* === 16. Integrated player deck (center console) === */
+.player-deck {
+  @apply bg-[#121212] border border-ssm-border rounded-2xl shadow-2xl overflow-hidden mb-6;
+}
+
+.pd-none {
+  @apply py-20 text-center text-ssm-muted bg-[#09090b]/50;
+}
+
+/* --- Top area: metadata and large jacket art --- */
+.pd-info {
+  @apply flex items-center gap-8 p-8 border-b border-ssm-border bg-[#18181b]/40 relative;
+}
+
+/* Jacket frame with dynamic glow. */
+.pd-jacket {
+  @apply w-40 h-40 bg-[#0a0a0c] rounded-xl overflow-hidden border border-[#333] flex items-center justify-center relative z-10;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+}
+
+.pd-jacket img {
+  @apply w-full h-full object-cover;
+}
+
+/* Expanding ripple animation while playing. */
+.pd-jacket-wrap.playing::after,
+.pd-jacket-wrap.playing::before {
+  content: '';
+  @apply absolute inset-0 rounded-xl opacity-0 z-0 pointer-events-none;
+  border: 2px solid var(--jacket-color);
+}
+
+.pd-jacket-wrap.playing::after {
+  animation: jacketRipple 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.pd-jacket-wrap.playing::before {
+  /* Intentional second block: adds delay on top of shared ripple styles above. */
+  animation: jacketRipple 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  animation-delay: 1s;
+  /* Second ripple layer. */
+}
+
+@keyframes jacketRipple {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+    border-width: 2px;
+  }
+
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+.pd-meta {
+  @apply flex-1 min-w-0;
+}
+
+.pd-title {
+  @apply text-3xl md:text-4xl font-black text-white mb-2 truncate tracking-tight;
+}
+
+.pd-artist {
+  @apply text-base text-ssm-muted mb-5 truncate;
+}
+
+.pd-badges {
+  @apply flex flex-wrap items-center gap-3;
+}
+
+.pd-state {
+  @apply flex items-center gap-2 px-3 py-1 bg-[#222] rounded-full font-bold text-white border border-[#333];
+}
+
+.pd-change-btn {
+  @apply text-xs px-4 py-2 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-white transition-colors border border-[#444] cursor-pointer active:scale-95 shrink-0;
+}
+
+/* --- Middle area: offset controls --- */
+.pd-offset-sec {
+  @apply p-6 border-b border-ssm-border/50 bg-[#0c0c0e] flex justify-center;
+}
+
+.pd-offset-container {
+  /* Relax width constraints for a wider layout. */
+  @apply w-full max-w-2xl;
+}
+
+.pd-offset-header {
+  @apply flex justify-between items-end mb-2 px-1;
+}
+
+.pd-offset-header span {
+  @apply text-[11px] font-bold text-ssm-muted uppercase tracking-widest;
+}
+
+.pd-offset-header button {
+  @apply text-[11px] font-bold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer border-none bg-transparent;
+}
+
+.pd-offset-bar {
+  @apply flex items-center bg-[#18181b] p-1.5 rounded-xl border border-ssm-border shadow-inner gap-1.5;
+}
+
+.pd-offset-bar button {
+  @apply flex-1 h-12 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-white font-bold transition-all cursor-pointer active:scale-95 border-none text-xl;
+}
+
+.pd-offset-val {
+  @apply w-28 text-center flex flex-col shrink-0 justify-center;
+}
+
+.pd-offset-val span {
+  @apply text-3xl font-mono font-black text-white leading-none;
+}
+
+.pd-offset-val small {
+  @apply text-[10px] text-ssm-hint font-bold uppercase mt-1 tracking-widest;
+}
+
+/* --- Bottom area: playback actions --- */
+.pd-actions-sec {
+  @apply p-8 bg-[#09090b] flex flex-col items-center justify-center;
+}
+
+.pd-actions-row {
+  @apply flex items-center justify-center gap-6 w-full max-w-sm mb-6;
+}
+
+/* Circular stop button. */
+.pd-btn-stop {
+  @apply w-16 h-16 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0;
+  /* Neutral gray by default, solid red on hover for hardware-like feedback. */
+  @apply border border-[#3f3f46] bg-[#27272a] text-red-500 hover:bg-red-600 hover:text-white hover:border-red-400 active:scale-90;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Draw the stop square with CSS for exact centering, independent of font metrics. */
+.pd-btn-stop::after {
+  content: '';
+  @apply w-[18px] h-[18px] bg-current rounded-[3px];
+}
+
+/* Pill-shaped start button. */
+.pd-btn-start {
+  @apply flex-1 h-16 rounded-full flex items-center justify-center text-xl font-black transition-all cursor-pointer uppercase tracking-[0.15em];
+  @apply border border-blue-500 text-white bg-blue-600 active:scale-95;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(37, 99, 235, 0.4);
+}
+
+.pd-btn-start:hover:not(:disabled) {
+  @apply bg-blue-500 border-blue-400;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 6px 20px rgba(37, 99, 235, 0.6);
+}
+
+.pd-btn-start:disabled {
+  @apply bg-[#18181b] border-[#27272a] text-[#52525b] cursor-not-allowed scale-100;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+  /* Keep inset shadow explicitly for disabled appearance consistency. */
+}
+
+/* --- Keyboard shortcut hint styling --- */
+.pd-instruction-box {
+  @apply flex items-center justify-center gap-6 font-mono opacity-80 mt-2;
+}
+
+.ins-group {
+  @apply flex items-center gap-2;
+}
+
+.ins-label {
+  @apply text-[10px] text-ssm-hint uppercase tracking-widest font-black mr-1;
+}
+
+.ins-sep {
+  @apply text-ssm-hint/30 text-xs;
+}
+
+.ins-divider {
+  @apply w-[1px] h-4 bg-ssm-border;
 }
 
 
+
+/* Core keyboard keycap style. */
+kbd {
+  @apply inline-block px-2 py-0.5 border border-[#444] rounded text-white font-bold text-[11px] min-w-[24px] text-center;
+  box-shadow: 0 2px 0 #000;
+  background: linear-gradient(180deg, #333 0%, #2a2a2d 100%);
+}

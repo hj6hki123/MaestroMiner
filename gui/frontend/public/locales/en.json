@@ -65,8 +65,7 @@
   "play.offset.hint":  "Too early → negative · Too late → positive · <kbd>←</kbd><kbd>→</kbd> ±10 · <kbd>Shift</kbd>±50 · <kbd>Ctrl</kbd>±100",
   "play.offset.reset": "Reset",
   "play.stop":         "■ Stop",
-  "play.stop.hint":    "Or press",
-  "play.stop.hint2":   "in terminal",
+
 
   "extract.title":     "Extract from game folder",
   "extract.step1":     "Pull game data via ADB:<br><code>adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/ ./gamedata</code>",
@@ -94,6 +93,8 @@
   "log.extract.start": "Extracting: ",
   "log.extract.done":  "Done! assets/ generated.",
   "log.extract.fail":  "Error: ",
+
+  "song.backend.hid_warn": "If you are using HID and it's crashing! Please switch to ADB or enter <code class=\"bg-black/40 px-1 rounded text-red-300\">adb kill-server</code> in the terminal after adding the device.",
 
   "dc.hint.missing": "Please fill in all fields",
   "dc.hint.saved":   "✓ Saved",

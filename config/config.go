@@ -9,6 +9,8 @@ import (
 	"os"
 )
 
+var DisablePrompt bool = false
+
 type DeviceConfig struct {
 	Serial string `json:"-"`
 	Width  int    `json:"width"`
@@ -46,6 +48,9 @@ func (c *Config) Get(serial string) *DeviceConfig {
 		dc.Serial = serial
 		return dc
 	} else {
+		if DisablePrompt {
+			return nil
+		}
 		dc = c.askFor(serial)
 		c.Devices[serial] = dc
 		c.Save()

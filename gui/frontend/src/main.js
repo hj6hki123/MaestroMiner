@@ -150,6 +150,11 @@ function jitterRealValue(key, raw) {
 function renderJitter(key) {
   var raw = parseInt(document.getElementById('sld-' + key).value);
   var el = document.getElementById('val-' + key);
+
+  var sld = document.getElementById('sld-' + key);
+  var pct = ((raw - (sld.min || 0)) / ((sld.max || 100) - (sld.min || 0))) * 100;
+  sld.style.setProperty('--val', pct + '%');
+
   if (raw === 0) { el.textContent = 'OFF'; el.style.color = 'var(--hint)'; return; }
   el.style.color = 'var(--blue)';
   el.textContent = key === 'position' ? ('±' + Math.round((JITTER_POS_MAP[raw] || 0) * 100) + '%') : ('±' + raw + ' ms');
@@ -159,7 +164,7 @@ function renderAllJitters() { ['timing', 'position', 'tapDur'].forEach(renderJit
 function onJitter(key) { renderJitter(key); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'hid', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1 };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1 };
 var DN = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
 var DOT_CLS = { 1: 'ready', 2: 'playing', 3: 'done', 4: 'error' };
@@ -181,7 +186,21 @@ function nav(id) {
   document.getElementById('pane-' + id).classList.add('active');
   if (id === 'settings') loadDevices();
 }
+function navToSearch() {
+  nav('song');
 
+  setTimeout(function () {
+    var searchInput = document.getElementById('q');
+    if (searchInput) {
+      searchInput.focus({ preventScroll: true });
+
+      var searchCard = searchInput.closest('.card');
+      if (searchCard) {
+        searchCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, 50);
+}
 function setMode(m) {
   S.mode = m; S.db = null; if (S.songId) clearSong();
 
@@ -200,6 +219,15 @@ function setMode(m) {
 function setBackend(b) {
   S.backend = b;
   ['hid', 'adb'].forEach(function (x) { document.getElementById('backend-' + x).classList.toggle('active', x === b); });
+  var warnBox = document.getElementById('hid-warn-box');
+    if (warnBox) {
+      if (b === 'hid') {
+        warnBox.classList.remove('hidden'); 
+      } else {
+        warnBox.classList.add('hidden');    
+      }
+    }
+
   document.getElementById('orient-wrap').style.opacity = b === 'adb' ? '0.4' : '1';
 }
 function setOrient(o) {
@@ -207,18 +235,18 @@ function setOrient(o) {
   document.getElementById('ol').classList.toggle('active', o === 'left');
   document.getElementById('or').classList.toggle('active', o === 'right');
 }
-function setDiff(i) { 
+function setDiff(i) {
   var btns = document.querySelectorAll('.db');
-  
+
   // Guard: if this difficulty is disabled, ignore the click.
   if (btns[i] && btns[i].classList.contains('dis')) {
     return;
   }
 
-  S.diff = i; 
-  btns.forEach(function (b, j) { 
-    b.classList.toggle('active', j === i); 
-  }); 
+  S.diff = i;
+  btns.forEach(function (b, j) {
+    b.classList.toggle('active', j === i);
+  });
 }
 function setDiffAvail(avail) {
   document.querySelectorAll('.db').forEach(function (b, i) {
@@ -372,6 +400,13 @@ function updatePlayCard(np) {
   document.getElementById('pn-artist-big').textContent = np.artist || '';
   var badge = document.getElementById('pn-diff-badge'); badge.className = 'np-diff d-' + (np.diff || 'expert'); badge.textContent = (np.diff || '').toUpperCase();
   document.getElementById('pn-lv-big').textContent = np.diffLevel ? 'Lv.' + np.diffLevel : '';
+  var diffColors = {
+    'easy': '#5ba3e0', 'normal': '#7ab84a', 'hard': '#d4921e',
+    'expert': '#e06060', 'special': '#9b95e0'
+  };
+  var themeColor = diffColors[np.diff] || '#3b82f6';
+  var wrap = document.getElementById('pn-jacket-wrap');
+  if (wrap) wrap.style.setProperty('--jacket-color', themeColor);
 }
 
 // ══ keyboard ═══════════════════════════════════════════════
@@ -403,6 +438,52 @@ function submitRun() {
   var cp = document.getElementById('chart-path').value.trim();
   var ds = document.getElementById('dev-serial').value.trim();
   if (!sid && !cp) { log('song-log', t('log.no.song'), 'err'); return; }
+
+  var dsInput = document.getElementById('dev-serial');
+
+  if (!ds) {
+      var savedSerials = Object.keys(S.devices || {});
+      if (savedSerials.length > 0) {
+        ds = savedSerials[0]; 
+        dsInput.value = ds;    
+        log('song-log', 'No serial provided. Auto-selected: ' + ds, 'info');
+      }
+    }
+
+  var isConfigured = S.devices && S.devices[ds];
+
+  if (!ds || !isConfigured) {
+    var errorMsg = !ds
+      ? 'Device Serial is required!'
+      : 'Device [' + ds + '] is not configured with resolution!';
+
+    log('song-log', errorMsg + ' Redirecting...', 'err');
+
+    if (ds) document.getElementById('dc-s').value = ds;
+
+    nav('settings');
+
+    setTimeout(function () {
+      var devCard = document.getElementById('dc-s').closest('.card');
+      if (devCard) {
+        devCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        var focusTarget = !ds ? 'dc-s' : 'dc-w';
+        document.getElementById(focusTarget).focus({ preventScroll: true });
+
+        devCard.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+        devCard.style.boxShadow = '0 0 20px rgba(239, 68, 68, 0.4)';
+        devCard.style.borderColor = '#ef4444';
+
+        setTimeout(function () {
+          devCard.style.boxShadow = '';
+          devCard.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+        }, 2000);
+      }
+    }, 50);
+    return;
+  }
+
   var tRaw = parseInt(document.getElementById('sld-timing').value) || 0;
   var pRaw = parseInt(document.getElementById('sld-position').value) || 0;
   var dRaw = parseInt(document.getElementById('sld-tapDur').value) || 0;
@@ -424,6 +505,7 @@ function resetOff() { _adjPending = 0; clearTimeout(_adjTimer); var delta = -S.o
 // ══ devices ════════════════════════════════════════════════
 function loadDevices() {
   fetch('/api/device').then(function (r) { return r.json(); }).then(function (d) {
+    S.devices = d || {};
     var list = document.getElementById('dev-list');
     if (!d || !Object.keys(d).length) { list.innerHTML = '<div style="font-size:12px;color:var(--hint)">' + t('device.none') + '</div>'; return; }
     list.innerHTML = Object.entries(d).map(function (e) { return '<div class="dev-row"><span class="dev-s">' + e[0] + '</span><span>' + e[1].width + ' × ' + e[1].height + '</span><button class="btn-del" onclick="deleteDevice(\'' + e[0] + '\')">' + t('settings.device.delete') + '</button></div>'; }).join('');
@@ -439,11 +521,51 @@ function deleteDevice(serial) {
   fetch('/api/device', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ serial: serial }) })
     .then(function (r) { if (r.ok) loadDevices(); });
 }
+
+// ══ ADB & Device Utilities ════════════════════════════════
+function killAdbServer() {
+  log('song-log', 'Killing ADB server...', 'info');
+  // 💡 這裡需要你在後端寫一個 /api/kill-adb 的路由，執行 `adb kill-server`
+  fetch('/api/kill-adb', { method: 'POST' })
+    .then(function (r) {
+      if (r.ok) log('song-log', 'ADB server killed successfully.', 'ok');
+      else log('song-log', 'Failed to kill ADB.', 'err');
+    })
+    .catch(function (e) { log('song-log', 'Network error: ' + e, 'err'); });
+}
+
+function autoDetectDevice() {
+  var dsInput = document.getElementById('dev-serial');
+  dsInput.placeholder = "Detecting...";
+
+  fetch('/api/detect-adb')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.serial) {
+        dsInput.value = d.serial;
+        log('song-log', 'Device detected: ' + d.serial, 'ok');
+      } else {
+        log('song-log', 'No device found.', 'err');
+        dsInput.placeholder = "";
+      }
+    })
+    .catch(function (e) {
+      log('song-log', 'Failed to auto-detect.', 'err');
+      dsInput.placeholder = "";
+    });
+}
+
+
 // ══ advanced VTE params ════════════════════════════════════
 var ADV_DEFAULTS = { tapDuration: 10, flickDuration: 60, flickReportInterval: 5, slideReportInterval: 10, flickFactor: 20, flickPow: 10 };
 function onAdvanced(key) {
   var raw = parseInt(document.getElementById('sld-' + key).value);
   var el = document.getElementById('val-' + key);
+
+  var sld = document.getElementById('sld-' + key);
+  var pct = ((raw - (sld.min || 0)) / ((sld.max || 100) - (sld.min || 0))) * 100;
+  sld.style.setProperty('--val', pct + '%');
+
   if (key === 'flickFactor') {
     el.textContent = (raw / 100).toFixed(2);
   } else if (key === 'flickPow') {
@@ -478,11 +600,11 @@ function doExtract() {
     .then(function (r) { if (r.ok) log('ex-log', t('log.extract.done'), 'ok'); else r.text().then(function (tx) { log('ex-log', t('log.extract.fail') + tx, 'err'); }); })
     .catch(function (e) { log('ex-log', t('log.conn.fail') + e, 'err'); });
 }
-
 // ══ initialization ═════════════════════════════════════════
 I18n.init();
-
-
+setBackend(S.backend);
+resetAdvanced();
+loadDevices();
 
 // ==========================================
 // expose functions to global scope for HTML onclick handlers
@@ -491,6 +613,9 @@ Object.assign(window, {
   I18n,
   toggleLangMenu,
   nav,
+  navToSearch,
+  killAdbServer,
+  autoDetectDevice,
   setMode,
   setBackend,
   setOrient,
@@ -513,6 +638,51 @@ Object.assign(window, {
   resetAdvanced,
   doExtract,
   toggleDevDrop,
+  loadDevices,
   selectDevSerial,
   selSong
 });
+
+
+// ══ 開發模式 ════════════════════════════════
+if (import.meta.env.DEV) {
+  console.log("🛠️ 開發模式已啟動！按下 [Ctrl + Shift + D] 載入測試歌曲。");
+
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      console.log("🛠️ 觸發 Debug 模式：載入假資料...");
+
+      // 建立一筆測試用的假歌資料
+      var mockNp = {
+        songId: 999,
+        title: 'DEBUG MOCK SONG ~測試用曲目~',
+        artist: 'System Tester',
+        diff: 'expert',
+        diffLevel: 28,
+        // 隨便抓一張 Bestdori 的圖作為測試
+        jacketUrl: 'https://bestdori.com/assets/jp/musicjacket/musicjacket10_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket10-10-jacket.png'
+      };
+
+      // 強制寫入狀態
+      S.songId = 999;
+      S.diff = 3;
+      S.state = 1; // 1 = 準備就緒
+
+      // 呼叫原本的 UI 更新函數
+      showNP(mockNp);
+      updatePlayCard(mockNp);
+
+      // 模擬從後端推播 SSE 事件過來 (狀態變為 Ready，Offset = 0)
+      updateUI({
+        state: 1,
+        offset: 0,
+        nowPlaying: mockNp
+      });
+
+      // 切換到播放面板方便查看
+      nav('play');
+      log('play-log', '已載入 Debug 測試歌曲', 'info');
+    }
+  });
+}

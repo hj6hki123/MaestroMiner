@@ -65,8 +65,7 @@
   "play.offset.hint":  "早すぎ → マイナス · 遅すぎ → プラス · <kbd>←</kbd><kbd>→</kbd> ±10 · <kbd>Shift</kbd>±50 · <kbd>Ctrl</kbd>±100",
   "play.offset.reset": "リセット",
   "play.stop":         "■ 停止",
-  "play.stop.hint":    "または",
-  "play.stop.hint2":   "でも停止できます",
+
 
   "extract.title":     "ゲームフォルダから抽出",
   "extract.step1":     "ADB でゲームデータを取得：<br><code>adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/ ./gamedata</code>",
@@ -94,6 +93,8 @@
   "log.extract.start": "抽出中：",
   "log.extract.done":  "完了！assets/ を生成しました",
   "log.extract.fail":  "エラー：",
+
+  "song.backend.hid_warn": "⚠️ HIDでクラッシュする場合、ADBを使用するか、デバイス接続後にターミナルで <code class=\"bg-black/40 px-1 rounded text-red-300\">adb kill-server</code> を実行してから再試行してください。",
 
   "dc.hint.missing": "すべての項目を入力してください",
   "dc.hint.saved":   "✓ 保存しました",

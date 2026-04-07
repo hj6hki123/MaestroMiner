@@ -65,8 +65,7 @@
   "play.offset.hint":  "打太早 → 負值 · 打太晚 → 正值 · <kbd>←</kbd><kbd>→</kbd> ±10 · <kbd>Shift</kbd>±50 · <kbd>Ctrl</kbd>±100",
   "play.offset.reset": "歸零",
   "play.stop":         "■ 中斷播放",
-  "play.stop.hint":    "終端機按",
-  "play.stop.hint2":   "也可中斷",
+
 
   "extract.title":     "從遊戲資料夾提取",
   "extract.step1":     "用 ADB 把遊戲資料拉到電腦：<br><code>adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/ ./gamedata</code>",
@@ -94,6 +93,8 @@
   "log.extract.start": "正在提取：",
   "log.extract.done":  "完成！已產生 assets/ 資料夾。",
   "log.extract.fail":  "錯誤：",
+
+  "song.backend.hid_warn": "⚠️ 如果你使用 HID 崩潰！請改用 ADB 或是在加入設備後透過終端機輸入 <code class=\"bg-black/40 px-1 rounded text-red-300\">adb kill-server</code> 再使用此功能。",
 
   "dc.hint.missing": "請填寫所有欄位",
   "dc.hint.saved":   "✓ 已儲存",

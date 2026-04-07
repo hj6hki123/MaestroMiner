@@ -15,7 +15,8 @@ import (
 	"os"
 	"sync"
 	"time"
-
+	"os/exec"
+	"github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
@@ -548,7 +549,42 @@ done:
 		s.mu.Unlock()
 	}
 }
+// ─── ADB Utils ──────────────────────────────────────
 
+func (s *Server) handleKillAdb(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	cmd := exec.Command("adb", "kill-server")
+	_ = cmd.Run() 
+	
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleDetectAdb(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	client := adb.NewDefaultClient()
+	devices, err := client.Devices()
+	
+	if err != nil || len(devices) == 0 {
+		json.NewEncoder(w).Encode(map[string]string{"serial": ""})
+		return
+	}
+
+	device := adb.FirstAuthorizedDevice(devices)
+	if device != nil {
+		json.NewEncoder(w).Encode(map[string]string{"serial": device.Serial()})
+	} else {
+		json.NewEncoder(w).Encode(map[string]string{"serial": ""})
+	}
+}
 // ─── Startup ──────────────────────────────────────
 
 func (s *Server) Start() (string, error) {
@@ -568,6 +604,8 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/device", s.handleDevice)
 	mux.HandleFunc("/api/extract", s.handleExtract)
 	mux.HandleFunc("/api/songdb", s.handleSongDB)
+	mux.HandleFunc("/api/kill-adb", s.handleKillAdb)
+	mux.HandleFunc("/api/detect-adb", s.handleDetectAdb)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.port))
 	if err != nil {

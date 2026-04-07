@@ -88,7 +88,54 @@
             </div>
           </div>
         </div>
+        <div class="card">
+          <div class="ct flex items-center justify-between">
+            <span data-i18n="song.backend">Backend & Connection</span>
+            <div id="hid-warn-box" data-i18n="song.backend.hid_warn"
+              class="text-[10px] bg-red-950/20 text-red-400 p-2.5 rounded-lg border border-red-900/30 leading-relaxed font-medium">
+            </div>
+          </div>
 
+          <div class="bg">
+            <div class="bc" id="backend-hid" onclick="setBackend('hid')">
+              <div class="bcn">HID</div>
+            </div>
+            <div class="bc active" id="backend-adb" onclick="setBackend('adb')">
+              <div class="bcn">ADB</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="flex items-end justify-between mb-2">
+              <label class="!mb-0" data-i18n="song.serial.label">Device serial</label>
+              <button
+                class="text-[10px] bg-[#27272a] text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded border border-[#3f3f46] transition-all font-bold flex items-center gap-1 active:scale-95"
+                onclick="autoDetectDevice()">
+                🔍 Auto Detect
+              </button>
+            </div>
+
+            <div class="sw relative">
+              <input type="text" id="dev-serial" autocomplete="off" class="pr-10">
+              <button
+                class="sc absolute right-3 top-1/2 -translate-y-1/2 text-ssm-muted hover:text-white transition-colors"
+                id="btn-dev-drop" onclick="toggleDevDrop(event)">▾</button>
+              <div class="drop" id="dev-drop"></div>
+            </div>
+          </div>
+
+          <div id="orient-wrap" class="field mt-4">
+            <label data-i18n="song.orient">Screen rotation (HID only)</label>
+            <div class="grid grid-cols-2 gap-4 mt-2">
+              <button class="bc active !p-3 flex items-center justify-center" id="ol" onclick="setOrient('left')">
+                <div class="bcs !text-sm !font-bold" data-i18n="song.orient.left">↺ CCW</div>
+              </button>
+              <button class="bc !p-3 flex items-center justify-center" id="or" onclick="setOrient('right')">
+                <div class="bcs !text-sm !font-bold" data-i18n="song.orient.right">↻ CW</div>
+              </button>
+            </div>
+          </div>
+        </div>
         <div class="card">
           <div class="ct" data-i18n="song.search">Song Search</div>
           <div
@@ -133,42 +180,6 @@
             <input type="text" id="chart-path" data-i18n-placeholder="song.chart.placeholder">
           </div>
         </div>
-
-        <div class="card">
-          <div class="ct" data-i18n="song.backend">Backend &amp; Connection</div>
-          <div class="bg">
-            <div class="bc active" id="backend-hid" onclick="setBackend('hid')">
-              <div class="bcn">HID</div>
-            </div>
-            <div class="bc" id="backend-adb" onclick="setBackend('adb')">
-              <div class="bcn">ADB</div>
-            </div>
-          </div>
-
-          <div class="field">
-            <label data-i18n="song.serial.label">Device serial</label>
-            <div class="sw relative">
-              <input type="text" id="dev-serial" autocomplete="off" class="pr-10">
-              <button
-                class="sc absolute right-3 top-1/2 -translate-y-1/2 text-ssm-muted hover:text-white transition-colors"
-                id="btn-dev-drop" onclick="toggleDevDrop(event)">▾</button>
-              <div class="drop" id="dev-drop"></div>
-            </div>
-          </div>
-
-          <div id="orient-wrap" class="field mt-4">
-            <label data-i18n="song.orient">Screen rotation (HID only)</label>
-            <div class="grid grid-cols-2 gap-4 mt-2">
-              <button class="bc active !p-3 flex items-center justify-center" id="ol" onclick="setOrient('left')">
-                <div class="bcs !text-sm !font-bold" data-i18n="song.orient.left">↺ CCW</div>
-              </button>
-              <button class="bc !p-3 flex items-center justify-center" id="or" onclick="setOrient('right')">
-                <div class="bcs !text-sm !font-bold" data-i18n="song.orient.right">↻ CW</div>
-              </button>
-            </div>
-          </div>
-        </div>
-
         <button class="btn pri btn-b" onclick="submitRun()" data-i18n="song.load">▶ Load &amp; Prepare</button>
         <div class="log" id="song-log"></div>
       </div>
@@ -266,69 +277,88 @@
         </div>
       </div>
 
-    <div class="pane" id="pane-play">
+      <div class="pane" id="pane-play">
         <div class="pg-title" data-i18n="nav.play">Play Control</div>
-        
-        <div class="play-now mb-6 bg-ssm-surface border border-ssm-border rounded-2xl p-6 shadow-sm">
-          <div class="pn-none text-ssm-muted text-center py-4" id="pn-none" data-i18n="play.none">No song loaded.</div>
+
+        <div class="player-deck">
+          <div class="pd-none" id="pn-none">
+            <div class="text-4xl mb-3 opacity-30">♪</div>
+            <div data-i18n="play.none">No song loaded.</div>
+          </div>
+
           <div id="pn-loaded" style="display:none">
-            <div class="pn-top flex gap-6 items-center">
-              <div class="pn-jacket w-32 h-32 bg-ssm-bg rounded-xl overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.5)] border border-ssm-border shrink-0 flex items-center justify-center">
-                <img id="pn-img" src="" alt="" class="w-full h-full object-cover" onerror="this.style.display='none';document.getElementById('pn-no').style.display='flex'">
-                <div class="pn-no text-5xl text-ssm-muted font-bold" id="pn-no" style="display:none">♪</div>
+
+            <div class="pd-info">
+              <div class="pd-jacket-wrap" id="pn-jacket-wrap">
+                <div class="pd-jacket">
+                  <img id="pn-img" src="" alt=""
+                    onerror="this.style.display='none';document.getElementById('pn-no').style.display='flex'">
+                  <div class="pn-no text-6xl font-bold text-ssm-muted" id="pn-no" style="display:none">♪</div>
+                </div>
               </div>
-              <div class="pn-meta flex-1">
-                <div class="pn-title text-3xl font-black text-white mb-2" id="pn-title-big"></div>
-                <div class="pn-artist text-sm text-ssm-muted mb-4" id="pn-artist-big"></div>
-                <div class="pn-badges flex items-center gap-2">
-                  <span class="np-diff text-xs px-3 py-1" id="pn-diff-badge"></span>
-                  <span class="pn-lv font-mono font-bold text-white bg-[#333] px-3 py-1 rounded text-xs" id="pn-lv-big"></span>
+              <div class="pd-meta">
+                <div class="pd-title" id="pn-title-big"></div>
+                <div class="pd-artist" id="pn-artist-big"></div>
+                <div class="pd-badges">
+                  <span class="np-diff" id="pn-diff-badge"></span>
+                  <span class="pn-lv" id="pn-lv-big"></span>
+                  <div class="pd-state">
+                    <span class="dot" id="pn-dot"></span>
+                    <span id="pn-state-label" class="text-xs">Ready</span>
+                  </div>
+                </div>
+              </div>
+              <button class="pd-change-btn" onclick="navToSearch()" data-i18n="play.change">Change</button>
+            </div>
+
+            <div class="pd-offset-sec">
+              <div class="pd-offset-container">
+                <div class="pd-offset-header">
+                  <div class="flex items-center gap-2">
+                    <span data-i18n="play.offset.title">Offset Adjustment</span>
+
+                  </div>
+                  <button class="text-blue-400 hover:text-blue-300 font-bold text-[11px]" onclick="resetOff()"
+                    data-i18n="play.offset.reset">Reset</button>
+                </div>
+                <div class="pd-offset-bar">
+                  <button onclick="adj(-100)" title="-100ms">«</button>
+                  <button onclick="adj(-50)" title="-50ms">‹‹</button>
+                  <button onclick="adj(-10)" title="-10ms">‹</button>
+
+                  <div class="pd-offset-val">
+                    <span id="ov">0</span><small>ms</small>
+                  </div>
+
+                  <button onclick="adj(10)" title="+10ms">›</button>
+                  <button onclick="adj(50)" title="+50ms">››</button>
+                  <button onclick="adj(100)" title="+100ms">»</button>
+                </div>
+                <div class="flex justify-center gap-6 mt-3 opacity-40 text-[10px] font-mono">
+                  <div class="hidden md:flex gap-1 items-center ml-2 opacity-50">
+                    <kbd>←</kbd><kbd>→</kbd> <span class="text-[9px]">Seek</span>
+                  </div>
+                  <span><kbd class="!bg-transparent !shadow-none opacity-60">Shift</kbd> ±50ms</span>
+                  <span><kbd class="!bg-transparent !shadow-none opacity-60">Ctrl</kbd> ±100ms</span>
                 </div>
               </div>
             </div>
-            <div class="pn-status flex items-center gap-3 mt-6 pt-4 border-t border-ssm-border">
-              <div class="dot" id="pn-dot"></div>
-              <div class="pn-state-label text-sm font-bold text-white" id="pn-state-label">Ready</div>
-              <div class="flex:1"></div>
-              <button class="btn !text-xs !py-1.5 !px-3" onclick="nav('song')" data-i18n="play.change">Change Song</button>
+
+            <div class="pd-actions-sec">
+              <div class="pd-actions-row">
+                <button class="pd-btn-stop" onclick="apiStop()" title="Stop"></button>
+                <button class="pd-btn-start" id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶
+                  START</button>
+              </div>
+
+              <div class="pd-instruction-box">
+                <div class="ins-group">
+                  <span class="ins-label">PLAY</span>
+                  <kbd>Enter</kbd> <span class="ins-sep">/</span> <kbd>Space</kbd>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        
-        <div class="card">
-          <div class="ct" data-i18n="play.start.title">Playback Control</div>
-          
-          
-          <button class="start-btn btn pri w-full py-4 text-xl tracking-wider disabled:opacity-50 disabled:cursor-not-allowed" id="btn-start" onclick="apiStart()" disabled data-i18n="play.start.btn">▶ Start</button>
-          <div class="text-xs text-ssm-hint mb-4 leading-relaxed text-center" data-i18n="play.start.hint"></div>
-          <div class="kh text-center mt-2 text-[11px] text-ssm-hint"><span data-i18n="play.start.kbd">Click, or press</span> <kbd class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">Enter</kbd> / <kbd class="bg-[#333] border border-[#444] px-2 py-0.5 rounded text-white text-xs font-mono">Space</kbd></div>
-          
-          <div class="h-[1px] bg-ssm-border my-5 w-1/4 mx-auto"></div>
 
-          <button class="btn dan btn-b !mt-0" onclick="apiStop()" data-i18n="play.stop">■ Stop</button>
-          <div class="kh text-center mt-2 text-[11px] text-ssm-hint"></div>
-
-            
-          
-        </div>
-
-        <div class="card">
-          <div class="ct" data-i18n="play.offset.title">Offset Adjustment</div>
-          <div class="text-[11px] text-ssm-hint mb-3 text-center" data-i18n="play.offset.hint"></div>
-          <div class="oc flex items-center justify-center gap-2 bg-ssm-bg p-4 rounded-xl border border-ssm-border">
-            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(-100)">«</button>
-            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(-50)">‹‹</button>
-            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(-10)">‹</button>
-            <div class="text-center w-20">
-              <div class="ov text-xl font-mono font-black text-white" id="ov">0</div>
-              <div class="ou text-xs text-ssm-hint font-bold uppercase tracking-widest">ms</div>
-            </div>
-            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(10)">›</button>
-            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(50)">››</button>
-            <button class="adj w-10 h-10 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white flex items-center justify-center font-bold transition-all active:scale-90" onclick="adj(100)">»</button>
-          </div>
-          <div class="text-center mt-4">
-            <button class="btn" onclick="resetOff()" data-i18n="play.offset.reset">Reset</button>
           </div>
         </div>
 
