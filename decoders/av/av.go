@@ -36,6 +36,8 @@ type AVDecoder struct {
 	ctx       *C.AVCodecContext
 	needMerge bool
 	frameFn   func(DecodedFrame)
+	mu        sync.Mutex
+	closed    bool
 }
 
 // DecodedFrame carries a compact frame view for downstream analysis.
@@ -58,7 +60,7 @@ var (
 
 func NewAVDecoder(id string) (*AVDecoder, error) {
 	avLogLevelOnce.Do(func() {
-		C.av_log_set_level(C.AV_LOG_ERROR)
+		C.av_log_set_level(C.AV_LOG_QUIET)
 	})
 
 	var codecId uint32 = C.AV_CODEC_ID_NONE
@@ -97,6 +99,14 @@ func NewAVDecoder(id string) (*AVDecoder, error) {
 }
 
 func (d *AVDecoder) Drop() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.closed {
+		return
+	}
+	d.closed = true
+
 	if d.ctx != nil {
 		C.avcodec_free_context(&d.ctx)
 	}
@@ -120,13 +130,32 @@ func copyPlane(data *C.uint8_t, stride C.int, width, height int) []byte {
 }
 
 func (d *AVDecoder) Decode(pts uint64, data []byte) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.closed || d.ctx == nil {
+		return nil
+	}
+
+	if len(data) == 0 {
+		return nil
+	}
+
 	packet := C.av_packet_alloc()
 	frame := C.av_frame_alloc()
+	defer C.av_packet_free(&packet)
+	defer C.av_frame_free(&frame)
 
 	C.av_new_packet(packet, C.int(len(data)))
 	C.memcpy(unsafe.Pointer(packet.data), unsafe.Pointer(&data[0]), C.size_t(len(data)))
 
 	if pts&SC_PACKET_FLAG_CONFIG != 0 {
+		if d.needMerge {
+			// For H264/H265, keep config and merge it into next media packet.
+			d.config = append(d.config[:0], data...)
+			return nil
+		}
+
 		packet.pts = C.AV_NOPTS_VALUE
 		d.config = data
 	} else {
@@ -177,9 +206,6 @@ func (d *AVDecoder) Decode(pts uint64, data []byte) error {
 
 		C.av_frame_unref(frame)
 	}
-
-	C.av_packet_free(&packet)
-	C.av_frame_free(&frame)
 
 	return nil
 }

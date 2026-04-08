@@ -161,29 +161,33 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		return err
 	}
 	c.codecID = string(buf)
-	c.decoder, err = av.NewAVDecoder(c.codecID)
-	if err != nil {
-		return err
+	if os.Getenv("SSM_ENABLE_VIDEO_DECODE") == "1" {
+		c.decoder, err = av.NewAVDecoder(c.codecID)
+		if err != nil {
+			return err
+		}
+		c.decoder.SetFrameHandler(func(f av.DecodedFrame) {
+			frame := ScrcpyFrame{
+				PTS:         f.PTS,
+				Width:       f.Width,
+				Height:      f.Height,
+				PixelFormat: f.PixelFormat,
+				Plane0:      append([]byte(nil), f.Plane0...),
+				CapturedAt:  time.Now(),
+			}
+
+			c.frameMu.Lock()
+			c.latestFrame = &frame
+			fn := c.frameFn
+			c.frameMu.Unlock()
+
+			if fn != nil {
+				fn(frame)
+			}
+		})
+	} else {
+		log.Debugln("Video decode is disabled (set SSM_ENABLE_VIDEO_DECODE=1 to enable).")
 	}
-	c.decoder.SetFrameHandler(func(f av.DecodedFrame) {
-		frame := ScrcpyFrame{
-			PTS:         f.PTS,
-			Width:       f.Width,
-			Height:      f.Height,
-			PixelFormat: f.PixelFormat,
-			Plane0:      append([]byte(nil), f.Plane0...),
-			CapturedAt:  time.Now(),
-		}
-
-		c.frameMu.Lock()
-		c.latestFrame = &frame
-		fn := c.frameFn
-		c.frameMu.Unlock()
-
-		if fn != nil {
-			fn(frame)
-		}
-	})
 
 	if err := readFull(videoSocket, buf); err != nil {
 		return err
