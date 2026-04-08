@@ -13,6 +13,7 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 ~~Given that the original author has stopped development (I think?)~~ , once again express my gratitude to kvarenzn for the excellent work. I’ve basically just wrapped a simple GUI shell  around the original core architecture to make the gameplay experience even more convenient and user-friendly.
 
 **If you're looking for an easier way to play, give this version a try!**
+Support for BanG Dream and Project Sekai: Colorful Stage
 
 ##  What's new
 
