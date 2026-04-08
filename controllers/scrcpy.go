@@ -258,10 +258,13 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 	}
 
 	result := []common.ViscousEventItem{}
-	currentFingers := make([]bool, 10)
+	currentFingers := map[int]bool{}
 	for _, events := range rawEvents {
 		var data []byte
 		for _, event := range events.Events {
+			if event.PointerID < 0 {
+				log.Fatalf("invalid pointer id: %d", event.PointerID)
+			}
 			x, y := mapper(event.X, event.Y)
 			action, ok := common.NormalizeTouchAction(event.Action)
 			if !ok {
@@ -281,7 +284,7 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 				if !currentFingers[event.PointerID] {
 					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
 				}
-				currentFingers[event.PointerID] = false
+				delete(currentFingers, event.PointerID)
 			}
 
 			data = append(data, c.Encode(action, int32(x), int32(y), uint64(event.PointerID))...)

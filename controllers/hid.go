@@ -173,7 +173,8 @@ func (c *HIDController) unregisterHID() {
 		nil,
 	)
 	if err != nil {
-		log.Fatal(err)
+		// Device may already be gone (e.g. cable hiccup); do not crash on best-effort cleanup.
+		log.Warnf("failed to unregister HID: %v", err)
 	}
 }
 
@@ -238,33 +239,75 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 
 	result := []common.ViscousEventItem{}
 	currentFingers := make([]PointerStatus, 10)
+	pointerSlotMap := map[int]int{}
+
+	allocSlot := func() int {
+		for i, status := range currentFingers {
+			if !status.OnScreen {
+				return i
+			}
+		}
+		return -1
+	}
+
 	for _, events := range rawEvents {
 		for _, event := range events.Events {
+			if event.PointerID < 0 {
+				log.Fatalf("invalid pointer id: %d", event.PointerID)
+			}
 			x, y := mapper(event.X, event.Y)
-			status := currentFingers[event.PointerID]
 			action, ok := common.NormalizeTouchAction(event.Action)
 			if !ok {
 				log.Fatalf("unknown touch action: %d\n", event.Action)
 			}
+
+			slot, mapped := pointerSlotMap[event.PointerID]
+			if !mapped {
+				slot = -1
+			}
+
 			switch action {
 			case common.TouchDown:
+				if slot == -1 {
+					slot = allocSlot()
+					if slot == -1 {
+						log.Fatalf("too many simultaneous touch pointers (max 10), incoming pointer `%d`", event.PointerID)
+					}
+					pointerSlotMap[event.PointerID] = slot
+				}
+				status := currentFingers[slot]
 				if status.OnScreen {
 					log.Fatalf("pointer `%d` is already on screen", event.PointerID)
 				}
 				status.OnScreen = true
+				status.X = x
+				status.Y = y
+				currentFingers[slot] = status
 			case common.TouchMove:
+				if slot == -1 {
+					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+				}
+				status := currentFingers[slot]
 				if !status.OnScreen {
 					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
 				}
+				status.X = x
+				status.Y = y
+				currentFingers[slot] = status
 			case common.TouchUp:
+				if slot == -1 {
+					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+				}
+				status := currentFingers[slot]
 				if !status.OnScreen {
 					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
 				}
 				status.OnScreen = false
+				status.X = x
+				status.Y = y
+				currentFingers[slot] = status
+				delete(pointerSlotMap, event.PointerID)
 			}
-			status.X = x
-			status.Y = y
-			currentFingers[event.PointerID] = status
 		}
 		result = append(result, common.ViscousEventItem{
 			Timestamp: events.Timestamp,
