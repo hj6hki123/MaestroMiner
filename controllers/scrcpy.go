@@ -97,7 +97,8 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			"video_bit_rate=100000",             // Use a very low bitrate to reduce video bandwidth usage
 		)
 		if err != nil {
-			log.Fatalln("Failed to start `scrcpy-server`:", err)
+			log.Warnf("failed to start `scrcpy-server`: %v", err)
+			return
 		}
 
 		log.Debugln(result)
@@ -310,11 +311,13 @@ func (c *ScrcpyController) Send(data []byte) {
 	// }
 	n, err := c.controlSocket.Write(data)
 	if err != nil {
-		log.Fatalln("Failed to send control data through control socket:", err)
+		log.Warnf("failed to send control data through control socket: %v", err)
+		return
 	}
 
 	if n != len(data) {
-		log.Fatalf("Failed to send control data through control socket: expect to send %d bytes, but %d bytes were sent", len(data), n)
+		log.Warnf("partial control data sent: expect %d bytes, sent %d bytes", len(data), n)
+		return
 	}
 }
 

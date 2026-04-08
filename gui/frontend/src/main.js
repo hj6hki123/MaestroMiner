@@ -987,12 +987,9 @@ Object.assign(window, {
 
 // ══ Development mode ════════════════════════════════
 if (import.meta.env.DEV) {
-  console.log("🛠️ Development mode enabled. Press [Ctrl + Shift + D] to load the test song.");
-
   document.addEventListener('keydown', function (e) {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
       e.preventDefault();
-      console.log("🛠️ Debug mode triggered: loading mock data...");
 
       var mockNp = {
         songId: 999,

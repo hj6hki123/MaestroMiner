@@ -367,12 +367,12 @@
                   <button onclick="adj(50)" title="+50ms">››</button>
                   <button onclick="adj(100)" title="+100ms">»</button>
                 </div>
-                <div class="flex justify-center gap-6 mt-3 opacity-40 text-[10px] font-mono">
-                  <div class="hidden md:flex gap-1 items-center ml-2 opacity-50">
-                    <kbd>←</kbd><kbd>→</kbd> <span class="text-[9px]">Seek</span>
+                <div class="ins-group ins-group-hints">
+                  <div class="hidden md:flex gap-1 items-center ml-2">
+                    <kbd>←</kbd><kbd>→</kbd> <span class="text-[9px]">Offset</span>
                   </div>
-                  <span><kbd class="!bg-transparent !shadow-none opacity-60">Shift</kbd> ±50ms</span>
-                  <span><kbd class="!bg-transparent !shadow-none opacity-60">Ctrl</kbd> ±100ms</span>
+                  <span><kbd class="!bg-transparent !shadow-none">Shift</kbd> ±50ms</span>
+                  <span><kbd class="!bg-transparent !shadow-none">Ctrl</kbd> ±100ms</span>
                 </div>
               </div>
             </div>
@@ -408,29 +408,6 @@
           <div class="log" id="ex-log"></div>
         </div>
 
-        <div class="card">
-          <div class="ct" data-i18n="extract.alt">Or download charts from Bestdori</div>
-          <div class="step flex items-start gap-3 mb-3">
-            <div
-              class="sn w-6 h-6 bg-[#333] text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">
-              1</div>
-            <div class="st text-sm text-ssm-muted">
-              <span data-i18n="extract.alt.step1">Go to</span>
-              <a href="https://bestdori.com/tool/explorer" target="_blank"
-                class="text-ssm-blue hover:text-blue-400 hover:underline font-bold transition-colors">bestdori.com/tool/explorer</a>
-              → musicscore →
-              <code
-                class="bg-[#121212] border border-ssm-border px-1.5 py-0.5 rounded text-white">{ID}_{name}_{diff}.txt</code>
-            </div>
-          </div>
-          <div class="step flex items-start gap-3">
-            <div
-              class="sn w-6 h-6 bg-[#333] text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">
-              2</div>
-            <div class="st text-sm text-ssm-muted" data-i18n="extract.alt.step2">Save it to your local charts directory.
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>

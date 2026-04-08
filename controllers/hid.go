@@ -6,6 +6,7 @@ package controllers
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/google/gousb"
 
@@ -151,7 +152,20 @@ func NewHIDController(dc *config.DeviceConfig) *HIDController {
 	}
 }
 
-func (c *HIDController) registerHID() {
+func (c *HIDController) ensureDevice() error {
+	if c == nil {
+		return fmt.Errorf("HID controller is nil")
+	}
+	if c.device == nil {
+		return fmt.Errorf("HID device not found or not accessible")
+	}
+	return nil
+}
+
+func (c *HIDController) registerHID() error {
+	if err := c.ensureDevice(); err != nil {
+		return err
+	}
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		54, // ACCESSORY_REGISTER_HID
@@ -160,11 +174,15 @@ func (c *HIDController) registerHID() {
 		nil,
 	)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("libusb register HID failed: %w", err)
 	}
+	return nil
 }
 
-func (c *HIDController) unregisterHID() {
+func (c *HIDController) unregisterHID() error {
+	if err := c.ensureDevice(); err != nil {
+		return err
+	}
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		55, // ACCESSORY_UNREGISTER_ID
@@ -173,12 +191,15 @@ func (c *HIDController) unregisterHID() {
 		nil,
 	)
 	if err != nil {
-		// Device may already be gone (e.g. cable hiccup); do not crash on best-effort cleanup.
-		log.Warnf("failed to unregister HID: %v", err)
+		return fmt.Errorf("libusb unregister HID failed: %w", err)
 	}
+	return nil
 }
 
-func (c *HIDController) setHIDReportDescription() {
+func (c *HIDController) setHIDReportDescription() error {
+	if err := c.ensureDevice(); err != nil {
+		return err
+	}
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		56, // ACCESSORY_SET_HID_REPORT_DESC
@@ -187,11 +208,15 @@ func (c *HIDController) setHIDReportDescription() {
 		c.reportDescription,
 	)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("libusb set HID report descriptor failed: %w", err)
 	}
+	return nil
 }
 
-func (c *HIDController) sendHIDEvent(event []byte) {
+func (c *HIDController) sendHIDEvent(event []byte) error {
+	if err := c.ensureDevice(); err != nil {
+		return err
+	}
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		57, // ACCESSORY_SEND_HID_EVENT
@@ -200,25 +225,48 @@ func (c *HIDController) sendHIDEvent(event []byte) {
 		event,
 	)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("libusb send HID event failed: %w", err)
 	}
+	return nil
 }
 
-func (c *HIDController) Open() {
-	c.registerHID()
-	c.setHIDReportDescription()
+func (c *HIDController) Open() error {
+	if err := c.registerHID(); err != nil {
+		return err
+	}
+	if err := c.setHIDReportDescription(); err != nil {
+		_ = c.unregisterHID()
+		return err
+	}
+	return nil
 }
 
 func (c *HIDController) Send(data []byte) {
-	c.sendHIDEvent(data)
+	if err := c.sendHIDEvent(data); err != nil {
+		log.Warnf("failed to send HID event: %v", err)
+	}
 }
 
 func (c *HIDController) Close() error {
-	c.unregisterHID()
-	if err := c.device.Close(); err != nil {
+	if c == nil {
+		return nil
+	}
+	if err := c.unregisterHID(); err != nil {
+		// Device may already be gone (e.g. cable hiccup); do not crash on best-effort cleanup.
+		log.Warnf("failed to unregister HID: %v", err)
+	}
+	if c.device != nil {
+		if err := c.device.Close(); err != nil {
+			return err
+		}
+		c.device = nil
+	}
+	if c.usbContext != nil {
+		err := c.usbContext.Close()
+		c.usbContext = nil
 		return err
 	}
-	return c.usbContext.Close()
+	return nil
 }
 
 func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, calc stage.JudgeLinePositionCalculator) []common.ViscousEventItem {
@@ -240,6 +288,8 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 	result := []common.ViscousEventItem{}
 	currentFingers := make([]PointerStatus, 10)
 	pointerSlotMap := map[int]int{}
+	droppedPointers := map[int]bool{}
+	overflowWarned := false
 
 	allocSlot := func() int {
 		for i, status := range currentFingers {
@@ -271,7 +321,12 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 				if slot == -1 {
 					slot = allocSlot()
 					if slot == -1 {
-						log.Fatalf("too many simultaneous touch pointers (max 10), incoming pointer `%d`", event.PointerID)
+						droppedPointers[event.PointerID] = true
+						if !overflowWarned {
+							overflowWarned = true
+							log.Warn("HID backend supports at most 10 simultaneous pointers; extra pointers will be dropped")
+						}
+						continue
 					}
 					pointerSlotMap[event.PointerID] = slot
 				}
@@ -284,23 +339,30 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 				status.Y = y
 				currentFingers[slot] = status
 			case common.TouchMove:
+				if droppedPointers[event.PointerID] {
+					continue
+				}
 				if slot == -1 {
-					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+					continue
 				}
 				status := currentFingers[slot]
 				if !status.OnScreen {
-					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+					continue
 				}
 				status.X = x
 				status.Y = y
 				currentFingers[slot] = status
 			case common.TouchUp:
+				if droppedPointers[event.PointerID] {
+					delete(droppedPointers, event.PointerID)
+					continue
+				}
 				if slot == -1 {
-					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+					continue
 				}
 				status := currentFingers[slot]
 				if !status.OnScreen {
-					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+					continue
 				}
 				status.OnScreen = false
 				status.X = x
@@ -339,7 +401,7 @@ func FindHIDDevices() []string {
 
 		err = dev.Close()
 		if err != nil {
-			log.Fatal(err)
+			log.Warnf("failed to close HID device handle while scanning: %v", err)
 		}
 	}
 

@@ -234,7 +234,10 @@ func runGUI(conf *config.Config) {
 				}
 				dc := conf.Get(deviceSerial)
 				hidCtrl := controllers.NewHIDController(dc)
-				hidCtrl.Open()
+				if err := hidCtrl.Open(); err != nil {
+					srv.SetError("Failed to initialize HID: " + err.Error())
+					return
+				}
 				defer hidCtrl.Close()
 				events = hidCtrl.Preprocess(rawEvents, direction == "right", getJudgeLineCalculator())
 				ctrl = hidCtrl
@@ -725,7 +728,9 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	}
 	dc := conf.Get(deviceSerial)
 	controller := controllers.NewHIDController(dc)
-	controller.Open()
+	if err := controller.Open(); err != nil {
+		log.Die("Failed to initialize HID:", err)
+	}
 	defer controller.Close()
 	events := controller.Preprocess(rawEvents, direction == "right", getJudgeLineCalculator())
 	t.init(controller, events)
