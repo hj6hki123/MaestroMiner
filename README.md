@@ -14,6 +14,8 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 
 **If you're looking for an easier way to play, give this version a try!**
 
+**Support for BanG Dream and Project Sekai: Colorful Stage**
+
 ##  What's new
 
 ### 🎵 Smart Song Search
@@ -29,7 +31,9 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 - **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
 
-
+## Requirements 
+1. A computer, a mobile phone, and a data transfer cable
+2. A pair of skillful hands
 
 ## Quick Start
 
@@ -40,10 +44,9 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 4. **Connect Device**: Connect your mobile device to your computer and ensure **ADB Debugging** is enabled.
 5. **Device Setup**: 
    - Go to the **Settings** page to add your device.
-   - **Select Connection Type**: Choose **HID** or **ADB** . ( **HID** mode may not work on Windows due to protocol overrides; you can try running `adb kill-server` to resolve conflicts)
-   - **Identify Device**: Enter your device ID (found via **`adb devices`**) and your screen resolution .
-   - *Alternative*: You can skip the Settings page. When you click **LOAD & PLAY**, the terminal will prompt you to enter the connection type and resolution manually.
-6. **Start Playing**: Follow the workflow in the UI: **Song Setup → Play Control → Start**.
+   - **Select Connection Type**: Choose **HID** or **ADB** .
+6. Copy the game's resource pack to your computer and extract it.
+7. **Start Playing**: Follow the workflow in the UI: **Song Setup → Play Control → Start**.
 
 * *Note*: Legacy command-line methods are still supported—simply append your parameters. For details, please refer to [kvarenzn's Usage Guide](https://github.com/kvarenzn/ssm/blob/main/docs/USAGE.md).
 
