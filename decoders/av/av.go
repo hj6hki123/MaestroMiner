@@ -35,6 +35,17 @@ type AVDecoder struct {
 	codec     *C.AVCodec
 	ctx       *C.AVCodecContext
 	needMerge bool
+	frameFn   func(DecodedFrame)
+}
+
+// DecodedFrame carries a compact frame view for downstream analysis.
+// For most scrcpy video formats this is the Y/luma plane.
+type DecodedFrame struct {
+	PTS         int64
+	Width       int
+	Height      int
+	PixelFormat int
+	Plane0      []byte
 }
 
 var (
@@ -91,6 +102,23 @@ func (d *AVDecoder) Drop() {
 	}
 }
 
+func (d *AVDecoder) SetFrameHandler(fn func(DecodedFrame)) {
+	d.frameFn = fn
+}
+
+func copyPlane(data *C.uint8_t, stride C.int, width, height int) []byte {
+	if data == nil || width <= 0 || height <= 0 {
+		return nil
+	}
+	out := make([]byte, width*height)
+	for y := 0; y < height; y++ {
+		src := unsafe.Pointer(uintptr(unsafe.Pointer(data)) + uintptr(y*int(stride)))
+		row := C.GoBytes(src, C.int(width))
+		copy(out[y*width:(y+1)*width], row)
+	}
+	return out
+}
+
 func (d *AVDecoder) Decode(pts uint64, data []byte) error {
 	packet := C.av_packet_alloc()
 	frame := C.av_frame_alloc()
@@ -137,7 +165,15 @@ func (d *AVDecoder) Decode(pts uint64, data []byte) error {
 			return ErrDecodeFailed
 		}
 
-		// [TODO] process decoded frame
+		if d.frameFn != nil {
+			d.frameFn(DecodedFrame{
+				PTS:         int64(frame.pts),
+				Width:       int(frame.width),
+				Height:      int(frame.height),
+				PixelFormat: int(frame.format),
+				Plane0:      copyPlane(frame.data[0], frame.linesize[0], int(frame.width), int(frame.height)),
+			})
+		}
 
 		C.av_frame_unref(frame)
 	}

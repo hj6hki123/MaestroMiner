@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/kvarenzn/ssm/adb"
@@ -35,6 +36,21 @@ type ScrcpyController struct {
 	decoder  *av.AVDecoder
 	cRunning bool
 	vRunning bool
+
+	frameMu     sync.RWMutex
+	latestFrame *ScrcpyFrame
+	frameFn     func(ScrcpyFrame)
+}
+
+// ScrcpyFrame is a compact grayscale-friendly frame snapshot for analyzers.
+// Plane0 typically represents Y/luma for the common YUV formats from scrcpy.
+type ScrcpyFrame struct {
+	PTS         int64
+	Width       int
+	Height      int
+	PixelFormat int
+	Plane0      []byte
+	CapturedAt  time.Time
 }
 
 func NewScrcpyController(device *adb.Device) *ScrcpyController {
@@ -54,6 +70,11 @@ func tryListen(host string, port int) (net.Listener, int) {
 
 		port++
 	}
+}
+
+func readFull(conn net.Conn, buf []byte) error {
+	_, err := io.ReadFull(conn, buf)
+	return err
 }
 
 const testFromPort = 27188
@@ -123,7 +144,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	// Wait for scrcpy-server to finish initialization on the device
 	time.Sleep(500 * time.Millisecond)
 
-	err = c.device.Client().KillForward(localName, true)
+	err = c.device.KillReverseForward(localName)
 	if err != nil {
 		return err
 	}
@@ -131,21 +152,47 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	log.Debugf("ADB reverse socket `%s` removed.", localName)
 
 	deviceName := make([]byte, 64)
-	videoSocket.Read(deviceName)
+	if err := readFull(videoSocket, deviceName); err != nil {
+		return err
+	}
 
 	buf := make([]byte, 4)
-	videoSocket.Read(buf)
+	if err := readFull(videoSocket, buf); err != nil {
+		return err
+	}
 	c.codecID = string(buf)
-	// c.decoder, err = av.NewAVDecoder(c.codecID)
-	// if err != nil {
-	//     return err
-	// }
-	c.decoder = nil
+	c.decoder, err = av.NewAVDecoder(c.codecID)
+	if err != nil {
+		return err
+	}
+	c.decoder.SetFrameHandler(func(f av.DecodedFrame) {
+		frame := ScrcpyFrame{
+			PTS:         f.PTS,
+			Width:       f.Width,
+			Height:      f.Height,
+			PixelFormat: f.PixelFormat,
+			Plane0:      append([]byte(nil), f.Plane0...),
+			CapturedAt:  time.Now(),
+		}
 
-	videoSocket.Read(buf)
+		c.frameMu.Lock()
+		c.latestFrame = &frame
+		fn := c.frameFn
+		c.frameMu.Unlock()
+
+		if fn != nil {
+			fn(frame)
+		}
+	})
+
+	if err := readFull(videoSocket, buf); err != nil {
+		return err
+	}
 	c.width = int(binary.BigEndian.Uint32(buf))
 
-	videoSocket.Read(buf)
+	if err := readFull(videoSocket, buf); err != nil {
+		return err
+	}
 	c.height = int(binary.BigEndian.Uint32(buf))
 
 	c.cRunning = true
@@ -155,17 +202,17 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		msgTypeBuf := make([]byte, 1)
 		sizeBuf := make([]byte, 4)
 		for c.cRunning {
-			if n, err := controlSocket.Read(msgTypeBuf); err != nil || n != 1 {
+			if err := readFull(controlSocket, msgTypeBuf); err != nil {
 				break
 			}
 
-			if n, err := controlSocket.Read(sizeBuf); err != nil || n != 4 {
+			if err := readFull(controlSocket, sizeBuf); err != nil {
 				break
 			}
 
 			size := binary.BigEndian.Uint32(sizeBuf)
 			bodyBuf := make([]byte, size)
-			if n, err := controlSocket.Read(bodyBuf); err != nil || n != int(size) {
+			if err := readFull(controlSocket, bodyBuf); err != nil {
 				break
 			}
 		}
@@ -177,12 +224,12 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		ptsBuf := make([]byte, 8)
 		sizeBuf := make([]byte, 4)
 		for c.vRunning {
-			if n, err := videoSocket.Read(ptsBuf); err != nil || n != 8 {
+			if err := readFull(videoSocket, ptsBuf); err != nil {
 				break
 			}
 			pts := binary.BigEndian.Uint64(ptsBuf)
 
-			if n, err := videoSocket.Read(sizeBuf); err != nil || n != 4 {
+			if err := readFull(videoSocket, sizeBuf); err != nil {
 				break
 			}
 			size := binary.BigEndian.Uint32(sizeBuf)
@@ -194,7 +241,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			}
 
 			data := make([]byte, size)
-			if n, err := videoSocket.Read(data); err != nil || n != int(size) {
+			if err := readFull(videoSocket, data); err != nil {
 				break
 			}
 			c.decoder.Decode(pts, data)
@@ -248,7 +295,29 @@ func (c *ScrcpyController) Close() error {
 		return err
 	}
 
+	if c.decoder != nil {
+		c.decoder.Drop()
+		c.decoder = nil
+	}
+
 	return c.listener.Close()
+}
+
+func (c *ScrcpyController) SetFrameHandler(fn func(ScrcpyFrame)) {
+	c.frameMu.Lock()
+	c.frameFn = fn
+	c.frameMu.Unlock()
+}
+
+func (c *ScrcpyController) LatestFrame() (ScrcpyFrame, bool) {
+	c.frameMu.RLock()
+	defer c.frameMu.RUnlock()
+	if c.latestFrame == nil {
+		return ScrcpyFrame{}, false
+	}
+	f := *c.latestFrame
+	f.Plane0 = append([]byte(nil), c.latestFrame.Plane0...)
+	return f, true
 }
 
 func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, dc *config.DeviceConfig, calc stage.JudgeLinePositionCalculator) []common.ViscousEventItem {

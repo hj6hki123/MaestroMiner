@@ -133,6 +133,16 @@ func (d *Device) KillForward(local string) error {
 	return d.client.Run("host-serial:%s:killforward:%s", d.serial, local)
 }
 
+func (d *Device) KillReverseForward(local string) error {
+	conn, err := d.Open()
+	if err != nil {
+		return err
+	}
+
+	defer conn.Close()
+	return conn.Run(fmt.Sprintf("reverse:killforward:%s", local))
+}
+
 var EmptyCommandError = errors.New("shell command cannot be empty")
 
 func (d *Device) RawSh(prog string, args ...string) ([]byte, error) {
