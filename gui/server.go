@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -618,7 +619,16 @@ func (s *Server) Start() (string, error) {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.FS(staticFS)))
+	staticHandler := http.FileServer(http.FS(staticFS))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Avoid stale frontend assets after rebuilding embedded dist files.
+		if strings.HasSuffix(r.URL.Path, ".html") || r.URL.Path == "/" {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+		}
+		staticHandler.ServeHTTP(w, r)
+	}))
 	mux.HandleFunc("/api/events", s.handleEvents)
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/run", s.handleRun)

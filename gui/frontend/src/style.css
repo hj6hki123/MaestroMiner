@@ -35,9 +35,9 @@ html {
 
   /* Glass controls: use direct values for reliable cross-browser parsing. */
   --ui-glass-tint: 0.02;
-  --ui-glass-bg: rgb(255 255 255 / var(--ui-glass-tint));
-  --ui-glass-bg-strong: rgb(255 255 255 / calc(var(--ui-glass-tint) + 0.05));
-  --ui-glass-border: rgb(255 255 255 / calc(var(--ui-glass-tint) + 0.03));
+  --ui-glass-bg: rgba(255, 255, 255, 0.02);
+  --ui-glass-bg-strong: rgba(255, 255, 255, 0.07);
+  --ui-glass-border: rgba(255, 255, 255, 0.05);
   --ui-glass-blur: 1px;
   --ui-glass-saturate: 170%;
   --ui-glass-contrast: 106%;
@@ -503,12 +503,13 @@ html[data-theme='light'] .di-band,
 html[data-theme='light'] .lo-native,
 html[data-theme='light'] .hint,
 html[data-theme='light'] .jitter-hint,
-html[data-theme='light'] .pd-offset-val small {
-  color: #5f6f86;
+html[data-theme='light'] .pd-offset-val small,
+html[data-theme='light'] .st {
+  color: #1a1a1a;
 }
 
 html[data-theme='light'] .ins-label {
-  color: #5f6f86;
+  color: #1a1a1a;
 }
 
 html[data-theme='light'] .ins-group-hints {
@@ -519,7 +520,7 @@ html[data-theme='light'] .ins-group-hints {
   align-items: center;
   flex-wrap: wrap;
   text-align: center;
-  color: rgba(95, 111, 134, 0.78);
+  color: #1a1a1a;
 }
 
 html[data-theme='light'] .ins-group-hints > div {
@@ -595,10 +596,42 @@ html[data-theme='light'] .pd-btn-start:hover:not(:disabled) {
 }
 
 html[data-theme='light'] .drop {
-  background: var(--ui-glass-bg-strong);
-  border-color: var(--ui-glass-border);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.1);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
   z-index: 9999;
+}
+
+
+
+html[data-theme='light'] .dev-row {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: transparent;
+}
+
+html[data-theme='light'] .dev-row:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+html[data-theme='light'] .dev-s {
+  color: #0f172a;
+  font-weight: bold;
+}
+
+html[data-theme='light'] .dev-row span:nth-of-type(2) {
+  color: #475569;
+}
+
+html[data-theme='light'] #dev-list .btn-del {
+  color: #64748b;
+  border-color: transparent;
+}
+
+html[data-theme='light'] #dev-list .btn-del:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
 }
 
 html[data-theme='light'] .bc {
@@ -683,7 +716,6 @@ html[data-theme='light'] #pn-state-label {
 html[data-theme='light'] .db {
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(236, 246, 255, 0.28));
   backdrop-filter: var(--ui-glass-filter-chip-light);
-  -webkit-backdrop-filter: var(--ui-glass-filter-chip-light);
 }
 
 html[data-theme='light'] .db:not(.active) {
@@ -763,7 +795,6 @@ html[data-theme='light'] .db.append.active {
   @apply rounded-2xl p-6 mb-6 transition-all duration-300;
   background: var(--ui-glass-bg);
   backdrop-filter: var(--ui-glass-filter);
-  -webkit-backdrop-filter: var(--ui-glass-filter);
   border: 1px solid var(--ui-glass-border);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.3),
@@ -773,7 +804,6 @@ html[data-theme='light'] .db.append.active {
 .card:hover {
   background: var(--ui-glass-bg-strong);
   border-color: var(--ui-glass-border);
-  transform: translateY(-2px);
 }
 
 .ct {
@@ -1161,15 +1191,48 @@ html[data-theme='light'] input[type="range"]::-moz-range-track {
   background: rgba(241, 245, 249, 0.92);
 }
 
+html[data-theme='light'] input[type="text"],
+html[data-theme='light'] input[type="number"] {
+  color: #1a1a1a;
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+html[data-theme='light'] input[type="text"]::placeholder,
+html[data-theme='light'] input[type="number"]::placeholder {
+  color: #888888;
+}
+
 /* === 10. Log terminal === */
 .log {
   @apply mt-6 font-mono text-xs p-4 rounded-xl h-48 overflow-y-auto leading-relaxed;
   background: var(--ui-log-bg);
+  background: color-mix(in srgb, var(--ui-log-bg) 72%, transparent);
   border: 1px solid var(--ui-log-border);
   box-shadow: var(--ui-log-shadow);
   color: var(--ui-log-text);
-  backdrop-filter: var(--ui-glass-filter-soft);
-  -webkit-backdrop-filter: var(--ui-glass-filter-soft);
+  isolation: isolate;
+  backdrop-filter: var(--ui-glass-filter-soft) !important;
+}
+
+@supports (backdrop-filter: blur(0)) {
+  .log {
+    backdrop-filter: var(--ui-glass-filter-soft) !important;
+  }
+}
+
+#song-log,
+#play-log,
+#ex-log {
+  backdrop-filter: var(--ui-glass-filter-soft) !important;
+}
+
+@supports (backdrop-filter: blur(0)) {
+  #song-log,
+  #play-log,
+  #ex-log {
+    backdrop-filter: var(--ui-glass-filter-soft) !important;
+  }
 }
 
 /* === Song setup compact layout === */
@@ -1293,7 +1356,6 @@ html[data-theme='light'] input[type="range"]::-moz-range-track {
 .sel-bar {
   @apply flex items-center gap-3 bg-ssm-blue-bg p-3 rounded-xl border border-ssm-blue/30 text-white mb-4;
   backdrop-filter: var(--ui-glass-filter-strong);
-  -webkit-backdrop-filter: var(--ui-glass-filter-strong);
 }
 
 .sel-bar .sb-title {
@@ -1322,8 +1384,8 @@ html[data-theme='light'] .sel-bar .sb-title {
 
 .drop {
   @apply absolute top-full left-0 right-0 mt-2 rounded-xl max-h-60 overflow-y-auto hidden;
-  background: var(--ui-glass-bg-strong);
-  border: 1px solid var(--ui-glass-border);
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   z-index: 9999;
 }
@@ -1334,6 +1396,7 @@ html[data-theme='light'] .sel-bar .sb-title {
 }
 .drop.open {
   @apply block animate-[fadeIn_0.2s_ease-out_forwards];
+  backdrop-filter: none !important;
 }
 
 
@@ -1505,7 +1568,6 @@ html[data-theme='light'] .sel-bar .sb-title {
   background: var(--ui-pd-info-bg) !important;
   border-bottom: 1px solid var(--ui-pd-info-border) !important;
   backdrop-filter: var(--ui-glass-filter-strong);
-  -webkit-backdrop-filter: var(--ui-glass-filter-strong);
   gap: 40px;
   @apply flex items-center gap-8 p-8 relative;
 }
@@ -1575,7 +1637,6 @@ html[data-theme='light'] .sel-bar .sb-title {
   background: var(--ui-glass-bg-strong);
   border-color: var(--ui-glass-border);
   backdrop-filter: var(--ui-glass-filter);
-  -webkit-backdrop-filter: var(--ui-glass-filter);
 }
 
 .pd-change-btn {
@@ -1589,7 +1650,6 @@ html[data-theme='light'] .sel-bar .sb-title {
   border-color: var(--ui-pd-change-btn-border);
   color: var(--ui-pd-change-btn-text);
   backdrop-filter: var(--ui-glass-filter-soft);
-  -webkit-backdrop-filter: var(--ui-glass-filter-soft);
 }
 
 .pd-change-btn:hover {
@@ -1638,7 +1698,6 @@ html[data-theme='light'] .sel-bar .sb-title {
   background: var(--ui-glass-bg);
   border-color: var(--ui-glass-border);
   backdrop-filter: var(--ui-glass-filter);
-  -webkit-backdrop-filter: var(--ui-glass-filter);
 }
 
 .pd-offset-bar button {
@@ -1687,7 +1746,6 @@ html[data-theme='light'] .sel-bar .sb-title {
   @apply border border-cyan-400/60 text-white active:scale-95;
   background: linear-gradient(135deg, rgba(34, 211, 238, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
   backdrop-filter: var(--ui-glass-filter-soft);
-  -webkit-backdrop-filter: var(--ui-glass-filter-soft);
   box-shadow: 
     inset 0 1px 2px rgba(255, 255, 255, 0.2),
     0 0 20px rgba(34, 211, 238, 0.3),
@@ -1810,7 +1868,6 @@ html[data-theme='light'] .sel-bar .sb-title {
 .player-deck {
   background: var(--ui-glass-bg) !important;
   backdrop-filter: var(--ui-glass-filter);
-  -webkit-backdrop-filter: var(--ui-glass-filter);
   border: 1px solid var(--ui-glass-border);
   position: relative;
   overflow: hidden;
