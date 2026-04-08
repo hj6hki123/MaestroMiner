@@ -1,6 +1,6 @@
 <p align="center">
     <a href="https://github.com/hj6hki123/ssm-gui">
-        <img src="imgs/ssm_gui_github_banner.svg" alt="ssm-gui-banner"/>
+        <img src="imgs/page.png" alt="ssm-gui-banner"/>
     </a>
     <br>
     <strong>A Web-based GUI for automated mobile rhythm game playback and chart parsing.</strong>
