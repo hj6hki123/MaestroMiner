@@ -29,7 +29,9 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 - **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
 
-
+## Requirements 
+1. A computer, a mobile phone, and a data transfer cable
+2. A pair of skillful hands
 
 ## Quick Start
 
