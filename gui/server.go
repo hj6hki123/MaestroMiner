@@ -1,4 +1,4 @@
-// Copyright (C) 2024, 2025 kvarenzn
+// Copyright (C) 2026 hj6hki123
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 package gui
