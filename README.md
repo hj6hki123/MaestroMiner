@@ -30,12 +30,7 @@ Planned features:
 
 ### 自动打击展示
 https://github.com/user-attachments/assets/09c6585a-64fb-44ad-af82-6239ee994b1b
-
-
 ---
-
-Honestly, I just wanted to make a simple, clean GUI for myself at the beginning...  
-But then the **programmer brain** took over and things escalated quickly 😂
 
 
 # SSM Web GUI (Star Stone Miner Web GUI Version)
