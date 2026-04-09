@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +52,19 @@ type ScrcpyFrame struct {
 	PixelFormat int
 	Plane0      []byte
 	CapturedAt  time.Time
+}
+
+func isVideoDecodeEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("SSM_ENABLE_VIDEO_DECODE")))
+	if v == "" {
+		return true
+	}
+	switch v {
+	case "0", "false", "off", "no":
+		return false
+	default:
+		return true
+	}
 }
 
 func NewScrcpyController(device *adb.Device) *ScrcpyController {
@@ -161,7 +175,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		return err
 	}
 	c.codecID = string(buf)
-	if os.Getenv("SSM_ENABLE_VIDEO_DECODE") == "1" {
+	if isVideoDecodeEnabled() {
 		c.decoder, err = av.NewAVDecoder(c.codecID)
 		if err != nil {
 			return err
@@ -186,7 +200,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			}
 		})
 	} else {
-		log.Debugln("Video decode is disabled (set SSM_ENABLE_VIDEO_DECODE=1 to enable).")
+		log.Debugln("Video decode is disabled (set SSM_ENABLE_VIDEO_DECODE=0 to disable; default is enabled).")
 	}
 
 	if err := readFull(videoSocket, buf); err != nil {

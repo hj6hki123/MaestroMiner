@@ -205,9 +205,9 @@ function getAutoTriggerVisionConfig() {
   var chk = document.getElementById('chk-autoFirstTap');
   var inp = document.getElementById('inp-autoFirstLead');
   var enabled = !!(chk && chk.checked);
-  var lead = parseInt(inp ? inp.value : 120);
-  if (!isFinite(lead) || lead <= 0) lead = 120;
-  var roiBang = readROI('bang', { x1: 0, y1: 42, x2: 100, y2: 68 });
+  var lead = parseInt(inp ? inp.value : 50);
+  if (!isFinite(lead) || lead <= 0) lead = 50;
+  var roiBang = readROI('bang', { x1: 14, y1: 73, x2: 87, y2: 80 });
   var roiPjsk = readROI('pjsk', { x1: 0, y1: 35, x2: 100, y2: 60 });
   return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk };
 }

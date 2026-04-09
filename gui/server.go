@@ -690,7 +690,7 @@ func normalizeAutoTriggerROI(mode string, bang ROI, pjsk ROI) ROI {
 		if mode == "pjsk" {
 			return ROI{X1: 0, Y1: 35, X2: 100, Y2: 60}
 		}
-		return ROI{X1: 0, Y1: 42, X2: 100, Y2: 68}
+		return ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
 	}
 
 	clamp := func(v int) int {

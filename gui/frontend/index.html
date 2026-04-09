@@ -266,18 +266,18 @@
               <input type="checkbox" id="chk-autoFirstTap" onchange="onAutoTriggerVisionChanged()">
               <span data-i18n="jitter.enable">Enable</span>
             </label>
-            <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="120" oninput="onAutoTriggerVisionChanged()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
-            <span class="jitter-val text-ssm-hint" id="val-autoFirstLead">120 ms</span>
+            <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="50" oninput="onAutoTriggerVisionChanged()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+            <span class="jitter-val text-ssm-hint" id="val-autoFirstLead">50 ms</span>
           </div>
           <div class="jitter-row">
             <span class="jitter-label" data-i18n="jitter.roi.bang">ROI (Bang)</span>
             <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-              <input type="number" id="inp-roi-bang-x1" min="0" max="99" step="1" value="0" oninput="onAutoTriggerVisionChanged()" title="x1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
-              <input type="number" id="inp-roi-bang-y1" min="0" max="99" step="1" value="42" oninput="onAutoTriggerVisionChanged()" title="y1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
-              <input type="number" id="inp-roi-bang-x2" min="1" max="100" step="1" value="100" oninput="onAutoTriggerVisionChanged()" title="x2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
-              <input type="number" id="inp-roi-bang-y2" min="1" max="100" step="1" value="68" oninput="onAutoTriggerVisionChanged()" title="y2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-bang-x1" min="0" max="99" step="1" value="14" oninput="onAutoTriggerVisionChanged()" title="x1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-bang-y1" min="0" max="99" step="1" value="73" oninput="onAutoTriggerVisionChanged()" title="y1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-bang-x2" min="1" max="100" step="1" value="87" oninput="onAutoTriggerVisionChanged()" title="x2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-bang-y2" min="1" max="100" step="1" value="80" oninput="onAutoTriggerVisionChanged()" title="y2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
             </div>
-            <span class="jitter-val text-ssm-hint" id="val-roi-bang">0,42,100,68</span>
+            <span class="jitter-val text-ssm-hint" id="val-roi-bang">14,73,87,80</span>
           </div>
           <div class="jitter-row">
             <span class="jitter-label" data-i18n="jitter.roi.pjsk">ROI (PJSK)</span>

@@ -63,6 +63,19 @@ const (
 	SERVER_FILE_SHA256       = "a0f70b20aa4998fbf658c94118cd6c8dab6abbb0647a3bdab344d70bc1ebcbb8"
 )
 
+func isVideoDecodeEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("SSM_ENABLE_VIDEO_DECODE")))
+	if v == "" {
+		return true
+	}
+	switch v {
+	case "0", "false", "off", "no":
+		return false
+	default:
+		return true
+	}
+}
+
 // ─────────────────────────────────────────────
 // GUI mode main flow
 // ─────────────────────────────────────────────
@@ -79,7 +92,7 @@ func runGUI(conf *config.Config) {
 			if mode == "pjsk" {
 				return gui.ROI{X1: 0, Y1: 35, X2: 100, Y2: 60}
 			}
-			return gui.ROI{X1: 0, Y1: 42, X2: 100, Y2: 68}
+			return gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
 		}
 
 		clamp := func(v int) int {
@@ -500,9 +513,9 @@ func runGUI(conf *config.Config) {
 					log.Warn("Auto Trigger (Vision) is only available on scrcpy backend")
 					return
 				}
-				if os.Getenv("SSM_ENABLE_VIDEO_DECODE") != "1" {
+				if !isVideoDecodeEnabled() {
 					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, PollMs: req.AutoTriggerPollMs, ROI: roi, Message: "video decode disabled"})
-					log.Warn("Auto Trigger (Vision) requested but video decode is disabled; set SSM_ENABLE_VIDEO_DECODE=1")
+					log.Warn("Auto Trigger (Vision) requested but video decode is disabled; set SSM_ENABLE_VIDEO_DECODE=0 to disable (default is enabled)")
 					return
 				}
 				if !autoTriggerByVision(ctx, sc, req.Mode, roi, req.AutoTriggerPollMs) {
