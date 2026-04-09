@@ -182,6 +182,56 @@ function getGreatCountRaw() {
   return raw;
 }
 
+function getAutoTriggerVisionConfig() {
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function readROI(prefix, defaults) {
+    var x1 = parseInt(document.getElementById('inp-roi-' + prefix + '-x1').value);
+    var y1 = parseInt(document.getElementById('inp-roi-' + prefix + '-y1').value);
+    var x2 = parseInt(document.getElementById('inp-roi-' + prefix + '-x2').value);
+    var y2 = parseInt(document.getElementById('inp-roi-' + prefix + '-y2').value);
+    if (!isFinite(x1)) x1 = defaults.x1;
+    if (!isFinite(y1)) y1 = defaults.y1;
+    if (!isFinite(x2)) x2 = defaults.x2;
+    if (!isFinite(y2)) y2 = defaults.y2;
+    x1 = clamp(x1, 0, 99);
+    y1 = clamp(y1, 0, 99);
+    x2 = clamp(x2, 1, 100);
+    y2 = clamp(y2, 1, 100);
+    if (x2 <= x1) x2 = Math.min(100, x1 + 1);
+    if (y2 <= y1) y2 = Math.min(100, y1 + 1);
+    return { x1: x1, y1: y1, x2: x2, y2: y2 };
+  }
+
+  var chk = document.getElementById('chk-autoFirstTap');
+  var inp = document.getElementById('inp-autoFirstLead');
+  var enabled = !!(chk && chk.checked);
+  var lead = parseInt(inp ? inp.value : 120);
+  if (!isFinite(lead) || lead <= 0) lead = 120;
+  var roiBang = readROI('bang', { x1: 0, y1: 42, x2: 100, y2: 68 });
+  var roiPjsk = readROI('pjsk', { x1: 0, y1: 35, x2: 100, y2: 60 });
+  return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk };
+}
+
+function onAutoTriggerVisionChanged() {
+  var cfg = getAutoTriggerVisionConfig();
+  var inp = document.getElementById('inp-autoFirstLead');
+  var val = document.getElementById('val-autoFirstLead');
+  var roiBangVal = document.getElementById('val-roi-bang');
+  var roiPjskVal = document.getElementById('val-roi-pjsk');
+  if (inp) inp.disabled = !cfg.enabled;
+  if (val) {
+    if (!cfg.enabled) {
+      val.textContent = 'OFF';
+      val.style.color = 'var(--hint)';
+    } else {
+      val.textContent = cfg.lead + ' ms';
+      val.style.color = 'var(--blue)';
+    }
+  }
+  if (roiBangVal) roiBangVal.textContent = [cfg.roiBang.x1, cfg.roiBang.y1, cfg.roiBang.x2, cfg.roiBang.y2].join(',');
+  if (roiPjskVal) roiPjskVal.textContent = [cfg.roiPjsk.x1, cfg.roiPjsk.y1, cfg.roiPjsk.x2, cfg.roiPjsk.y2].join(',');
+}
+
 function renderJitter(key) {
   var raw = key === 'grCount' ? getGreatCountRaw() : parseInt(document.getElementById('sld-' + key).value);
   var el = document.getElementById('val-' + key);
@@ -210,7 +260,7 @@ function onJitter(key) { renderJitter(key); }
 function onGreatCountInput() { renderJitter('grCount'); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '' };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0 };
 var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
@@ -659,6 +709,69 @@ function updateUI(d) {
 			log('play-log', 'Great applied: ' + d.greatApply + ' / requested: ' + d.greatReq, d.greatApply > 0 ? 'ok' : 'info');
 		}
 	}
+
+  var dbg = d.autoTriggerDebug || {};
+  var dbgState = document.getElementById('dbg-at-state');
+  var dbgMode = document.getElementById('dbg-at-mode');
+  var dbgLuma = document.getElementById('dbg-at-luma');
+  var dbgDelta = document.getElementById('dbg-at-delta');
+  var dbgStable = document.getElementById('dbg-at-stable');
+  var dbgRoi = document.getElementById('dbg-at-roi');
+  var dbgPoll = document.getElementById('dbg-at-poll');
+  var dbgMsg = document.getElementById('dbg-at-msg');
+  var dbgFired = document.getElementById('dbg-at-fired');
+  if (dbgState) dbgState.textContent = dbg.enabled ? (dbg.armed ? 'armed' : 'watching') : 'disabled';
+  if (dbgMode) dbgMode.textContent = dbg.mode || S.mode || '-';
+  if (dbgLuma) dbgLuma.textContent = typeof dbg.luma === 'number' ? dbg.luma.toFixed(2) : '-';
+  if (dbgDelta) dbgDelta.textContent = typeof dbg.delta === 'number' ? dbg.delta.toFixed(2) : '-';
+  if (dbgStable) dbgStable.textContent = typeof dbg.stableCount === 'number' ? String(dbg.stableCount) : '-';
+  if (dbgPoll) dbgPoll.textContent = typeof dbg.pollMs === 'number' && dbg.pollMs > 0 ? (String(dbg.pollMs) + ' ms') : '-';
+  if (dbgMsg) dbgMsg.textContent = dbg.message || '-';
+  if (dbgRoi) {
+    if (dbg.roi && typeof dbg.roi.x1 === 'number') dbgRoi.textContent = [dbg.roi.x1, dbg.roi.y1, dbg.roi.x2, dbg.roi.y2].join(',');
+    else dbgRoi.textContent = '-';
+  }
+  if (dbgFired) {
+    dbgFired.textContent = dbg.fired ? 'TRIGGERED' : '-';
+    dbgFired.style.color = dbg.fired ? 'var(--blue)' : 'var(--hint)';
+  }
+
+  var pDbgState = document.getElementById('play-dbg-at-state');
+  var pDbgMode = document.getElementById('play-dbg-at-mode');
+  var pDbgLuma = document.getElementById('play-dbg-at-luma');
+  var pDbgDelta = document.getElementById('play-dbg-at-delta');
+  var pDbgStable = document.getElementById('play-dbg-at-stable');
+  var pDbgRoi = document.getElementById('play-dbg-at-roi');
+  var pDbgPoll = document.getElementById('play-dbg-at-poll');
+  var pDbgMsg = document.getElementById('play-dbg-at-msg');
+  var pDbgFired = document.getElementById('play-dbg-at-fired');
+  if (pDbgState) pDbgState.textContent = dbg.enabled ? (dbg.armed ? 'armed' : 'watching') : 'disabled';
+  if (pDbgMode) pDbgMode.textContent = dbg.mode || S.mode || '-';
+  if (pDbgLuma) pDbgLuma.textContent = typeof dbg.luma === 'number' ? dbg.luma.toFixed(2) : '-';
+  if (pDbgDelta) pDbgDelta.textContent = typeof dbg.delta === 'number' ? dbg.delta.toFixed(2) : '-';
+  if (pDbgStable) pDbgStable.textContent = typeof dbg.stableCount === 'number' ? String(dbg.stableCount) : '-';
+  if (pDbgPoll) pDbgPoll.textContent = typeof dbg.pollMs === 'number' && dbg.pollMs > 0 ? (String(dbg.pollMs) + ' ms') : '-';
+  if (pDbgMsg) pDbgMsg.textContent = dbg.message || '-';
+  if (pDbgRoi) {
+    if (dbg.roi && typeof dbg.roi.x1 === 'number') pDbgRoi.textContent = [dbg.roi.x1, dbg.roi.y1, dbg.roi.x2, dbg.roi.y2].join(',');
+    else pDbgRoi.textContent = '-';
+  }
+  if (pDbgFired) {
+    pDbgFired.textContent = dbg.fired ? 'TRIGGERED' : '-';
+    pDbgFired.style.color = dbg.fired ? 'var(--blue)' : 'var(--hint)';
+  }
+
+  var roiImg = document.getElementById('vision-roi-img');
+  if (roiImg) {
+    var nowTs = Date.now();
+    if (dbg.enabled && (st === 1 || st === 2) && nowTs - S._lastVisionFrameAt > 150) {
+      S._lastVisionFrameAt = nowTs;
+      roiImg.src = '/api/vision-roi.png?t=' + nowTs;
+    }
+    if (!dbg.enabled) {
+      roiImg.removeAttribute('src');
+    }
+  }
 }
 
 function showNP(np) {
@@ -853,8 +966,9 @@ function submitRun() {
   var dRaw = parseInt(document.getElementById('sld-tapDur').value) || 0;
   var grOffsetRaw = parseInt(document.getElementById('sld-grOffset').value) || 10;
   var grCountRaw = getGreatCountRaw();
+  var autoTrigger = getAutoTriggerVisionConfig();
   var adv = getAdvancedValues();
-  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTrigger.enabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
@@ -973,6 +1087,7 @@ setBackend(S.backend);
 updateDiffLabels();
 resetAdvanced();
 loadDevices();
+onAutoTriggerVisionChanged();
 
 // ==========================================
 // expose functions to global scope for HTML onclick handlers
@@ -1004,6 +1119,7 @@ Object.assign(window, {
   deleteDevice,
   onJitter,
   onGreatCountInput,
+  onAutoTriggerVisionChanged,
   onAdvanced,
   resetAdvanced,
   doExtract,

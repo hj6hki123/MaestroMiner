@@ -9,6 +9,8 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"io/fs"
 	"net"
@@ -59,11 +61,15 @@ type RunRequest struct {
 	NowPlaying   NowPlaying `json:"nowPlaying"`
 
 	// Jitter settings
-	TimingJitter   int64   `json:"timingJitter"`   // Time jitter (ms), 0 = disabled
-	PositionJitter float64 `json:"positionJitter"` // Position jitter (track units), 0 = disabled
-	TapDurJitter   int64   `json:"tapDurJitter"`   // Tap duration jitter (ms), 0 = disabled
-	GreatOffsetMs  int64   `json:"greatOffsetMs"`  // Absolute offset in ms
-	GreatCount     int64   `json:"greatCount"`     // Exact number of tap notes to force as Great, 0 = probability mode
+	TimingJitter       int64   `json:"timingJitter"`       // Time jitter (ms), 0 = disabled
+	PositionJitter     float64 `json:"positionJitter"`     // Position jitter (track units), 0 = disabled
+	TapDurJitter       int64   `json:"tapDurJitter"`       // Tap duration jitter (ms), 0 = disabled
+	GreatOffsetMs      int64   `json:"greatOffsetMs"`      // Absolute offset in ms
+	GreatCount         int64   `json:"greatCount"`         // Exact number of tap notes to force as Great, 0 = probability mode
+	AutoTriggerVision  bool    `json:"autoTriggerVision"`  // Auto start by visual detection on decoded scrcpy frames
+	AutoTriggerPollMs  int64   `json:"autoTriggerPollMs"`  // Frame polling interval in ms for visual trigger
+	AutoTriggerROIBang ROI     `json:"autoTriggerRoiBang"` // ROI (% space) for Bang mode
+	AutoTriggerROIPjsk ROI     `json:"autoTriggerRoiPjsk"` // ROI (% space) for PJSK mode
 
 	// Advanced VTE parameters (0 = use mode default)
 	TapDuration         int64   `json:"tapDuration"`
@@ -72,6 +78,26 @@ type RunRequest struct {
 	SlideReportInterval int64   `json:"slideReportInterval"`
 	FlickFactor         float64 `json:"flickFactor"`
 	FlickPow            float64 `json:"flickPow"`
+}
+
+type ROI struct {
+	X1 int `json:"x1"`
+	Y1 int `json:"y1"`
+	X2 int `json:"x2"`
+	Y2 int `json:"y2"`
+}
+
+type AutoTriggerDebug struct {
+	Enabled     bool    `json:"enabled"`
+	Mode        string  `json:"mode"`
+	Armed       bool    `json:"armed"`
+	Fired       bool    `json:"fired"`
+	PollMs      int64   `json:"pollMs"`
+	Luma        float64 `json:"luma"`
+	Delta       float64 `json:"delta"`
+	StableCount int     `json:"stableCount"`
+	ROI         ROI     `json:"roi"`
+	Message     string  `json:"message"`
 }
 
 type Server struct {
@@ -86,6 +112,7 @@ type Server struct {
 	lastRunReq RunRequest
 	greatReq   int64
 	greatApply int64
+	autoDebug  AutoTriggerDebug
 
 	startCh  chan struct{}
 	offsetCh chan int
@@ -142,12 +169,13 @@ func (s *Server) broadcast(msg string) {
 func (s *Server) broadcastState() {
 	s.mu.Lock()
 	data := map[string]interface{}{
-		"state":      int(s.state),
-		"offset":     s.offset,
-		"error":      s.errMsg,
-		"nowPlaying": s.nowPlaying,
-		"greatReq":   s.greatReq,
-		"greatApply": s.greatApply,
+		"state":            int(s.state),
+		"offset":           s.offset,
+		"error":            s.errMsg,
+		"nowPlaying":       s.nowPlaying,
+		"greatReq":         s.greatReq,
+		"greatApply":       s.greatApply,
+		"autoTriggerDebug": s.autoDebug,
 	}
 	s.mu.Unlock()
 	b, _ := json.Marshal(data)
@@ -183,12 +211,13 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	data := map[string]interface{}{
-		"state":      int(s.state),
-		"offset":     s.offset,
-		"error":      s.errMsg,
-		"nowPlaying": s.nowPlaying,
-		"greatReq":   s.greatReq,
-		"greatApply": s.greatApply,
+		"state":            int(s.state),
+		"offset":           s.offset,
+		"error":            s.errMsg,
+		"nowPlaying":       s.nowPlaying,
+		"greatReq":         s.greatReq,
+		"greatApply":       s.greatApply,
+		"autoTriggerDebug": s.autoDebug,
 	}
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
@@ -222,20 +251,29 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.TriggerStart() {
+		http.Error(w, "not ready", http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) TriggerStart() bool {
 	s.mu.Lock()
 	st := s.state
 	ch := s.startCh
 	s.mu.Unlock()
 
 	if st != StateReady {
-		http.Error(w, "not ready", http.StatusConflict)
-		return
+		return false
 	}
+
 	select {
 	case ch <- struct{}{}:
 	default:
 	}
-	w.WriteHeader(http.StatusOK)
+
+	return true
 }
 
 func (s *Server) handleOffset(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +311,7 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	req := s.lastRunReq
 	s.mu.Unlock()
 
-	if st != StatePlaying && st != StateDone {
+	if st != StateReady && st != StatePlaying && st != StateDone {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -292,7 +330,7 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	s.broadcastState()
 
-	if s.OnRunRequest != nil {
+	if s.OnRunRequest != nil && (st == StatePlaying || st == StateDone) {
 		go s.OnRunRequest(req)
 	}
 
@@ -450,6 +488,7 @@ func (s *Server) SetReady(ctrl controllers.Controller, events []common.ViscousEv
 	s.offset = 0
 	s.errMsg = ""
 	s.nowPlaying = np
+	s.autoDebug = AutoTriggerDebug{}
 	s.startCh = make(chan struct{}, 1)
 	s.stopCh = make(chan struct{})
 	s.offsetCh = make(chan int, 32)
@@ -481,6 +520,13 @@ func (s *Server) SetGreatStats(requested, applied int64) {
 	}
 	s.greatReq = requested
 	s.greatApply = applied
+	s.mu.Unlock()
+	s.broadcastState()
+}
+
+func (s *Server) SetAutoTriggerDebug(v AutoTriggerDebug) {
+	s.mu.Lock()
+	s.autoDebug = v
 	s.mu.Unlock()
 	s.broadcastState()
 }
@@ -634,6 +680,117 @@ func (s *Server) handleDetectAdb(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func normalizeAutoTriggerROI(mode string, bang ROI, pjsk ROI) ROI {
+	roi := bang
+	if mode == "pjsk" {
+		roi = pjsk
+	}
+
+	if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
+		if mode == "pjsk" {
+			return ROI{X1: 0, Y1: 35, X2: 100, Y2: 60}
+		}
+		return ROI{X1: 0, Y1: 42, X2: 100, Y2: 68}
+	}
+
+	clamp := func(v int) int {
+		if v < 0 {
+			return 0
+		}
+		if v > 100 {
+			return 100
+		}
+		return v
+	}
+
+	roi.X1 = clamp(roi.X1)
+	roi.Y1 = clamp(roi.Y1)
+	roi.X2 = clamp(roi.X2)
+	roi.Y2 = clamp(roi.Y2)
+	if roi.X2 <= roi.X1 {
+		if roi.X1 >= 99 {
+			roi.X1 = 98
+		}
+		roi.X2 = roi.X1 + 1
+	}
+	if roi.Y2 <= roi.Y1 {
+		if roi.Y1 >= 99 {
+			roi.Y1 = 98
+		}
+		roi.Y2 = roi.Y1 + 1
+	}
+
+	return roi
+}
+
+func (s *Server) handleVisionROI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.mu.Lock()
+	ctrl := s.controller
+	req := s.lastRunReq
+	s.mu.Unlock()
+
+	sc, ok := ctrl.(*controllers.ScrcpyController)
+	if !ok || sc == nil {
+		http.Error(w, "vision preview unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	frame, ok := sc.LatestFrame()
+	if !ok || frame.Width <= 0 || frame.Height <= 0 {
+		http.Error(w, "no decoded frame", http.StatusServiceUnavailable)
+		return
+	}
+
+	need := frame.Width * frame.Height
+	if len(frame.Plane0) < need {
+		http.Error(w, "invalid frame", http.StatusServiceUnavailable)
+		return
+	}
+
+	roi := normalizeAutoTriggerROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)
+	x1 := frame.Width * roi.X1 / 100
+	x2 := frame.Width * roi.X2 / 100
+	y1 := frame.Height * roi.Y1 / 100
+	y2 := frame.Height * roi.Y2 / 100
+	if x1 < 0 {
+		x1 = 0
+	}
+	if y1 < 0 {
+		y1 = 0
+	}
+	if x2 > frame.Width {
+		x2 = frame.Width
+	}
+	if y2 > frame.Height {
+		y2 = frame.Height
+	}
+	if x2 <= x1 || y2 <= y1 {
+		http.Error(w, "invalid roi", http.StatusBadRequest)
+		return
+	}
+
+	wid := x2 - x1
+	hgt := y2 - y1
+	img := image.NewGray(image.Rect(0, 0, wid, hgt))
+	for y := 0; y < hgt; y++ {
+		srcOff := (y1+y)*frame.Width + x1
+		dstOff := y * img.Stride
+		copy(img.Pix[dstOff:dstOff+wid], frame.Plane0[srcOff:srcOff+wid])
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if err := png.Encode(w, img); err != nil {
+		http.Error(w, "encode failed", http.StatusInternalServerError)
+		return
+	}
+}
+
 // ─── Startup ──────────────────────────────────────
 
 func (s *Server) Start() (string, error) {
@@ -664,6 +821,7 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/songdb", s.handleSongDB)
 	mux.HandleFunc("/api/kill-adb", s.handleKillAdb)
 	mux.HandleFunc("/api/detect-adb", s.handleDetectAdb)
+	mux.HandleFunc("/api/vision-roi.png", s.handleVisionROI)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.port))
 	if err != nil {

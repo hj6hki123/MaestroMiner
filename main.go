@@ -69,6 +69,219 @@ const (
 func runGUI(conf *config.Config) {
 	srv := gui.NewServer(guiPort, conf)
 
+	normalizeROI := func(mode string, bang gui.ROI, pjsk gui.ROI) gui.ROI {
+		roi := bang
+		if mode == "pjsk" {
+			roi = pjsk
+		}
+
+		if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
+			if mode == "pjsk" {
+				return gui.ROI{X1: 0, Y1: 35, X2: 100, Y2: 60}
+			}
+			return gui.ROI{X1: 0, Y1: 42, X2: 100, Y2: 68}
+		}
+
+		clamp := func(v int) int {
+			if v < 0 {
+				return 0
+			}
+			if v > 100 {
+				return 100
+			}
+			return v
+		}
+
+		roi.X1 = clamp(roi.X1)
+		roi.Y1 = clamp(roi.Y1)
+		roi.X2 = clamp(roi.X2)
+		roi.Y2 = clamp(roi.Y2)
+
+		if roi.X2 <= roi.X1 {
+			if roi.X1 >= 99 {
+				roi.X1 = 98
+			}
+			roi.X2 = roi.X1 + 1
+		}
+		if roi.Y2 <= roi.Y1 {
+			if roi.Y1 >= 99 {
+				roi.Y1 = 98
+			}
+			roi.Y2 = roi.Y1 + 1
+		}
+
+		return roi
+	}
+
+	autoTriggerByVision := func(ctx context.Context, sc *controllers.ScrcpyController, mode string, roi gui.ROI, pollMs int64) bool {
+		if pollMs < 30 {
+			pollMs = 30
+		}
+		if pollMs > 1000 {
+			pollMs = 1000
+		}
+
+		srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+			Enabled: true,
+			Mode:    mode,
+			Armed:   true,
+			Fired:   false,
+			PollMs:  pollMs,
+			ROI:     roi,
+			Message: "armed; waiting first-note trigger",
+		})
+
+		sampleLumaBand := func(f controllers.ScrcpyFrame) (float64, bool) {
+			if f.Width <= 0 || f.Height <= 0 {
+				return 0, false
+			}
+			need := f.Width * f.Height
+			if len(f.Plane0) < need {
+				return 0, false
+			}
+
+			x1 := f.Width * roi.X1 / 100
+			x2 := f.Width * roi.X2 / 100
+			y1 := f.Height * roi.Y1 / 100
+			y2 := f.Height * roi.Y2 / 100
+			if x1 < 0 {
+				x1 = 0
+			}
+			if y1 < 0 {
+				y1 = 0
+			}
+			if x2 > f.Width {
+				x2 = f.Width
+			}
+			if y2 > f.Height {
+				y2 = f.Height
+			}
+			if x2 <= x1 || y2 <= y1 {
+				return 0, false
+			}
+
+			xStep := max(1, (x2-x1)/96)
+			yStep := max(1, (y2-y1)/24)
+			var sum int64
+			count := 0
+			for y := y1; y < y2; y += yStep {
+				row := y * f.Width
+				for x := x1; x < x2; x += xStep {
+					sum += int64(f.Plane0[row+x])
+					count++
+				}
+			}
+			if count == 0 {
+				return 0, false
+			}
+			return float64(sum) / float64(count), true
+		}
+
+		ticker := time.NewTicker(time.Duration(pollMs) * time.Millisecond)
+		defer ticker.Stop()
+
+		const stableNeed = 6
+		const stableDiff = 0.8
+		const triggerDiff = 3.0
+
+		var last float64
+		hasLast := false
+		stableCount := 0
+		lastDebugAt := time.Time{}
+
+		publishDebug := func(v gui.AutoTriggerDebug, force bool) {
+			if !force && !lastDebugAt.IsZero() && time.Since(lastDebugAt) < 120*time.Millisecond {
+				return
+			}
+			lastDebugAt = time.Now()
+			srv.SetAutoTriggerDebug(v)
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: mode, Armed: false, Fired: false, PollMs: pollMs, ROI: roi, Message: "stopped"})
+				return false
+			case <-ticker.C:
+			}
+
+			frame, ok := sc.LatestFrame()
+			if !ok {
+				publishDebug(gui.AutoTriggerDebug{
+					Enabled: true,
+					Mode:    mode,
+					Armed:   true,
+					Fired:   false,
+					PollMs:  pollMs,
+					ROI:     roi,
+					Message: "no decoded frame",
+				}, false)
+				continue
+			}
+
+			cur, ok := sampleLumaBand(frame)
+			if !ok {
+				publishDebug(gui.AutoTriggerDebug{
+					Enabled: true,
+					Mode:    mode,
+					Armed:   true,
+					Fired:   false,
+					PollMs:  pollMs,
+					ROI:     roi,
+					Message: "invalid roi on frame",
+				}, false)
+				continue
+			}
+
+			delta := 0.0
+			if hasLast {
+				delta = cur - last
+				absDelta := delta
+				if absDelta < 0 {
+					absDelta = -absDelta
+				}
+
+				if absDelta <= stableDiff {
+					stableCount++
+				} else {
+					if stableCount >= stableNeed && delta >= triggerDiff {
+						publishDebug(gui.AutoTriggerDebug{
+							Enabled:     true,
+							Mode:        mode,
+							Armed:       true,
+							Fired:       true,
+							PollMs:      pollMs,
+							Luma:        cur,
+							Delta:       delta,
+							StableCount: stableCount,
+							ROI:         roi,
+							Message:     "triggered",
+						}, true)
+						log.Debugf("Vision auto trigger fired: pollMs=%d stable=%d delta=%.2f", pollMs, stableCount, delta)
+						return true
+					}
+					stableCount = 0
+				}
+			}
+
+			publishDebug(gui.AutoTriggerDebug{
+				Enabled:     true,
+				Mode:        mode,
+				Armed:       stableCount >= stableNeed,
+				Fired:       false,
+				PollMs:      pollMs,
+				Luma:        cur,
+				Delta:       delta,
+				StableCount: stableCount,
+				ROI:         roi,
+				Message:     "watching",
+			}, false)
+
+			last = cur
+			hasLast = true
+		}
+	}
+
 	// Ensure only one playback goroutine runs at a time.
 	var (
 		runMu         sync.Mutex
@@ -273,8 +486,28 @@ func runGUI(conf *config.Config) {
 
 			srv.SetReady(ctrl, events, np)
 
+			srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: req.AutoTriggerVision, Mode: req.Mode, Message: "idle"})
+
 			if !srv.WaitForStart(ctx) {
 				return
+			}
+
+			if req.AutoTriggerVision {
+				roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)
+				sc, ok := ctrl.(*controllers.ScrcpyController)
+				if !ok {
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, PollMs: req.AutoTriggerPollMs, ROI: roi, Message: "backend not scrcpy"})
+					log.Warn("Auto Trigger (Vision) is only available on scrcpy backend")
+					return
+				}
+				if os.Getenv("SSM_ENABLE_VIDEO_DECODE") != "1" {
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, PollMs: req.AutoTriggerPollMs, ROI: roi, Message: "video decode disabled"})
+					log.Warn("Auto Trigger (Vision) requested but video decode is disabled; set SSM_ENABLE_VIDEO_DECODE=1")
+					return
+				}
+				if !autoTriggerByVision(ctx, sc, req.Mode, roi, req.AutoTriggerPollMs) {
+					return
+				}
 			}
 
 			start := time.Now().Add(-time.Duration(events[0].Timestamp) * time.Millisecond)

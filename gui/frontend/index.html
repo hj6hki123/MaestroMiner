@@ -260,6 +260,45 @@
             <input type="number" id="inp-grCount" min="0" max="300" step="1" value="0" oninput="onGreatCountInput()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
             <span class="jitter-val text-ssm-hint" id="val-grCount">OFF</span>
           </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.autoFirstTap">Auto Trigger (Vision)</span>
+            <label style="display:flex;align-items:center;gap:6px;color:var(--txt);font-size:12px;white-space:nowrap;">
+              <input type="checkbox" id="chk-autoFirstTap" onchange="onAutoTriggerVisionChanged()">
+              <span data-i18n="jitter.enable">Enable</span>
+            </label>
+            <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="120" oninput="onAutoTriggerVisionChanged()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+            <span class="jitter-val text-ssm-hint" id="val-autoFirstLead">120 ms</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.roi.bang">ROI (Bang)</span>
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+              <input type="number" id="inp-roi-bang-x1" min="0" max="99" step="1" value="0" oninput="onAutoTriggerVisionChanged()" title="x1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-bang-y1" min="0" max="99" step="1" value="42" oninput="onAutoTriggerVisionChanged()" title="y1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-bang-x2" min="1" max="100" step="1" value="100" oninput="onAutoTriggerVisionChanged()" title="x2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-bang-y2" min="1" max="100" step="1" value="68" oninput="onAutoTriggerVisionChanged()" title="y2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+            </div>
+            <span class="jitter-val text-ssm-hint" id="val-roi-bang">0,42,100,68</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.roi.pjsk">ROI (PJSK)</span>
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+              <input type="number" id="inp-roi-pjsk-x1" min="0" max="99" step="1" value="0" oninput="onAutoTriggerVisionChanged()" title="x1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-pjsk-y1" min="0" max="99" step="1" value="35" oninput="onAutoTriggerVisionChanged()" title="y1" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-pjsk-x2" min="1" max="100" step="1" value="100" oninput="onAutoTriggerVisionChanged()" title="x2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+              <input type="number" id="inp-roi-pjsk-y2" min="1" max="100" step="1" value="60" oninput="onAutoTriggerVisionChanged()" title="y2" style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+            </div>
+            <span class="jitter-val text-ssm-hint" id="val-roi-pjsk">0,35,100,60</span>
+          </div>
+          <div class="jitter-row" style="align-items:flex-start;">
+            <span class="jitter-label" data-i18n="jitter.debug">Vision Debug</span>
+            <div style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--hint);line-height:1.35;min-width:240px;">
+              <div><span data-i18n="jitter.debug.state">state</span>: <span id="dbg-at-state">-</span> | <span data-i18n="jitter.debug.mode">mode</span>: <span id="dbg-at-mode">-</span></div>
+              <div>Luma: <span id="dbg-at-luma">-</span> | Delta: <span id="dbg-at-delta">-</span> | Stable: <span id="dbg-at-stable">-</span></div>
+              <div>ROI: <span id="dbg-at-roi">-</span> | Poll: <span id="dbg-at-poll">-</span></div>
+              <div><span data-i18n="jitter.debug.msg">msg</span>: <span id="dbg-at-msg">-</span></div>
+            </div>
+            <span class="jitter-val text-ssm-hint" id="dbg-at-fired">-</span>
+          </div>
           <div class="jitter-hint text-xs text-ssm-hint mt-2" data-i18n="jitter.hint"></div>
         </div>
 
@@ -383,6 +422,25 @@
                   </div>
                   <span><kbd class="!bg-transparent !shadow-none">Shift</kbd> ±50ms</span>
                   <span><kbd class="!bg-transparent !shadow-none">Ctrl</kbd> ±100ms</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="pd-offset-sec">
+              <div class="pd-offset-container">
+                <div class="pd-offset-header">
+                  <div class="flex items-center gap-2">
+                    <span>Vision ROI Debug</span>
+                  </div>
+                </div>
+                <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+                  <img id="vision-roi-img" alt="vision-roi" style="width:260px;max-width:100%;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:#0a0a0a;image-rendering:pixelated;" />
+                  <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--hint);line-height:1.35;min-width:220px;">
+                    <div>state: <span id="play-dbg-at-state">-</span> | mode: <span id="play-dbg-at-mode">-</span></div>
+                    <div>Luma: <span id="play-dbg-at-luma">-</span> | Delta: <span id="play-dbg-at-delta">-</span> | Stable: <span id="play-dbg-at-stable">-</span></div>
+                    <div>ROI: <span id="play-dbg-at-roi">-</span> | Poll: <span id="play-dbg-at-poll">-</span></div>
+                    <div>msg: <span id="play-dbg-at-msg">-</span> | <span id="play-dbg-at-fired">-</span></div>
+                  </div>
                 </div>
               </div>
             </div>
