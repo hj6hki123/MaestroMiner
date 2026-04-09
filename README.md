@@ -6,6 +6,37 @@
     <strong>A Web-based GUI for automated mobile rhythm game playback and chart parsing.</strong>
 </p>
 
+##  Auto-Mining Branch 
+
+This branch is all about turning you into a proper **lazy legend** — full automation so you can just sit back and let the game play itself.
+
+Planned features:
+
+- [x] **Auto first tap** (for us butterfingers out there)
+- [ ] Delay compensation
+- [ ] Auto song title detection
+- [ ] Auto single-player song cycling / grinding
+- [ ] Ensemble / co-op support
+---
+此分支致力于塑造一个解放双手的懒人，预计开发功能如下：
+
+- [ ] 自动打击第一下音符（手残党用）
+- [ ] 延迟补偿
+- [ ] 自动辨识歌名
+- [ ] 自动单人轮巡打歌
+- [ ] 支持协奏
+
+虽然本人开始的初衷只是为了自己做一个简单易用的GUI，却抵不住码农的血液在流淌...
+
+### 自动打击展示
+https://github.com/user-attachments/assets/09c6585a-64fb-44ad-af82-6239ee994b1b
+
+
+---
+
+Honestly, I just wanted to make a simple, clean GUI for myself at the beginning...  
+But then the **programmer brain** took over and things escalated quickly 😂
+
 
 # SSM Web GUI (Star Stone Miner Web GUI Version)
 
