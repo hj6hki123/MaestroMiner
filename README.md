@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> **As the core features are now complete, the main branch of this project will only receive minor bug fixes and no major functional changes.**
+> 
+> **For new feature development, please head over to the [test/automation](https://github.com/hj6hki123/ssm-gui/tree/test/automation) branch.**
+> 
+> **This branch is under active development, focusing on a fully autonomous 'unattended mode' to achieve a completely hands-off user experience.**
 <p align="center">
     <a href="https://github.com/hj6hki123/ssm-gui">
         <img src="imgs/page.png" alt="ssm-gui-banner"/>
@@ -16,6 +22,8 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 
 **Support for BanG Dream and Project Sekai: Colorful Stage**
 
+
+
 ##  What's new
 
 ### 🎵 Smart Song Search
@@ -31,9 +39,8 @@ This project is an extended branch based on the core architecture of [kvarenzn/s
 - **Offset adjustment** — fine-tune timing on the fly with keyboard shortcuts
 
 
-## Requirements 
-1. A computer, a mobile phone, and a data transfer cable
-2. A pair of skillful hands
+
+
 
 ## Quick Start
 
