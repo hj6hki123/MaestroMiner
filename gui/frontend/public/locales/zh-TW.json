@@ -31,6 +31,10 @@
   "jitter.timing":  "時間偏移 ±ms",
   "jitter.position":"座標偏移 ±%",
   "jitter.tapDur":  "按壓時長 ±ms",
+  "jitter.grEarly": "Great 提早比例 %",
+  "jitter.grLate":  "Great 延後比例 %",
+  "jitter.grOffset":"Great 偏移毫秒",
+  "jitter.grCount": "Great 指定顆數",
   "jitter.hint":    "模擬人類遊玩的隨機抖動，讓判定在 Perfect 與 Good 之間跳動。建議：時間 ±20 ms、座標 ±8%、按壓時長 ±15 ms。",
 
   "settings.device":               "裝置管理",

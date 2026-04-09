@@ -250,6 +250,16 @@
             <input type="range" id="sld-tapDur" min="0" max="40" step="1" value="0" oninput="onJitter('tapDur')">
             <span class="jitter-val text-ssm-hint" id="val-tapDur">OFF</span>
           </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.grOffset">Great Offset ms</span>
+            <input type="range" id="sld-grOffset" min="10" max="200" step="5" value="75" oninput="onJitter('grOffset')">
+            <span class="jitter-val text-ssm-hint" id="val-grOffset">75 ms</span>
+          </div>
+          <div class="jitter-row">
+            <span class="jitter-label" data-i18n="jitter.grCount">Great Count</span>
+            <input type="number" id="inp-grCount" min="0" max="300" step="1" value="0" oninput="onGreatCountInput()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
+            <span class="jitter-val text-ssm-hint" id="val-grCount">OFF</span>
+          </div>
           <div class="jitter-hint text-xs text-ssm-hint mt-2" data-i18n="jitter.hint"></div>
         </div>
 

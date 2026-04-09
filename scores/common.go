@@ -92,6 +92,10 @@ type VTEGenerateConfig struct {
 	TimingJitter   int64   // Time jitter range (ms)
 	PositionJitter float64 // Position jitter
 	TapDurJitter   int64   // Tap duration jitter
+
+	// Great-hit shaping (tap only)
+	GreatOffsetMs    int64 // abs offset in ms
+	GreatTargetCount int64 // exact tap-note count to force great offset; 0 disables
 }
 
 type noteKind uint8

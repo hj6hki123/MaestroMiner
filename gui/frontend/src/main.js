@@ -175,24 +175,42 @@ function jitterRealValue(key, raw) {
   return key === 'position' ? (JITTER_POS_MAP[raw] || 0) : raw;
 }
 
-function renderJitter(key) {
-  var raw = parseInt(document.getElementById('sld-' + key).value);
-  var el = document.getElementById('val-' + key);
-
-  var sld = document.getElementById('sld-' + key);
-  var pct = ((raw - (sld.min || 0)) / ((sld.max || 100) - (sld.min || 0))) * 100;
-  sld.style.setProperty('--val', pct + '%');
-
-  if (raw === 0) { el.textContent = 'OFF'; el.style.color = 'var(--hint)'; return; }
-  el.style.color = 'var(--blue)';
-  el.textContent = key === 'position' ? ('±' + Math.round((JITTER_POS_MAP[raw] || 0) * 100) + '%') : ('±' + raw + ' ms');
+function getGreatCountRaw() {
+  var inp = document.getElementById('inp-grCount');
+  var raw = parseInt(inp ? inp.value : 0);
+  if (!isFinite(raw) || raw < 0) raw = 0;
+  return raw;
 }
 
-function renderAllJitters() { ['timing', 'position', 'tapDur'].forEach(renderJitter); }
+function renderJitter(key) {
+  var raw = key === 'grCount' ? getGreatCountRaw() : parseInt(document.getElementById('sld-' + key).value);
+  var el = document.getElementById('val-' + key);
+
+  if (key !== 'grCount') {
+    var sld = document.getElementById('sld-' + key);
+    var pct = ((raw - (sld.min || 0)) / ((sld.max || 100) - (sld.min || 0))) * 100;
+    sld.style.setProperty('--val', pct + '%');
+  }
+
+  if (key !== 'grOffset' && raw === 0) { el.textContent = 'OFF'; el.style.color = 'var(--hint)'; return; }
+  el.style.color = 'var(--blue)';
+  if (key === 'position') {
+    el.textContent = '±' + Math.round((JITTER_POS_MAP[raw] || 0) * 100) + '%';
+  } else if (key === 'grOffset') {
+    el.textContent = raw + ' ms';
+  } else if (key === 'grCount') {
+    el.textContent = raw + ' notes';
+  } else {
+    el.textContent = '±' + raw + ' ms';
+  }
+}
+
+function renderAllJitters() { ['timing', 'position', 'tapDur', 'grOffset', 'grCount'].forEach(renderJitter); }
 function onJitter(key) { renderJitter(key); }
+function onGreatCountInput() { renderJitter('grCount'); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1 };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '' };
 var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
@@ -633,6 +651,14 @@ function updateUI(d) {
     if (st === 3) log('play-log', t('log.done'), 'ok');
     if (st === 4 && d.error) log('play-log', t('log.fail') + d.error, 'err');
   }
+
+	if (st === 1 && typeof d.greatReq === 'number' && typeof d.greatApply === 'number') {
+		var greatSig = String(d.greatReq) + '/' + String(d.greatApply);
+		if (greatSig !== S._lastGreatSig) {
+			S._lastGreatSig = greatSig;
+			log('play-log', 'Great applied: ' + d.greatApply + ' / requested: ' + d.greatReq, d.greatApply > 0 ? 'ok' : 'info');
+		}
+	}
 }
 
 function showNP(np) {
@@ -825,8 +851,10 @@ function submitRun() {
   var tRaw = parseInt(document.getElementById('sld-timing').value) || 0;
   var pRaw = parseInt(document.getElementById('sld-position').value) || 0;
   var dRaw = parseInt(document.getElementById('sld-tapDur').value) || 0;
+  var grOffsetRaw = parseInt(document.getElementById('sld-grOffset').value) || 10;
+  var grCountRaw = getGreatCountRaw();
   var adv = getAdvancedValues();
-  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
@@ -975,6 +1003,7 @@ Object.assign(window, {
   saveDevice,
   deleteDevice,
   onJitter,
+  onGreatCountInput,
   onAdvanced,
   resetAdvanced,
   doExtract,

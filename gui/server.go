@@ -62,6 +62,8 @@ type RunRequest struct {
 	TimingJitter   int64   `json:"timingJitter"`   // Time jitter (ms), 0 = disabled
 	PositionJitter float64 `json:"positionJitter"` // Position jitter (track units), 0 = disabled
 	TapDurJitter   int64   `json:"tapDurJitter"`   // Tap duration jitter (ms), 0 = disabled
+	GreatOffsetMs  int64   `json:"greatOffsetMs"`  // Absolute offset in ms
+	GreatCount     int64   `json:"greatCount"`     // Exact number of tap notes to force as Great, 0 = probability mode
 
 	// Advanced VTE parameters (0 = use mode default)
 	TapDuration         int64   `json:"tapDuration"`
@@ -82,6 +84,8 @@ type Server struct {
 	errMsg     string
 	nowPlaying NowPlaying
 	lastRunReq RunRequest
+	greatReq   int64
+	greatApply int64
 
 	startCh  chan struct{}
 	offsetCh chan int
@@ -142,6 +146,8 @@ func (s *Server) broadcastState() {
 		"offset":     s.offset,
 		"error":      s.errMsg,
 		"nowPlaying": s.nowPlaying,
+		"greatReq":   s.greatReq,
+		"greatApply": s.greatApply,
 	}
 	s.mu.Unlock()
 	b, _ := json.Marshal(data)
@@ -181,6 +187,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"offset":     s.offset,
 		"error":      s.errMsg,
 		"nowPlaying": s.nowPlaying,
+		"greatReq":   s.greatReq,
+		"greatApply": s.greatApply,
 	}
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
@@ -199,6 +207,8 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	s.lastRunReq = req
+	s.greatReq = req.GreatCount
+	s.greatApply = 0
 	s.mu.Unlock()
 
 	if s.OnRunRequest != nil {
@@ -457,6 +467,20 @@ func (s *Server) SetError(msg string) {
 	s.mu.Lock()
 	s.state = StateError
 	s.errMsg = msg
+	s.mu.Unlock()
+	s.broadcastState()
+}
+
+func (s *Server) SetGreatStats(requested, applied int64) {
+	s.mu.Lock()
+	if requested < 0 {
+		requested = 0
+	}
+	if applied < 0 {
+		applied = 0
+	}
+	s.greatReq = requested
+	s.greatApply = applied
 	s.mu.Unlock()
 	s.broadcastState()
 }

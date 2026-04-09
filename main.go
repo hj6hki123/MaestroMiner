@@ -152,6 +152,23 @@ func runGUI(conf *config.Config) {
 				TimingJitter:        req.TimingJitter,
 				PositionJitter:      req.PositionJitter,
 				TapDurJitter:        req.TapDurJitter,
+				GreatOffsetMs: func() int64 {
+					v := req.GreatOffsetMs
+					if v < 0 {
+						v = -v
+					}
+					if v == 0 {
+						v = 10
+					}
+					return v
+				}(),
+				GreatTargetCount: func() int64 {
+					v := req.GreatCount
+					if v < 0 {
+						return 0
+					}
+					return v
+				}(),
 			}
 			if pjskMode {
 				genConfig.FlickFactor = 1.0 / 6
@@ -176,7 +193,8 @@ func runGUI(conf *config.Config) {
 			if req.FlickPow > 0 {
 				genConfig.FlickPow = req.FlickPow
 			}
-			rawEvents := scores.GenerateTouchEvent(genConfig, chart)
+			rawEvents, greatApplied := scores.GenerateTouchEvent(genConfig, chart)
+			srv.SetGreatStats(req.GreatCount, int64(greatApplied))
 
 			var ctrl controllers.Controller
 			var events []common.ViscousEventItem
@@ -884,7 +902,7 @@ func main() {
 		genConfig.FlickFactor = 1.0 / 6
 		genConfig.FlickDuration = 20
 	}
-	rawEvents := scores.GenerateTouchEvent(genConfig, chart)
+	rawEvents, _ := scores.GenerateTouchEvent(genConfig, chart)
 
 	t := newTui(database)
 

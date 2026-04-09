@@ -347,16 +347,24 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 			switch action {
 			case common.TouchDown:
 				if currentFingers[event.PointerID] {
-					log.Fatalf("pointer `%d` is already on screen", event.PointerID)
+					// Be tolerant to occasional duplicated down events to avoid hard crash.
+					log.Warnf("pointer `%d` duplicated down; convert to move", event.PointerID)
+					action = common.TouchMove
+				} else {
+					currentFingers[event.PointerID] = true
 				}
-				currentFingers[event.PointerID] = true
 			case common.TouchMove:
 				if !currentFingers[event.PointerID] {
-					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+					// Recover by treating stray move as a down.
+					log.Warnf("pointer `%d` move without down; convert to down", event.PointerID)
+					action = common.TouchDown
+					currentFingers[event.PointerID] = true
 				}
 			case common.TouchUp:
 				if !currentFingers[event.PointerID] {
-					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
+					// Ignore duplicated up events.
+					log.Warnf("pointer `%d` duplicated up; ignore", event.PointerID)
+					continue
 				}
 				delete(currentFingers, event.PointerID)
 			}

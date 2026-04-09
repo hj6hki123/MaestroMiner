@@ -31,6 +31,10 @@
   "jitter.timing":  "タイミング ±ms",
   "jitter.position":"座標 ±%",
   "jitter.tapDur":  "押下時間 ±ms",
+  "jitter.grEarly": "Great 早め割合 %",
+  "jitter.grLate":  "Great 遅め割合 %",
+  "jitter.grOffset":"Great オフセット ms",
+  "jitter.grCount": "Great 指定数",
   "jitter.hint":    "人間のプレイを模倣するランダムな揺らぎです。Perfect と Good の間を目標に。推奨：タイミング ±20 ms、座標 ±8%、押下時間 ±15 ms。",
 
   "settings.device":               "デバイス管理",

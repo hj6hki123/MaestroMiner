@@ -31,6 +31,10 @@
   "jitter.timing":  "Timing ±ms",
   "jitter.position":"Position ±%",
   "jitter.tapDur":  "Tap duration ±ms",
+  "jitter.grEarly": "Great Early %",
+  "jitter.grLate":  "Great Late %",
+  "jitter.grOffset":"Great Offset ms",
+  "jitter.grCount": "Great Count",
   "jitter.hint":    "Randomizes input to simulate human play. Target Perfect/Good range. Recommended: Timing ±20 ms, Position ±8%, Tap duration ±15 ms.",
 
   "settings.device":               "Device Management",

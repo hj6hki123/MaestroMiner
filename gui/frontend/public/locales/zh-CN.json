@@ -31,6 +31,10 @@
   "jitter.timing":  "时间偏移 ±ms",
   "jitter.position":"坐标偏移 ±%",
   "jitter.tapDur":  "按压时长 ±ms",
+  "jitter.grEarly": "Great 提前比例 %",
+  "jitter.grLate":  "Great 延后比例 %",
+  "jitter.grOffset":"Great 偏移毫秒",
+  "jitter.grCount": "Great 指定颗数",
   "jitter.hint":    "模拟人类游玩的随机抖动，使判定在 Perfect 与 Good 之间浮动。建议：时间 ±20 ms、坐标 ±8%、按压时长 ±15 ms。",
 
   "settings.device":               "设备管理",
