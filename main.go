@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -144,13 +145,13 @@ func runGUI(conf *config.Config) {
 			Message: "armed; waiting first-note trigger",
 		})
 
-		sampleLumaBand := func(f controllers.ScrcpyFrame) (float64, bool) {
+		sampleLumaBand := func(f controllers.ScrcpyFrame) (float64, float64, float64, float64, bool) {
 			if f.Width <= 0 || f.Height <= 0 {
-				return 0, false
+				return 0, 0, 0, 0, false
 			}
 			need := f.Width * f.Height
 			if len(f.Plane0) < need {
-				return 0, false
+				return 0, 0, 0, 0, false
 			}
 
 			x1 := f.Width * roi.X1 / 100
@@ -170,36 +171,67 @@ func runGUI(conf *config.Config) {
 				y2 = f.Height
 			}
 			if x2 <= x1 || y2 <= y1 {
-				return 0, false
+				return 0, 0, 0, 0, false
 			}
 
 			xStep := max(1, (x2-x1)/96)
 			yStep := max(1, (y2-y1)/24)
-			var sum int64
+			var sum, sumTop, sumMid, sumBottom int64
 			count := 0
+			countTop, countMid, countBottom := 0, 0, 0
+			ySpan := max(1, y2-y1)
 			for y := y1; y < y2; y += yStep {
 				row := y * f.Width
 				for x := x1; x < x2; x += xStep {
-					sum += int64(f.Plane0[row+x])
+					v := int64(f.Plane0[row+x])
+					sum += v
+					py := y - y1
+					if py*3 < ySpan {
+						sumTop += v
+						countTop++
+					} else if py*3 < ySpan*2 {
+						sumMid += v
+						countMid++
+					} else {
+						sumBottom += v
+						countBottom++
+					}
 					count++
 				}
 			}
 			if count == 0 {
-				return 0, false
+				return 0, 0, 0, 0, false
 			}
-			return float64(sum) / float64(count), true
+			avg := float64(sum) / float64(count)
+			avgTop := avg
+			avgMid := avg
+			avgBottom := avg
+			if countTop > 0 {
+				avgTop = float64(sumTop) / float64(countTop)
+			}
+			if countMid > 0 {
+				avgMid = float64(sumMid) / float64(countMid)
+			}
+			if countBottom > 0 {
+				avgBottom = float64(sumBottom) / float64(countBottom)
+			}
+			return avg, avgTop, avgMid, avgBottom, true
 		}
 
 		ticker := time.NewTicker(time.Duration(pollMs) * time.Millisecond)
 		defer ticker.Stop()
 
-		const stableNeed = 6
-		const stableDiff = 0.8
-		const triggerDiff = 3.0
+		const stableNeed = 4
+		const stableDiffBase = 1.0
+		const triggerDiffBase = 1.4
+		const noiseAlpha = 0.18
+		const seqWindow = 550 * time.Millisecond
 
-		var last float64
+		var last, lastTop, lastMid, lastBottom float64
 		hasLast := false
 		stableCount := 0
+		noiseEMA := 0.6
+		var riseTopAt, riseMidAt time.Time
 		lastDebugAt := time.Time{}
 
 		publishDebug := func(v gui.AutoTriggerDebug, force bool) {
@@ -232,7 +264,7 @@ func runGUI(conf *config.Config) {
 				continue
 			}
 
-			cur, ok := sampleLumaBand(frame)
+			cur, curTop, curMid, curBottom, ok := sampleLumaBand(frame)
 			if !ok {
 				publishDebug(gui.AutoTriggerDebug{
 					Enabled: true,
@@ -247,17 +279,41 @@ func runGUI(conf *config.Config) {
 			}
 
 			delta := 0.0
+			dTop, dMid, dBottom := 0.0, 0.0, 0.0
 			if hasLast {
 				delta = cur - last
-				absDelta := delta
-				if absDelta < 0 {
-					absDelta = -absDelta
+				dTop = curTop - lastTop
+				dMid = curMid - lastMid
+				dBottom = curBottom - lastBottom
+				absDelta := math.Abs(delta)
+				stripeNoise := (math.Abs(dTop) + math.Abs(dMid) + math.Abs(dBottom)) / 3.0
+				if stripeNoise > absDelta {
+					absDelta = stripeNoise
 				}
 
-				if absDelta <= stableDiff {
+				// Adapt to device-specific decode noise: low-end phones often have unstable luma.
+				noiseEMA = (1.0-noiseAlpha)*noiseEMA + noiseAlpha*absDelta
+				stableBand := max(stableDiffBase, noiseEMA*1.8)
+				triggerDiff := max(triggerDiffBase, noiseEMA*3.2)
+				riseDiff := max(0.9, noiseEMA*2.2)
+
+				nowT := time.Now()
+				if dTop >= riseDiff {
+					riseTopAt = nowT
+				}
+				if dMid >= riseDiff && !riseTopAt.IsZero() && nowT.Sub(riseTopAt) <= seqWindow {
+					riseMidAt = nowT
+				}
+				flowTriggered := dBottom >= riseDiff && !riseMidAt.IsZero() && nowT.Sub(riseMidAt) <= seqWindow
+
+				if absDelta <= stableBand {
 					stableCount++
 				} else {
-					if stableCount >= stableNeed && delta >= triggerDiff {
+					if flowTriggered || (stableCount >= stableNeed && delta >= triggerDiff) {
+						reason := "luma"
+						if flowTriggered {
+							reason = "flow"
+						}
 						publishDebug(gui.AutoTriggerDebug{
 							Enabled:     true,
 							Mode:        mode,
@@ -268,12 +324,15 @@ func runGUI(conf *config.Config) {
 							Delta:       delta,
 							StableCount: stableCount,
 							ROI:         roi,
-							Message:     "triggered",
+							Message:     fmt.Sprintf("triggered[%s] (thr=%.2f rise=%.2f noise=%.2f)", reason, triggerDiff, riseDiff, noiseEMA),
 						}, true)
-						log.Debugf("Vision auto trigger fired: pollMs=%d stable=%d delta=%.2f", pollMs, stableCount, delta)
+						log.Debugf("Vision auto trigger fired: reason=%s pollMs=%d stable=%d delta=%.2f dTop=%.2f dMid=%.2f dBottom=%.2f triggerThr=%.2f riseThr=%.2f noise=%.2f", reason, pollMs, stableCount, delta, dTop, dMid, dBottom, triggerDiff, riseDiff, noiseEMA)
 						return true
 					}
-					stableCount = 0
+					// Soften reset on noisy devices.
+					if stableCount > 0 {
+						stableCount--
+					}
 				}
 			}
 
@@ -287,10 +346,13 @@ func runGUI(conf *config.Config) {
 				Delta:       delta,
 				StableCount: stableCount,
 				ROI:         roi,
-				Message:     "watching",
+				Message:     fmt.Sprintf("watching (noise=%.2f d=%.2f/%.2f/%.2f)", noiseEMA, dTop, dMid, dBottom),
 			}, false)
 
 			last = cur
+			lastTop = curTop
+			lastMid = curMid
+			lastBottom = curBottom
 			hasLast = true
 		}
 	}
