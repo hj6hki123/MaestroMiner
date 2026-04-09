@@ -39,28 +39,37 @@ Engineering changes:
 
 The detection model (simplified) is as follows:
 
-### 1. Luma and Difference Definition
+#### 1. Luma and Difference Definition
 The single ROI is vertically divided into three segments to calculate the average luma:
 * **Global Average Luma:** $L_t$
 * **Segmented Luma:** $L_{t(top)}, L_{t(mid)}, L_{t(bottom)}$
 * **Instantaneous Difference:**
+
 $$\Delta L_t = L_t - L_{t-1}$$
+
 $$\Delta d_{top} = L_{t(top)} - L_{t-1(top)}$$
+
 $$\Delta d_{mid} = L_{t(mid)} - L_{t-1(mid)}$$
+
 $$\Delta d_{bottom} = L_{t(bottom)} - L_{t-1(bottom)}$$
 
-### 2. Adaptive Noise Estimation
+#### 2. Adaptive Noise Estimation
 Exponential smoothing is used to dynamically track environmental and device thermal noise:
+
 $$Noise_t = (1 - \alpha) \cdot Noise_{t-1} + \alpha \cdot \max\left(|\Delta L_t|, \frac{|\Delta d_{top}| + |\Delta d_{mid}| + |\Delta d_{bottom}|}{3}\right)$$
+
 > $\alpha$ is the smoothing coefficient (typically $0.05 \sim 0.1$).
 
-### 3. Dynamic Threshold Calculation
+#### 3. Dynamic Threshold Calculation
 Thresholds scale in real-time based on $Noise_t$ to ensure stability under high noise conditions on low-end devices:
-* **Stable Threshold:** $Thr_{stable} = \max(Base_{stable}, 1.8 \cdot Noise_t)$
-* **Trigger Threshold:** $Thr_{trigger} = \max(Base_{trigger}, 3.2 \cdot Noise_t)$
-* **Rise Threshold:** $Thr_{rise} = \max(0.9, 2.2 \cdot Noise_t)$
 
+$$Thr_{stable} = \max(Base_{stable}, 1.8 \cdot Noise_t)$$
 
+$$Thr_{trigger} = \max(Base_{trigger}, 3.2 \cdot Noise_t)$$
+
+$$Thr_{rise} = \max(0.9, 2.2 \cdot Noise_t)$$
+
+---
 
 ### Detection Logic
 
@@ -83,7 +92,7 @@ https://github.com/user-attachments/assets/09c6585a-64fb-44ad-af82-6239ee994b1b
 
 ## Disclaimer
 > [!IMPORTANT]
-> **This version is a **development build** and is not recommended for general users. If you wish to use it, you must **compile it yourself**.**
+> This version is a **development build** and is not recommended for general users. If you wish to use it, you must **compile it yourself**.
 
 
 ## 📜 License & Credits
