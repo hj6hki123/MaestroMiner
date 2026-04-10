@@ -91,7 +91,7 @@ func runGUI(conf *config.Config) {
 
 		if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
 			if mode == "pjsk" {
-				return gui.ROI{X1: 0, Y1: 35, X2: 100, Y2: 60}
+				return gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
 			}
 			return gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
 		}

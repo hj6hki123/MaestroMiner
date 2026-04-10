@@ -208,7 +208,7 @@ function getAutoTriggerVisionConfig() {
   var lead = parseInt(inp ? inp.value : 50);
   if (!isFinite(lead) || lead <= 0) lead = 50;
   var roiBang = readROI('bang', { x1: 14, y1: 73, x2: 87, y2: 80 });
-  var roiPjsk = readROI('pjsk', { x1: 0, y1: 35, x2: 100, y2: 60 });
+  var roiPjsk = readROI('pjsk', { x1: 14, y1: 73, x2: 87, y2: 80 });
   return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk };
 }
 
