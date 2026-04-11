@@ -6,6 +6,7 @@ package adb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -69,6 +70,40 @@ func (s *syncConnection) Done(status uint32) error {
 	}
 
 	return send(s.conn, msg.Bytes())
+}
+
+// Recv pulls a file from the device using the sync RECV protocol.
+func (s *syncConnection) Recv(remote string) ([]byte, error) {
+	if err := s.Send(SCRecv, []byte(remote)); err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	for {
+		header, err := read(s.conn, 8)
+		if err != nil {
+			return nil, err
+		}
+		tag := string(header[:4])
+		n := binary.LittleEndian.Uint32(header[4:])
+		switch tag {
+		case "DATA":
+			chunk, err := read(s.conn, int(n))
+			if err != nil {
+				return nil, err
+			}
+			out.Write(chunk)
+		case "DONE":
+			return out.Bytes(), nil
+		case "FAIL":
+			msg, err := read(s.conn, int(n))
+			if err != nil {
+				return nil, err
+			}
+			return nil, &ADBError{Message: string(msg)}
+		default:
+			return nil, fmt.Errorf("sync recv: unexpected tag %q", tag)
+		}
+	}
 }
 
 func (s *syncConnection) GetResponse() error {

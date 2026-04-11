@@ -70,6 +70,10 @@ type RunRequest struct {
 	AutoTriggerPollMs  int64   `json:"autoTriggerPollMs"`  // Frame polling interval in ms for visual trigger
 	AutoTriggerROIBang ROI     `json:"autoTriggerRoiBang"` // ROI (% space) for Bang mode
 	AutoTriggerROIPjsk ROI     `json:"autoTriggerRoiPjsk"` // ROI (% space) for PJSK mode
+	AutoNavigation     bool    `json:"autoNavigation"`     // Auto navigate through pre-game screens (ADB only)
+	AutoDetectSong     bool    `json:"autoDetectSong"`     // Auto detect current selected song via OCR on 楽曲選択 screen
+	NavSongROIBang     ROI     `json:"navSongRoiBang"`     // OCR ROI (% space) for song-name panel in Bang mode
+	NavSongROIPjsk     ROI     `json:"navSongRoiPjsk"`     // OCR ROI (% space) for song-name panel in PJSK mode
 
 	// Advanced VTE parameters (0 = use mode default)
 	TapDuration         int64   `json:"tapDuration"`
@@ -98,6 +102,12 @@ type AutoTriggerDebug struct {
 	StableCount int     `json:"stableCount"`
 	ROI         ROI     `json:"roi"`
 	Message     string  `json:"message"`
+	StripeVar   float64 `json:"stripeVar"`   // column-luma std-dev across lane area; high = track visible
+	InGame      bool    `json:"inGame"`      // true when stripe variance confirms HUD is on screen
+	ScreenLuma  float64 `json:"screenLuma"`  // whole-frame average luma; album loading screen is very dark (~40)
+	HasSeenDark bool    `json:"hasSeenDark"` // true once a dark loading screen has been observed (primary arm gate)
+	NavStage    string  `json:"navStage"`    // current pipeline stage (SCREEN_CHECK, SONG_DETECT, ...)
+	NavScene    string  `json:"navScene"`    // current scene detected by navigation pipeline
 }
 
 type Server struct {
@@ -723,6 +733,47 @@ func normalizeAutoTriggerROI(mode string, bang ROI, pjsk ROI) ROI {
 	return roi
 }
 
+func normalizeNavSongROI(mode string, bang ROI, pjsk ROI) ROI {
+	roi := bang
+	if mode == "pjsk" {
+		roi = pjsk
+	}
+
+	if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
+		if mode == "pjsk" {
+			return ROI{X1: 59, Y1: 46, X2: 85, Y2: 52}
+		}
+		return ROI{X1: 23, Y1: 46, X2: 47, Y2: 50}
+	}
+
+	clamp := func(v int) int {
+		if v < 0 {
+			return 0
+		}
+		if v > 100 {
+			return 100
+		}
+		return v
+	}
+	roi.X1 = clamp(roi.X1)
+	roi.Y1 = clamp(roi.Y1)
+	roi.X2 = clamp(roi.X2)
+	roi.Y2 = clamp(roi.Y2)
+	if roi.X2 <= roi.X1 {
+		if roi.X1 >= 99 {
+			roi.X1 = 98
+		}
+		roi.X2 = roi.X1 + 1
+	}
+	if roi.Y2 <= roi.Y1 {
+		if roi.Y1 >= 99 {
+			roi.Y1 = 98
+		}
+		roi.Y2 = roi.Y1 + 1
+	}
+	return roi
+}
+
 func (s *Server) handleVisionROI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -791,6 +842,146 @@ func (s *Server) handleVisionROI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleNavROI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.mu.Lock()
+	ctrl := s.controller
+	req := s.lastRunReq
+	s.mu.Unlock()
+
+	sc, ok := ctrl.(*controllers.ScrcpyController)
+	if !ok || sc == nil {
+		http.Error(w, "nav preview unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	frame, ok := sc.LatestFrame()
+	if !ok || frame.Width <= 0 || frame.Height <= 0 {
+		http.Error(w, "no decoded frame", http.StatusServiceUnavailable)
+		return
+	}
+
+	need := frame.Width * frame.Height
+	if len(frame.Plane0) < need {
+		http.Error(w, "invalid frame", http.StatusServiceUnavailable)
+		return
+	}
+
+	roi := normalizeNavSongROI(req.Mode, req.NavSongROIBang, req.NavSongROIPjsk)
+	x1 := frame.Width * roi.X1 / 100
+	x2 := frame.Width * roi.X2 / 100
+	y1 := frame.Height * roi.Y1 / 100
+	y2 := frame.Height * roi.Y2 / 100
+	if x1 < 0 {
+		x1 = 0
+	}
+	if y1 < 0 {
+		y1 = 0
+	}
+	if x2 > frame.Width {
+		x2 = frame.Width
+	}
+	if y2 > frame.Height {
+		y2 = frame.Height
+	}
+	if x2 <= x1 || y2 <= y1 {
+		http.Error(w, "invalid nav roi", http.StatusBadRequest)
+		return
+	}
+
+	wid := x2 - x1
+	hgt := y2 - y1
+	img := image.NewGray(image.Rect(0, 0, wid, hgt))
+	for y := 0; y < hgt; y++ {
+		srcOff := (y1+y)*frame.Width + x1
+		dstOff := y * img.Stride
+		copy(img.Pix[dstOff:dstOff+wid], frame.Plane0[srcOff:srcOff+wid])
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if err := png.Encode(w, img); err != nil {
+		http.Error(w, "encode failed", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleFrame(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.mu.Lock()
+	ctrl := s.controller
+	req := s.lastRunReq
+	s.mu.Unlock()
+
+	sc, ok := ctrl.(*controllers.ScrcpyController)
+	if ok && sc != nil {
+		frame, hasFrame := sc.LatestFrame()
+		if hasFrame && frame.Width > 0 && frame.Height > 0 {
+			need := frame.Width * frame.Height
+			if len(frame.Plane0) >= need {
+				img := image.NewGray(image.Rect(0, 0, frame.Width, frame.Height))
+				for y := 0; y < frame.Height; y++ {
+					srcOff := y * frame.Width
+					dstOff := y * img.Stride
+					copy(img.Pix[dstOff:dstOff+frame.Width], frame.Plane0[srcOff:srcOff+frame.Width])
+				}
+				w.Header().Set("Content-Type", "image/png")
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				if err := png.Encode(w, img); err != nil {
+					http.Error(w, "encode failed", http.StatusInternalServerError)
+					return
+				}
+				return
+			}
+		}
+	}
+
+	// Fallback path: if scrcpy frame isn't ready yet, fetch a fresh screenshot from ADB
+	// so ROI editor can still be used before pressing Load/Start.
+	if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
+		http.Error(w, "adb server unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	serial := strings.TrimSpace(r.URL.Query().Get("serial"))
+	if serial == "" {
+		serial = strings.TrimSpace(req.DeviceSerial)
+	}
+
+	device, err := pickDevice(serial)
+	if err != nil {
+		http.Error(w, "frame preview unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	pngBytes, err := device.ScreencapPNGBytes()
+	if err != nil {
+		http.Error(w, "screencap failed: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	decoded, err := png.Decode(bytes.NewReader(pngBytes))
+	if err != nil {
+		http.Error(w, "decode screencap failed", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if err := png.Encode(w, decoded); err != nil {
+		http.Error(w, "encode failed", http.StatusInternalServerError)
+		return
+	}
+}
+
 // ─── Startup ──────────────────────────────────────
 
 func (s *Server) Start() (string, error) {
@@ -822,6 +1013,8 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/kill-adb", s.handleKillAdb)
 	mux.HandleFunc("/api/detect-adb", s.handleDetectAdb)
 	mux.HandleFunc("/api/vision-roi.png", s.handleVisionROI)
+	mux.HandleFunc("/api/nav-roi.png", s.handleNavROI)
+	mux.HandleFunc("/api/frame.png", s.handleFrame)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.port))
 	if err != nil {

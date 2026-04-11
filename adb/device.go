@@ -174,6 +174,16 @@ func (d *Device) Sh(prog string, args ...string) (string, error) {
 	return string(bytes), err
 }
 
+// ScreencapPNGBytes saves a screenshot to /sdcard/ssm_sc.png via screencap,
+// then pulls the file using ADB sync (binary-safe, no shell PTY corruption).
+func (d *Device) ScreencapPNGBytes() ([]byte, error) {
+	const remote = "/sdcard/ssm_sc.png"
+	if _, err := d.RawSh("screencap", "-p", remote); err != nil {
+		return nil, fmt.Errorf("screencap: %w", err)
+	}
+	return d.Pull(remote)
+}
+
 func (d *Device) push(data io.Reader, remote string, modTime time.Time, fileMode os.FileMode) error {
 	conn, err := d.Open()
 	if err != nil {
@@ -200,6 +210,20 @@ func (d *Device) push(data io.Reader, remote string, modTime time.Time, fileMode
 	}
 
 	return s.GetResponse()
+}
+
+// Pull fetches a file from the device using ADB sync (binary-safe).
+func (d *Device) Pull(remote string) ([]byte, error) {
+	conn, err := d.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	s, err := conn.OpenSync()
+	if err != nil {
+		return nil, err
+	}
+	return s.Recv(remote)
 }
 
 func (d *Device) Push(local *os.File, remote string) error {

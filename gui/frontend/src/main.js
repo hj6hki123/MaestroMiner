@@ -183,33 +183,432 @@ function getGreatCountRaw() {
 }
 
 function getAutoTriggerVisionConfig() {
-  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-  function readROI(prefix, defaults) {
-    var x1 = parseInt(document.getElementById('inp-roi-' + prefix + '-x1').value);
-    var y1 = parseInt(document.getElementById('inp-roi-' + prefix + '-y1').value);
-    var x2 = parseInt(document.getElementById('inp-roi-' + prefix + '-x2').value);
-    var y2 = parseInt(document.getElementById('inp-roi-' + prefix + '-y2').value);
-    if (!isFinite(x1)) x1 = defaults.x1;
-    if (!isFinite(y1)) y1 = defaults.y1;
-    if (!isFinite(x2)) x2 = defaults.x2;
-    if (!isFinite(y2)) y2 = defaults.y2;
-    x1 = clamp(x1, 0, 99);
-    y1 = clamp(y1, 0, 99);
-    x2 = clamp(x2, 1, 100);
-    y2 = clamp(y2, 1, 100);
-    if (x2 <= x1) x2 = Math.min(100, x1 + 1);
-    if (y2 <= y1) y2 = Math.min(100, y1 + 1);
-    return { x1: x1, y1: y1, x2: x2, y2: y2 };
-  }
-
   var chk = document.getElementById('chk-autoFirstTap');
   var inp = document.getElementById('inp-autoFirstLead');
   var enabled = !!(chk && chk.checked);
   var lead = parseInt(inp ? inp.value : 50);
   if (!isFinite(lead) || lead <= 0) lead = 50;
-  var roiBang = readROI('bang', { x1: 14, y1: 73, x2: 87, y2: 80 });
-  var roiPjsk = readROI('pjsk', { x1: 14, y1: 73, x2: 87, y2: 80 });
+  var roiBang = getROIForTargetKey('auto-bang');
+  var roiPjsk = getROIForTargetKey('auto-pjsk');
   return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk };
+}
+
+function getNavOCRConfig() {
+  return {
+    songBang: getROIForTargetKey('nav-song-bang'),
+    songPjsk: getROIForTargetKey('nav-song-pjsk'),
+  };
+}
+
+function onNavOCRChanged() {
+  var cfg = getNavOCRConfig();
+  var bangVal = document.getElementById('val-nav-song-bang');
+  var pjskVal = document.getElementById('val-nav-song-pjsk');
+  if (bangVal) bangVal.textContent = [cfg.songBang.x1, cfg.songBang.y1, cfg.songBang.x2, cfg.songBang.y2].join(',');
+  if (pjskVal) pjskVal.textContent = [cfg.songPjsk.x1, cfg.songPjsk.y1, cfg.songPjsk.x2, cfg.songPjsk.y2].join(',');
+  S._lastNavRoiFrameAt = 0;
+  renderROIEditorAllValues();
+  if (S && S._roiEditor && (S._roiEditor.targetKey === 'nav-song-bang' || S._roiEditor.targetKey === 'nav-song-pjsk')) {
+    onROIEditorTargetChanged();
+  }
+}
+
+var ROI_EDITOR_TARGETS = {
+  'auto-bang': { kind: 'auto', mode: 'bang', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
+  'auto-pjsk': { kind: 'auto', mode: 'pjsk', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
+  'nav-song-bang': { kind: 'nav', mode: 'bang', writable: true, defaults: { x1: 23, y1: 46, x2: 47, y2: 50 } },
+  'nav-song-pjsk': { kind: 'nav', mode: 'pjsk', writable: true, defaults: { x1: 59, y1: 46, x2: 85, y2: 52 } },
+  'screen-title-bang': { kind: 'export', writable: false, defaults: { x1: 6, y1: 4, x2: 28, y2: 12 } },
+  'screen-title-pjsk': { kind: 'export', writable: false, defaults: { x1: 6, y1: 4, x2: 28, y2: 12 } },
+  'difficulty-row-bang': { kind: 'export', writable: false, defaults: { x1: 59, y1: 68, x2: 88, y2: 80 } },
+  'difficulty-row-pjsk': { kind: 'export', writable: false, defaults: { x1: 60, y1: 60, x2: 90, y2: 76 } },
+  'kettei-bang': { kind: 'export', writable: false, defaults: { x1: 76, y1: 83, x2: 92, y2: 92 } },
+  'kettei-pjsk': { kind: 'export', writable: false, defaults: { x1: 68, y1: 76, x2: 80, y2: 87 } },
+  'live-start-bang': { kind: 'export', writable: false, defaults: { x1: 72, y1: 72, x2: 89, y2: 94 } },
+  'live-start-pjsk': { kind: 'export', writable: false, defaults: { x1: 72, y1: 71, x2: 76, y2: 81 } },
+  'dialog-title-bang': { kind: 'export', writable: false, defaults: { x1: 33, y1: 12, x2: 47, y2: 20 } },
+  'dialog-title-pjsk': { kind: 'export', writable: false, defaults: { x1: 26, y1: 22, x2: 43, y2: 32 } },
+  'dialog-ok-bang': { kind: 'export', writable: false, defaults: { x1: 50, y1: 76, x2: 66, y2: 87 } },
+  'dialog-ok-pjsk': { kind: 'export', writable: false, defaults: { x1: 50, y1: 69, x2: 66, y2: 81 } },
+  'band-song-info-bang': { kind: 'export', writable: false, defaults: { x1: 24, y1: 60, x2: 80, y2: 88 } },
+  'band-song-info-pjsk': { kind: 'export', writable: false, defaults: { x1: 24, y1: 60, x2: 80, y2: 88 } },
+  'album-cover-pjsk': { kind: 'export', writable: false, defaults: { x1: 5, y1: 43, x2: 53, y2: 96 } },
+};
+
+var ROI_EDITOR_LABELS = {
+  'auto-bang': 'Auto Trigger ROI (Bang)',
+  'auto-pjsk': 'Auto Trigger ROI (PJSK)',
+  'nav-song-bang': 'Nav Song ROI (Bang)',
+  'nav-song-pjsk': 'Nav Song ROI (PJSK)',
+  'screen-title-bang': 'SCREEN_CHECK Title ROI (Bang/export)',
+  'screen-title-pjsk': 'SCREEN_CHECK Title ROI (PJSK/export)',
+  'difficulty-row-bang': 'SONG_DETECT Difficulty ROI (Bang/export)',
+  'difficulty-row-pjsk': 'SONG_DETECT Difficulty ROI (PJSK/export)',
+  'kettei-bang': 'CLICK_KETTEI ROI (Bang/export)',
+  'kettei-pjsk': 'CLICK_KETTEI ROI (PJSK/export)',
+  'live-start-bang': 'BAND_CONFIRM ROI (Bang/export)',
+  'live-start-pjsk': 'BAND_CONFIRM ROI (PJSK/export)',
+  'dialog-title-bang': 'LIVE_SETTING Title ROI (Bang/export)',
+  'dialog-title-pjsk': 'LIVE_SETTING Title ROI (PJSK/export)',
+  'dialog-ok-bang': 'LIVE_SETTING OK ROI (Bang/export)',
+  'dialog-ok-pjsk': 'LIVE_SETTING OK ROI (PJSK/export)',
+  'band-song-info-bang': 'BAND_CONFIRM SongInfo ROI (Bang/export)',
+  'band-song-info-pjsk': 'BAND_CONFIRM SongInfo ROI (PJSK/export)',
+  'album-cover-pjsk': 'WAIT_ALBUM Cover ROI (PJSK/export)'
+};
+
+function normalizeROIInt(roi) {
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  var x1 = clamp(parseInt(roi && roi.x1), 0, 99);
+  var y1 = clamp(parseInt(roi && roi.y1), 0, 99);
+  var x2 = clamp(parseInt(roi && roi.x2), 1, 100);
+  var y2 = clamp(parseInt(roi && roi.y2), 1, 100);
+  if (!isFinite(x1)) x1 = 0;
+  if (!isFinite(y1)) y1 = 0;
+  if (!isFinite(x2)) x2 = 1;
+  if (!isFinite(y2)) y2 = 1;
+  if (x2 <= x1) x2 = Math.min(100, x1 + 1);
+  if (y2 <= y1) y2 = Math.min(100, y1 + 1);
+  return { x1: x1, y1: y1, x2: x2, y2: y2 };
+}
+
+function ensureROIState() {
+  if (!S._roiValues) S._roiValues = {};
+  Object.keys(ROI_EDITOR_TARGETS).forEach(function (key) {
+    var cfg = ROI_EDITOR_TARGETS[key];
+    S._roiValues[key] = normalizeROIInt(S._roiValues[key] || cfg.defaults);
+  });
+  return S._roiValues;
+}
+
+function getStoredROI(key, defaults) {
+  var store = ensureROIState();
+  var roi = store[key] || defaults || { x1: 0, y1: 0, x2: 1, y2: 1 };
+  roi = normalizeROIInt(roi);
+  store[key] = roi;
+  return roi;
+}
+
+function setStoredROI(key, roi) {
+  var store = ensureROIState();
+  var n = normalizeROIInt(roi);
+  store[key] = n;
+  return n;
+}
+
+function getSelectedROITargetKey() {
+  var sel = document.getElementById('roi-target');
+  return sel && ROI_EDITOR_TARGETS[sel.value] ? sel.value : 'auto-bang';
+}
+
+function getROIForTargetKey(key) {
+  var cfg = ROI_EDITOR_TARGETS[key] || ROI_EDITOR_TARGETS['auto-bang'];
+  return getStoredROI(key, cfg.defaults);
+}
+
+function applyROIToTargetKey(key, roi) {
+  var cfg = ROI_EDITOR_TARGETS[key] || ROI_EDITOR_TARGETS['auto-bang'];
+  setStoredROI(key, roi);
+  if (cfg.kind === 'auto') {
+    onAutoTriggerVisionChanged();
+    return true;
+  }
+  if (cfg.kind === 'nav') {
+    S._lastNavRoiFrameAt = 0;
+    onNavOCRChanged();
+    return true;
+  }
+  renderROIEditorAllValues();
+  return false;
+}
+
+function roiEditorSetHint(msg, color) {
+  var el = document.getElementById('roi-editor-hint');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color || 'var(--hint)';
+}
+
+function roiEditorGetImageRect() {
+  var overlay = document.getElementById('roi-editor-overlay');
+  var img = document.getElementById('roi-editor-frame');
+  if (!overlay || !img) return null;
+  var o = overlay.getBoundingClientRect();
+  var i = img.getBoundingClientRect();
+  if (!o.width || !o.height || !i.width || !i.height) return null;
+  var left = i.left - o.left;
+  var top = i.top - o.top;
+  var width = i.width;
+  var height = i.height;
+  if (width <= 0 || height <= 0) return null;
+  return { left: left, top: top, width: width, height: height };
+}
+
+function roiEditorRenderBox(roi) {
+  var box = document.getElementById('roi-editor-box');
+  if (!box) return;
+  if (!roi) {
+    box.style.display = 'none';
+    return;
+  }
+  var r = roiEditorGetImageRect();
+  if (!r) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  box.style.left = (r.left + r.width * roi.x1 / 100) + 'px';
+  box.style.top = (r.top + r.height * roi.y1 / 100) + 'px';
+  box.style.width = (r.width * (roi.x2 - roi.x1) / 100) + 'px';
+  box.style.height = (r.height * (roi.y2 - roi.y1) / 100) + 'px';
+}
+
+function roiEditorRenderValues(roi) {
+  var p = document.getElementById('roi-editor-value-percent');
+  var px = document.getElementById('roi-editor-value-pixel');
+  if (!roi) {
+    if (p) p.textContent = 'x1,y1,x2,y2 = -';
+    if (px) px.textContent = 'px = -';
+    return;
+  }
+  if (p) p.textContent = 'x1,y1,x2,y2 = ' + [roi.x1, roi.y1, roi.x2, roi.y2].join(',');
+  var img = document.getElementById('roi-editor-frame');
+  if (px) {
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      var rx1 = Math.round(img.naturalWidth * roi.x1 / 100);
+      var ry1 = Math.round(img.naturalHeight * roi.y1 / 100);
+      var rx2 = Math.round(img.naturalWidth * roi.x2 / 100);
+      var ry2 = Math.round(img.naturalHeight * roi.y2 / 100);
+      px.textContent = 'px = ' + [rx1, ry1, rx2, ry2].join(',') + ' @ ' + img.naturalWidth + 'x' + img.naturalHeight;
+    } else {
+      px.textContent = 'px = (waiting frame)';
+    }
+  }
+}
+
+function renderROIEditorAllValues() {
+  var out = document.getElementById('roi-editor-all-values');
+  if (!out) return;
+  var lines = Object.keys(ROI_EDITOR_TARGETS).map(function (key) {
+    var roi = getROIForTargetKey(key);
+    var label = ROI_EDITOR_LABELS[key] || key;
+    return label + ': ' + [roi.x1, roi.y1, roi.x2, roi.y2].join(',');
+  });
+  out.textContent = lines.join('\n');
+}
+
+function onROIEditorTargetChanged() {
+  var key = getSelectedROITargetKey();
+  if (!S._roiEditor) S._roiEditor = {};
+  S._roiEditor.targetKey = key;
+  S._roiEditor.roi = getROIForTargetKey(key);
+  roiEditorRenderBox(S._roiEditor.roi);
+  roiEditorRenderValues(S._roiEditor.roi);
+  renderROIEditorAllValues();
+  var cfg = ROI_EDITOR_TARGETS[key];
+  if (cfg && cfg.writable) {
+    roiEditorSetHint('Drag to edit ROI. It writes directly to active ROI config.', 'var(--hint)');
+  } else {
+    roiEditorSetHint('Export-only ROI. Use Copy ROI to share coordinates.', '#f59e0b');
+  }
+}
+
+function roiEditorEventToPercent(e, allowOutside) {
+  var overlay = document.getElementById('roi-editor-overlay');
+  if (!overlay) return null;
+  var overlayRect = overlay.getBoundingClientRect();
+  var imageRect = roiEditorGetImageRect();
+  if (!overlayRect.width || !overlayRect.height || !imageRect) return null;
+  var xPx = e.clientX - overlayRect.left;
+  var yPx = e.clientY - overlayRect.top;
+  var inImage = xPx >= imageRect.left && xPx <= (imageRect.left + imageRect.width) && yPx >= imageRect.top && yPx <= (imageRect.top + imageRect.height);
+  if (!inImage && !allowOutside) return null;
+  xPx = Math.max(imageRect.left, Math.min(imageRect.left + imageRect.width, xPx));
+  yPx = Math.max(imageRect.top, Math.min(imageRect.top + imageRect.height, yPx));
+  var x = (xPx - imageRect.left) * 100 / imageRect.width;
+  var y = (yPx - imageRect.top) * 100 / imageRect.height;
+  x = Math.max(0, Math.min(100, x));
+  y = Math.max(0, Math.min(100, y));
+  return { x: x, y: y };
+}
+
+function onROIEditorMouseDown(e) {
+  if (S.backend !== 'adb') {
+    roiEditorSetHint('ROI box tool requires ADB backend preview.', '#f59e0b');
+    return;
+  }
+  var p = roiEditorEventToPercent(e, false);
+  if (!p) {
+    roiEditorSetHint('Please drag inside the actual image area (black bars are outside ROI space).', '#f59e0b');
+    return;
+  }
+  if (!S._roiEditor) S._roiEditor = {};
+  S._roiEditor.dragging = true;
+  S._roiEditor.start = p;
+  S._roiEditor.roi = normalizeROIInt({ x1: Math.floor(p.x), y1: Math.floor(p.y), x2: Math.ceil(p.x + 1), y2: Math.ceil(p.y + 1) });
+  roiEditorRenderBox(S._roiEditor.roi);
+  roiEditorRenderValues(S._roiEditor.roi);
+  e.preventDefault();
+}
+
+function onROIEditorMouseMove(e) {
+  if (!S._roiEditor || !S._roiEditor.dragging || !S._roiEditor.start) return;
+  var p = roiEditorEventToPercent(e, true);
+  if (!p) return;
+  var s = S._roiEditor.start;
+  var roi = normalizeROIInt({
+    x1: Math.floor(Math.min(s.x, p.x)),
+    y1: Math.floor(Math.min(s.y, p.y)),
+    x2: Math.ceil(Math.max(s.x, p.x)),
+    y2: Math.ceil(Math.max(s.y, p.y)),
+  });
+  S._roiEditor.roi = roi;
+  roiEditorRenderBox(roi);
+  roiEditorRenderValues(roi);
+}
+
+function onROIEditorMouseUp() {
+  if (!S._roiEditor || !S._roiEditor.dragging) return;
+  S._roiEditor.dragging = false;
+  var key = getSelectedROITargetKey();
+  applyROIToTargetKey(key, S._roiEditor.roi || getROIForTargetKey(key));
+  onROIEditorTargetChanged();
+}
+
+function refreshROIEditorFrame() {
+  var img = document.getElementById('roi-editor-frame');
+  if (!img) return;
+  if (S.backend !== 'adb') {
+    roiEditorSetHint('Switch backend to ADB for frame preview.', '#f59e0b');
+    return;
+  }
+  var ts = Date.now();
+  var ds = '';
+  var dsEl = document.getElementById('dev-serial');
+  if (dsEl && dsEl.value) ds = String(dsEl.value).trim();
+  S._lastRoiEditorFrameAt = ts;
+  img.src = '/api/frame.png?t=' + ts + (ds ? ('&serial=' + encodeURIComponent(ds)) : '');
+  roiEditorSetHint('Capturing frame...', 'var(--hint)');
+}
+
+function syncROIEditorStageSize() {
+  var stage = document.getElementById('roi-editor-stage');
+  var img = document.getElementById('roi-editor-frame');
+  if (!stage || !img || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
+  var parent = stage.parentElement;
+  if (!parent) return;
+
+  var ratio = img.naturalWidth / img.naturalHeight;
+  if (!isFinite(ratio) || ratio <= 0) return;
+
+  var parentWidth = parent.clientWidth || stage.clientWidth || 0;
+  if (parentWidth <= 0) return;
+  var maxHeight = Math.max(280, Math.min(900, Math.floor(window.innerHeight * 0.76)));
+
+  var drawWidth = Math.min(parentWidth, Math.floor(maxHeight * ratio));
+  var drawHeight = Math.floor(drawWidth / ratio);
+
+  if (drawHeight > maxHeight) {
+    drawHeight = maxHeight;
+    drawWidth = Math.floor(drawHeight * ratio);
+  }
+  if (drawWidth < 240) drawWidth = Math.min(parentWidth, 240);
+  if (drawHeight < 240) drawHeight = 240;
+
+  stage.style.width = drawWidth + 'px';
+  stage.style.height = drawHeight + 'px';
+  stage.style.marginLeft = 'auto';
+  stage.style.marginRight = 'auto';
+}
+
+function onROIEditorImageLoaded() {
+  syncROIEditorStageSize();
+  if (S._roiEditor && S._roiEditor.roi) {
+    roiEditorRenderBox(S._roiEditor.roi);
+    roiEditorRenderValues(S._roiEditor.roi);
+  }
+  roiEditorSetHint('Frame ready. Drag inside image to select ROI.', 'var(--hint)');
+}
+
+function onROIEditorImageError() {
+  roiEditorSetHint('No frame available. Ensure ADB device is connected, then press Refresh Frame.', '#f59e0b');
+}
+
+function applyROIEditorToInputs() {
+  var key = getSelectedROITargetKey();
+  if (!S._roiEditor || !S._roiEditor.roi) onROIEditorTargetChanged();
+  var applied = applyROIToTargetKey(key, S._roiEditor.roi);
+  var cfg = ROI_EDITOR_TARGETS[key] || {};
+  if (applied) roiEditorSetHint('Applied ROI to ' + key + '.', 'var(--blue)');
+  else roiEditorSetHint('Stored export ROI for ' + key + '. Use Copy ROI to share.', cfg.writable ? 'var(--blue)' : '#f59e0b');
+  onROIEditorTargetChanged();
+}
+
+function copyROIEditorValue() {
+  var roi = (S._roiEditor && S._roiEditor.roi) ? S._roiEditor.roi : getROIForTargetKey(getSelectedROITargetKey());
+  var txt = [roi.x1, roi.y1, roi.x2, roi.y2].join(',');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function () {
+      roiEditorSetHint('Copied ROI: ' + txt, 'var(--blue)');
+    }).catch(function () {
+      roiEditorSetHint('Copy failed. ROI: ' + txt, '#f59e0b');
+    });
+    return;
+  }
+  var ta = document.createElement('textarea');
+  ta.value = txt;
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) { }
+  document.body.removeChild(ta);
+  roiEditorSetHint('Copied ROI: ' + txt, 'var(--blue)');
+}
+
+function initROIEditor() {
+  if (!document.getElementById('roi-target')) return;
+  ensureROIState();
+  if (!S._roiEditor) {
+    S._roiEditor = { dragging: false, start: null, targetKey: 'auto-bang', roi: { x1: 14, y1: 73, x2: 87, y2: 80 } };
+  }
+  if (!S._roiEditorReady) {
+    document.addEventListener('mousemove', onROIEditorMouseMove);
+    document.addEventListener('mouseup', onROIEditorMouseUp);
+    window.addEventListener('resize', function () {
+      syncROIEditorStageSize();
+      if (S._roiEditor && S._roiEditor.roi) {
+        roiEditorRenderBox(S._roiEditor.roi);
+        roiEditorRenderValues(S._roiEditor.roi);
+      }
+    });
+    S._roiEditorReady = true;
+  }
+  onROIEditorTargetChanged();
+}
+
+function onAutoModeChanged() {
+  var chk = document.getElementById('chk-auto-mode');
+  var on = !!(chk && chk.checked);
+  S.autoMode = on;
+
+  // Auto mode owns vision trigger lifecycle: force-enable and lock the toggle.
+  var atChk = document.getElementById('chk-autoFirstTap');
+  if (atChk) {
+    if (on) atChk.checked = true;
+    atChk.disabled = on;
+  }
+
+  var inputIds = ['q', 'song-id', 'chart-path'];
+  inputIds.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.disabled = on; el.style.opacity = on ? '0.35' : ''; }
+  });
+  var scBtn = document.getElementById('sc');
+  if (scBtn) { scBtn.disabled = on; scBtn.style.opacity = on ? '0.35' : ''; }
+
+  var selBar = document.getElementById('sel-bar');
+  if (selBar) { selBar.style.opacity = on ? '0.35' : ''; selBar.style.pointerEvents = on ? 'none' : ''; }
+
+  onAutoTriggerVisionChanged();
 }
 
 function onAutoTriggerVisionChanged() {
@@ -224,12 +623,16 @@ function onAutoTriggerVisionChanged() {
       val.textContent = 'OFF';
       val.style.color = 'var(--hint)';
     } else {
-      val.textContent = cfg.lead + ' ms';
+      val.textContent = cfg.lead + ' ms (poll)';
       val.style.color = 'var(--blue)';
     }
   }
   if (roiBangVal) roiBangVal.textContent = [cfg.roiBang.x1, cfg.roiBang.y1, cfg.roiBang.x2, cfg.roiBang.y2].join(',');
   if (roiPjskVal) roiPjskVal.textContent = [cfg.roiPjsk.x1, cfg.roiPjsk.y1, cfg.roiPjsk.x2, cfg.roiPjsk.y2].join(',');
+  renderROIEditorAllValues();
+  if (S && S._roiEditor && (S._roiEditor.targetKey === 'auto-bang' || S._roiEditor.targetKey === 'auto-pjsk')) {
+    onROIEditorTargetChanged();
+  }
 }
 
 function renderJitter(key) {
@@ -260,7 +663,7 @@ function onJitter(key) { renderJitter(key); }
 function onGreatCountInput() { renderJitter('grCount'); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0 };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0, _lastNavRoiFrameAt: 0, _lastRoiEditorFrameAt: 0, _lastNavLogSig: '', autoMode: false, _roiValues: null, _roiEditorReady: false };
 var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
@@ -270,6 +673,19 @@ var DOT_CLS = { 1: 'ready', 2: 'playing', 3: 'done', 4: 'error' };
 function diffName(i) {
   var dn = S.mode === 'pjsk' ? DN_PJSK : DN_BANG;
   return dn[i] || dn[3];
+}
+
+function diffIndexByName(key) {
+  switch (String(key || '').toLowerCase()) {
+    case 'easy': return 0;
+    case 'normal': return 1;
+    case 'hard': return 2;
+    case 'expert': return 3;
+    case 'special': return 4;
+    case 'master': return 4;
+    case 'append': return 5;
+    default: return -1;
+  }
 }
 
 function diffLabel(i) {
@@ -302,7 +718,10 @@ function nav(id) {
   document.querySelectorAll('.pane').forEach(function (e) { e.classList.remove('active'); });
   document.getElementById('nav-' + id).classList.add('active');
   document.getElementById('pane-' + id).classList.add('active');
-  if (id === 'settings') loadDevices();
+  if (id === 'settings') {
+    loadDevices();
+    onROIEditorTargetChanged();
+  }
 }
 function navToSearch() {
   nav('song');
@@ -349,6 +768,10 @@ function setBackend(b) {
     }
 
   document.getElementById('orient-wrap').style.opacity = b === 'adb' ? '0.4' : '1';
+  if (b !== 'adb') {
+    var img = document.getElementById('roi-editor-frame');
+    if (img) img.removeAttribute('src');
+  }
 }
 function setOrient(o) {
   S.orient = o;
@@ -693,7 +1116,12 @@ function updateUI(d) {
   var btn = document.getElementById('btn-start');
   if (st === 1) { btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('play.start.btn'); }
   else { btn.disabled = true; btn.classList.remove('rdy'); btn.innerHTML = t('play.start.btn'); }
-  if (d.nowPlaying && (d.nowPlaying.songId > 0 || d.nowPlaying.title)) { showNP(d.nowPlaying); updatePlayCard(d.nowPlaying); }
+  if (d.nowPlaying && (d.nowPlaying.songId > 0 || d.nowPlaying.title)) {
+    hydrateNowPlaying(d.nowPlaying, function (npResolved) {
+      showNP(npResolved);
+      updatePlayCard(npResolved);
+    });
+  }
   if (st !== S._lastLogState) {
     S._lastLogState = st;
     if (st === 1) log('play-log', t('log.ready'), 'info');
@@ -716,6 +1144,8 @@ function updateUI(d) {
   var dbgLuma = document.getElementById('dbg-at-luma');
   var dbgDelta = document.getElementById('dbg-at-delta');
   var dbgStable = document.getElementById('dbg-at-stable');
+  var dbgStripe = document.getElementById('dbg-at-stripe');
+  var dbgIngame = document.getElementById('dbg-at-ingame');
   var dbgRoi = document.getElementById('dbg-at-roi');
   var dbgPoll = document.getElementById('dbg-at-poll');
   var dbgMsg = document.getElementById('dbg-at-msg');
@@ -725,12 +1155,52 @@ function updateUI(d) {
   if (dbgLuma) dbgLuma.textContent = typeof dbg.luma === 'number' ? dbg.luma.toFixed(2) : '-';
   if (dbgDelta) dbgDelta.textContent = typeof dbg.delta === 'number' ? dbg.delta.toFixed(2) : '-';
   if (dbgStable) dbgStable.textContent = typeof dbg.stableCount === 'number' ? String(dbg.stableCount) : '-';
+  if (dbgStripe) dbgStripe.textContent = typeof dbg.stripeVar === 'number' ? dbg.stripeVar.toFixed(2) : '-';
+  if (dbgIngame) { dbgIngame.textContent = dbg.inGame ? 'yes' : 'no'; dbgIngame.style.color = dbg.inGame ? 'var(--green, #4ade80)' : 'var(--hint)'; }
+  var dbgSluma = document.getElementById('dbg-at-sluma');
+  var dbgDark = document.getElementById('dbg-at-dark');
+  var dbgNavScene = document.getElementById('dbg-at-navscene');
+  if (dbgSluma) dbgSluma.textContent = typeof dbg.screenLuma === 'number' ? dbg.screenLuma.toFixed(1) : '-';
+  if (dbgDark) { dbgDark.textContent = dbg.hasSeenDark ? 'yes' : 'no'; dbgDark.style.color = dbg.hasSeenDark ? 'var(--green, #4ade80)' : 'var(--hint)'; }
+  if (dbgNavScene) {
+    var navStageText = dbg.navStage || '';
+    var navSceneText = dbg.navScene || '';
+    dbgNavScene.textContent = navStageText && navSceneText ? (navStageText + ' / ' + navSceneText) : (navStageText || navSceneText || '-');
+  }
   if (dbgPoll) dbgPoll.textContent = typeof dbg.pollMs === 'number' && dbg.pollMs > 0 ? (String(dbg.pollMs) + ' ms') : '-';
   if (dbgMsg) dbgMsg.textContent = dbg.message || '-';
   if (dbgRoi) {
     if (dbg.roi && typeof dbg.roi.x1 === 'number') dbgRoi.textContent = [dbg.roi.x1, dbg.roi.y1, dbg.roi.x2, dbg.roi.y2].join(',');
     else dbgRoi.textContent = '-';
   }
+
+  // Bridge backend stage telemetry into the visible play log.
+  if (dbg && dbg.navStage) {
+    var navStage = String(dbg.navStage || '');
+    var navScene = String(dbg.navScene || '');
+    var rawMsg = String(dbg.message || '').trim();
+    var actionText = rawMsg;
+    if (rawMsg.indexOf('\n') >= 0) {
+      var lines = rawMsg.split('\n').map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+      if (lines.length >= 2) actionText = lines[1];
+      else if (lines.length === 1) actionText = lines[0];
+    }
+    var stageIsHighFreq = navStage === 'VISION_TRIGGER' || navStage === 'WAIT_STAGE' || navStage === 'WAIT_ALBUM_DARK';
+    var navSig = navStage + '|' + navScene;
+    if (!stageIsHighFreq) navSig += '|' + actionText;
+    if (navSig !== S._lastNavLogSig) {
+      var line = '[NAV] ' + navStage;
+      if (navScene) line += ' / ' + navScene;
+      if (actionText) line += ' ' + actionText;
+      var lower = actionText.toLowerCase();
+      var logType = 'info';
+      if (dbg.fired || lower.indexOf('triggered') >= 0 || lower.indexOf('detected') >= 0 || lower.indexOf('命中') >= 0 || lower.indexOf('確認') >= 0) logType = 'ok';
+      if (lower.indexOf('timeout') >= 0 || lower.indexOf('failed') >= 0 || lower.indexOf('失敗') >= 0 || lower.indexOf('error') >= 0) logType = 'err';
+      log('play-log', line, logType);
+      S._lastNavLogSig = navSig;
+    }
+  }
+
   if (dbgFired) {
     dbgFired.textContent = dbg.fired ? 'TRIGGERED' : '-';
     dbgFired.style.color = dbg.fired ? 'var(--blue)' : 'var(--hint)';
@@ -741,6 +1211,8 @@ function updateUI(d) {
   var pDbgLuma = document.getElementById('play-dbg-at-luma');
   var pDbgDelta = document.getElementById('play-dbg-at-delta');
   var pDbgStable = document.getElementById('play-dbg-at-stable');
+  var pDbgStripe = document.getElementById('play-dbg-at-stripe');
+  var pDbgIngame = document.getElementById('play-dbg-at-ingame');
   var pDbgRoi = document.getElementById('play-dbg-at-roi');
   var pDbgPoll = document.getElementById('play-dbg-at-poll');
   var pDbgMsg = document.getElementById('play-dbg-at-msg');
@@ -750,6 +1222,18 @@ function updateUI(d) {
   if (pDbgLuma) pDbgLuma.textContent = typeof dbg.luma === 'number' ? dbg.luma.toFixed(2) : '-';
   if (pDbgDelta) pDbgDelta.textContent = typeof dbg.delta === 'number' ? dbg.delta.toFixed(2) : '-';
   if (pDbgStable) pDbgStable.textContent = typeof dbg.stableCount === 'number' ? String(dbg.stableCount) : '-';
+  if (pDbgStripe) pDbgStripe.textContent = typeof dbg.stripeVar === 'number' ? dbg.stripeVar.toFixed(2) : '-';
+  if (pDbgIngame) { pDbgIngame.textContent = dbg.inGame ? 'yes' : 'no'; pDbgIngame.style.color = dbg.inGame ? 'var(--green, #4ade80)' : 'var(--hint)'; }
+  var pDbgSluma = document.getElementById('play-dbg-at-sluma');
+  var pDbgDark = document.getElementById('play-dbg-at-dark');
+  var pDbgNavScene = document.getElementById('play-dbg-at-navscene');
+  if (pDbgSluma) pDbgSluma.textContent = typeof dbg.screenLuma === 'number' ? dbg.screenLuma.toFixed(1) : '-';
+  if (pDbgDark) { pDbgDark.textContent = dbg.hasSeenDark ? 'yes' : 'no'; pDbgDark.style.color = dbg.hasSeenDark ? 'var(--green, #4ade80)' : 'var(--hint)'; }
+  if (pDbgNavScene) {
+    var pNavStageText = dbg.navStage || '';
+    var pNavSceneText = dbg.navScene || '';
+    pDbgNavScene.textContent = pNavStageText && pNavSceneText ? (pNavStageText + ' / ' + pNavSceneText) : (pNavStageText || pNavSceneText || '-');
+  }
   if (pDbgPoll) pDbgPoll.textContent = typeof dbg.pollMs === 'number' && dbg.pollMs > 0 ? (String(dbg.pollMs) + ' ms') : '-';
   if (pDbgMsg) pDbgMsg.textContent = dbg.message || '-';
   if (pDbgRoi) {
@@ -772,6 +1256,19 @@ function updateUI(d) {
       roiImg.removeAttribute('src');
     }
   }
+
+  var navImg = document.getElementById('nav-roi-img');
+  if (navImg) {
+    var nowNavTs = Date.now();
+    if (S.backend === 'adb' && (st === 1 || st === 2) && nowNavTs - S._lastNavRoiFrameAt > 250) {
+      S._lastNavRoiFrameAt = nowNavTs;
+      navImg.src = '/api/nav-roi.png?t=' + nowNavTs;
+    }
+    if (S.backend !== 'adb' || !(st === 1 || st === 2)) {
+      navImg.removeAttribute('src');
+    }
+  }
+
 }
 
 function showNP(np) {
@@ -870,6 +1367,80 @@ function setImageWithFallback(imgEl, urls) {
   tryNext();
 }
 
+function fillNowPlayingFromSongData(np, song, songId, mode, db) {
+  if (!song) return np;
+
+  var sid = parseInt(songId || np.songId || 0) || 0;
+  var m = mode || np.mode || S.mode;
+  var out = Object.assign({}, np);
+
+  if (!out.title) {
+    out.title = pickName(song.musicTitle, m === 'pjsk') || out.title;
+  }
+
+  var diffIdx = diffIndexByName(out.diff);
+  var di = song.difficulty;
+  if ((!out.diffLevel || out.diffLevel <= 0) && diffIdx >= 0 && di && di[diffIdx]) {
+    out.diffLevel = di[diffIdx].playLevel || out.diffLevel;
+  }
+
+  if (!out.jacketUrl) {
+    var ji = song.jacketImage;
+    if (m === 'pjsk') {
+      var raw = song.__raw || {};
+      var bundle = raw.assetbundleName || ('jacket_s_' + String(sid).padStart(3, '0'));
+      out.jacketUrls = [
+        'https://storage.sekai.best/sekai-jp-assets/music/jacket/' + bundle + '/' + bundle + '.png',
+        'https://assets.pjsek.ai/file/pjsekai-assets/startapp/music/jacket/' + bundle + '/' + bundle + '.png'
+      ];
+      out.jacketUrl = out.jacketUrls[0] || '';
+    } else if (ji && ji[0]) {
+      var n = Math.ceil(sid / 10) * 10 || 10;
+      out.jacketUrl = 'https://bestdori.com/assets/jp/musicjacket/musicjacket' + n + '_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket' + n + '-' + ji[0] + '-jacket.png';
+      out.jacketUrls = [out.jacketUrl];
+    }
+  }
+
+  if (!out.artist) {
+    if (m === 'pjsk' && db && db.artists && song.creatorArtistId) {
+      out.artist = db.artists[song.creatorArtistId] || out.artist;
+    }
+    if (!out.artist && db && db.bands && song.bandId) {
+      var band = db.bands[song.bandId];
+      if (band && band.bandName) out.artist = pickName(band.bandName);
+    }
+    if (!out.artist && song.__artist) {
+      out.artist = song.__artist;
+    }
+  }
+
+  return out;
+}
+
+function hydrateNowPlaying(np, cb) {
+  if (!np || typeof cb !== 'function') return;
+  if (!np.songId || np.songId <= 0) {
+    cb(np);
+    return;
+  }
+
+  var needMeta = !np.title || !np.artist || !np.jacketUrl || !np.diffLevel;
+  if (!needMeta) {
+    cb(np);
+    return;
+  }
+
+  loadDB(function (db) {
+    var songs = db && db.songs ? db.songs : null;
+    var song = songs ? songs[np.songId] : null;
+    if (!song) {
+      cb(np);
+      return;
+    }
+    cb(fillNowPlayingFromSongData(np, song, np.songId, np.mode, db));
+  });
+}
+
 // ══ keyboard ═══════════════════════════════════════════════
 document.addEventListener('keydown', function (e) {
   if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
@@ -885,27 +1456,7 @@ document.addEventListener('keydown', function (e) {
 function buildNowPlaying() {
   var np = { songId: S.songId, diff: diffName(S.diff), mode: S.mode, title: '', artist: '', diffLevel: 0, jacketUrl: '', jacketUrls: [] };
   if (S.songData) {
-    np.title = pickName(S.songData.musicTitle, S.mode === 'pjsk') || '';
-    var di = S.songData.difficulty; if (di && di[S.diff]) np.diffLevel = di[S.diff].playLevel || 0;
-    var ji = S.songData.jacketImage;
-    if (S.mode === 'pjsk') {
-      var raw = S.songData.__raw || {};
-      var bundle = raw.assetbundleName || ('jacket_s_' + String(S.songId || 0).padStart(3, '0'));
-      np.jacketUrls = [
-        'https://storage.sekai.best/sekai-jp-assets/music/jacket/' + bundle + '/' + bundle + '.png',
-        'https://assets.pjsek.ai/file/pjsekai-assets/startapp/music/jacket/' + bundle + '/' + bundle + '.png'
-      ];
-      np.jacketUrl = np.jacketUrls[0];
-    } else if (ji && ji[0]) {
-      var n = Math.ceil(S.songId / 10) * 10 || 10;
-      np.jacketUrl = 'https://bestdori.com/assets/jp/musicjacket/musicjacket' + n + '_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket' + n + '-' + ji[0] + '-jacket.png';
-      np.jacketUrls = [np.jacketUrl];
-    }
-    if (S.mode === 'pjsk' && S.db && S.db.artists && S.songData.creatorArtistId) {
-      np.artist = S.db.artists[S.songData.creatorArtistId] || '';
-    }
-    if (S.db && S.db.bands && S.songData.bandId) { var band = S.db.bands[S.songData.bandId]; if (band && band.bandName) np.artist = pickName(band.bandName); }
-    if (!np.artist && S.songData.__artist) np.artist = S.songData.__artist;
+    np = fillNowPlayingFromSongData(np, S.songData, S.songId, S.mode, S.db);
   }
   return np;
 }
@@ -914,7 +1465,7 @@ function submitRun() {
   var sid = parseInt(document.getElementById('song-id').value) || S.songId || 0;
   var cp = document.getElementById('chart-path').value.trim();
   var ds = document.getElementById('dev-serial').value.trim();
-  if (!sid && !cp) { log('song-log', t('log.no.song'), 'err'); return; }
+  if (!S.autoMode && !sid && !cp) { log('song-log', t('log.no.song'), 'err'); return; }
 
   var dsInput = document.getElementById('dev-serial');
 
@@ -967,8 +1518,10 @@ function submitRun() {
   var grOffsetRaw = parseInt(document.getElementById('sld-grOffset').value) || 10;
   var grCountRaw = getGreatCountRaw();
   var autoTrigger = getAutoTriggerVisionConfig();
+  var autoTriggerEnabled = S.autoMode ? true : autoTrigger.enabled;
+  var navOCR = getNavOCRConfig();
   var adv = getAdvancedValues();
-  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTrigger.enabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTriggerEnabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, navSongRoiBang: navOCR.songBang, navSongRoiPjsk: navOCR.songPjsk, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
@@ -1088,6 +1641,9 @@ updateDiffLabels();
 resetAdvanced();
 loadDevices();
 onAutoTriggerVisionChanged();
+onNavOCRChanged();
+onAutoModeChanged();
+initROIEditor();
 
 // ==========================================
 // expose functions to global scope for HTML onclick handlers
@@ -1120,6 +1676,15 @@ Object.assign(window, {
   onJitter,
   onGreatCountInput,
   onAutoTriggerVisionChanged,
+  onNavOCRChanged,
+  onAutoModeChanged,
+  onROIEditorTargetChanged,
+  onROIEditorMouseDown,
+  refreshROIEditorFrame,
+  applyROIEditorToInputs,
+  copyROIEditorValue,
+  onROIEditorImageLoaded,
+  onROIEditorImageError,
   onAdvanced,
   resetAdvanced,
   doExtract,

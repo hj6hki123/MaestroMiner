@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto"
 	"encoding/json"
@@ -14,12 +15,15 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/common"
@@ -62,6 +66,8 @@ const (
 	SERVER_FILE              = "scrcpy-server-v" + SERVER_FILE_VERSION
 	SERVER_FILE_DOWNLOAD_URL = "https://github.com/Genymobile/scrcpy/releases/download/v" + SERVER_FILE_VERSION + "/" + SERVER_FILE
 	SERVER_FILE_SHA256       = "a0f70b20aa4998fbf658c94118cd6c8dab6abbb0647a3bdab344d70bc1ebcbb8"
+	GO_OCR_REPO_URL          = "https://huggingface.co/getcharzp/go-ocr"
+	GO_OCR_REPO_DIR          = "go-ocr"
 )
 
 func isVideoDecodeEnabled() bool {
@@ -77,11 +83,236 @@ func isVideoDecodeEnabled() bool {
 	}
 }
 
+func normalizeSceneText(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+			continue
+		}
+		switch r {
+		case '樂':
+			r = '楽'
+		case '擇':
+			r = '択'
+		case '选':
+			r = '選'
+		}
+		b.WriteRune(r)
+	}
+
+	return b.String()
+}
+
+func normalizeSceneTexts(texts []string) []string {
+	normalized := make([]string, 0, len(texts))
+	for _, raw := range texts {
+		t := normalizeSceneText(raw)
+		if t != "" {
+			normalized = append(normalized, t)
+		}
+	}
+	return normalized
+}
+
+func runeCount(s string) int {
+	return len([]rune(s))
+}
+
+func levenshteinDistance(a, b string) int {
+	ar := []rune(a)
+	br := []rune(b)
+	la := len(ar)
+	lb := len(br)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 0
+			if ar[i-1] != br[j-1] {
+				cost = 1
+			}
+			ins := curr[j-1] + 1
+			del := prev[j] + 1
+			sub := prev[j-1] + cost
+			v := ins
+			if del < v {
+				v = del
+			}
+			if sub < v {
+				v = sub
+			}
+			curr[j] = v
+		}
+		prev, curr = curr, prev
+	}
+
+	return prev[lb]
+}
+
+func similarityScore(a, b string) float64 {
+	a = normalizeSceneText(a)
+	b = normalizeSceneText(b)
+	if a == "" || b == "" {
+		return 0
+	}
+	maxLen := runeCount(a)
+	if lb := runeCount(b); lb > maxLen {
+		maxLen = lb
+	}
+	if maxLen == 0 {
+		return 0
+	}
+	d := levenshteinDistance(a, b)
+	score := 1 - float64(d)/float64(maxLen)
+	if score < 0 {
+		return 0
+	}
+	if score > 1 {
+		return 1
+	}
+	return score
+}
+
+func fuzzyKeywordScore(text, keyword string) float64 {
+	text = normalizeSceneText(text)
+	keyword = normalizeSceneText(keyword)
+	if text == "" || keyword == "" {
+		return 0
+	}
+	if strings.Contains(text, keyword) {
+		return 1
+	}
+
+	best := similarityScore(text, keyword)
+
+	// If OCR returns a shortened fragment (e.g. 曲選 from 楽曲選択),
+	// reward partial coverage without hard-coding specific characters.
+	if strings.Contains(keyword, text) && runeCount(text) >= 2 {
+		ratio := float64(runeCount(text)) / float64(runeCount(keyword))
+		if ratio > best {
+			best = ratio
+		}
+	}
+
+	textRunes := []rune(text)
+	kwLen := runeCount(keyword)
+	if len(textRunes) > 0 && kwLen > 0 {
+		windowMin := kwLen - 2
+		if windowMin < 2 {
+			windowMin = 2
+		}
+		windowMax := kwLen + 2
+		if windowMax > len(textRunes) {
+			windowMax = len(textRunes)
+		}
+		for w := windowMin; w <= windowMax; w++ {
+			for i := 0; i+w <= len(textRunes); i++ {
+				s := string(textRunes[i : i+w])
+				if sc := similarityScore(s, keyword); sc > best {
+					best = sc
+				}
+			}
+		}
+	}
+
+	if best < 0 {
+		return 0
+	}
+	if best > 1 {
+		return 1
+	}
+	return best
+}
+
+func bestKeywordScore(texts []string, keywords []string) float64 {
+	best := 0.0
+	for _, t := range texts {
+		for _, kw := range keywords {
+			if sc := fuzzyKeywordScore(t, kw); sc > best {
+				best = sc
+			}
+		}
+	}
+	return best
+}
+
+func songSelectTitleScore(texts []string) float64 {
+	normalized := normalizeSceneTexts(texts)
+	if len(normalized) == 0 {
+		return 0
+	}
+
+	combined := strings.Join(normalized, "")
+	candidates := make([]string, 0, len(normalized)+1)
+	candidates = append(candidates, normalized...)
+	if combined != "" {
+		candidates = append(candidates, combined)
+	}
+
+	fullTitleScore := bestKeywordScore(candidates, []string{"楽曲選択", "songselect", "selectsong"})
+	songConceptScore := bestKeywordScore(candidates, []string{"楽曲", "song", "music"})
+	selectConceptScore := bestKeywordScore(candidates, []string{"選択", "select", "choice"})
+
+	conceptScore := songConceptScore
+	if selectConceptScore < conceptScore {
+		conceptScore = selectConceptScore
+	}
+	if fullTitleScore > conceptScore {
+		return fullTitleScore
+	}
+	return conceptScore
+}
+
+func isSongSelectTitle(texts []string) bool {
+	return songSelectTitleScore(texts) >= 0.50
+}
+
+func firstNStrings(items []string, n int) []string {
+	if len(items) <= n {
+		return items
+	}
+	return items[:n]
+}
+
+func formatSongDetectCandidates(cands []gui.SongDetectCandidate, n int) string {
+	if len(cands) == 0 || n <= 0 {
+		return ""
+	}
+	if len(cands) > n {
+		cands = cands[:n]
+	}
+	parts := make([]string, 0, len(cands))
+	for _, c := range cands {
+		parts = append(parts, fmt.Sprintf("#%d %s(%d)", c.SongID, c.Title, c.Score))
+	}
+	return strings.Join(parts, " | ")
+}
+
 // ─────────────────────────────────────────────
 // GUI mode main flow
 // ─────────────────────────────────────────────
 func runGUI(conf *config.Config) {
 	srv := gui.NewServer(guiPort, conf)
+	prepareGUIPrerequisites()
+
+	if err := LoadPauseTemplate(); err != nil {
+		log.Warnf("pause template: %v", err)
+	}
 
 	normalizeROI := func(mode string, bang gui.ROI, pjsk gui.ROI) gui.ROI {
 		roi := bang
@@ -127,7 +358,7 @@ func runGUI(conf *config.Config) {
 		return roi
 	}
 
-	autoTriggerByVision := func(ctx context.Context, sc *controllers.ScrcpyController, mode string, roi gui.ROI, pollMs int64) bool {
+	autoTriggerByVision := func(ctx context.Context, sc *controllers.ScrcpyController, mode string, roi gui.ROI, pollMs int64, startHasSeenDark bool) bool {
 		if pollMs < 30 {
 			pollMs = 30
 		}
@@ -136,13 +367,14 @@ func runGUI(conf *config.Config) {
 		}
 
 		srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-			Enabled: true,
-			Mode:    mode,
-			Armed:   true,
-			Fired:   false,
-			PollMs:  pollMs,
-			ROI:     roi,
-			Message: "armed; waiting first-note trigger",
+			Enabled:  true,
+			Mode:     mode,
+			Armed:    true,
+			Fired:    false,
+			PollMs:   pollMs,
+			ROI:      roi,
+			NavStage: "VISION_TRIGGER",
+			Message:  "armed; waiting first-note trigger",
 		})
 
 		sampleLumaBand := func(f controllers.ScrcpyFrame) (float64, float64, float64, float64, bool) {
@@ -218,6 +450,98 @@ func runGUI(conf *config.Config) {
 			return avg, avgTop, avgMid, avgBottom, true
 		}
 
+		// sampleStripeVariance computes the std-dev of per-column luma averages inside the
+		// game's lane area (derived from the judge-line geometry).  A high value means
+		// the lane track structure is visible → we are inside the gameplay HUD.
+		// A low value means we are on a loading screen, album popup, or song-select screen.
+		sampleStripeVariance := func(f controllers.ScrcpyFrame) (float64, bool) {
+			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
+				return 0, false
+			}
+			var lx, rx, jy float64
+			if mode == "pjsk" {
+				lx, rx, jy = stage.PJSKJudgeLinePos(float64(f.Width), float64(f.Height))
+			} else {
+				lx, rx, jy = stage.BanGJudgeLinePos(float64(f.Width), float64(f.Height))
+			}
+			// Sample the middle portion of the track area (above the judge line).
+			x1, x2 := int(lx), int(rx)
+			y1, y2 := int(jy*0.30), int(jy*0.60)
+			if x1 < 0 {
+				x1 = 0
+			}
+			if y1 < 0 {
+				y1 = 0
+			}
+			if x2 > f.Width {
+				x2 = f.Width
+			}
+			if y2 > f.Height {
+				y2 = f.Height
+			}
+			if x2 <= x1 || y2 <= y1 {
+				return 0, false
+			}
+			const numCols = 16
+			colWidth := float64(x2-x1) / numCols
+			if colWidth < 1 {
+				return 0, false
+			}
+			yStep := max(1, (y2-y1)/32)
+			var colSum [numCols]float64
+			var colCnt [numCols]int
+			for y := y1; y < y2; y += yStep {
+				row := y * f.Width
+				for i := 0; i < numCols; i++ {
+					cx1 := x1 + int(float64(i)*colWidth)
+					cx2 := x1 + int(float64(i+1)*colWidth)
+					if cx2 > x2 {
+						cx2 = x2
+					}
+					xStep := max(1, (cx2-cx1)/4)
+					for x := cx1; x < cx2; x += xStep {
+						colSum[i] += float64(f.Plane0[row+x])
+						colCnt[i]++
+					}
+				}
+			}
+			var mean float64
+			var colAvg [numCols]float64
+			for i := range colAvg {
+				if colCnt[i] > 0 {
+					colAvg[i] = colSum[i] / float64(colCnt[i])
+				}
+				mean += colAvg[i]
+			}
+			mean /= numCols
+			var variance float64
+			for _, v := range colAvg {
+				d := v - mean
+				variance += d * d
+			}
+			return math.Sqrt(variance / numCols), true
+		}
+
+		// sampleFrameLuma samples the whole frame at low resolution for overall brightness.
+		// The album loading screen (dark background + centred album art) has very low luma (~35-55),
+		// distinctly darker than the song-select / band-confirm UI screens (~100-150).
+		sampleFrameLuma := func(f controllers.ScrcpyFrame) (float64, bool) {
+			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
+				return 0, false
+			}
+			step := max(1, f.Width*f.Height/1024)
+			var sum int64
+			count := 0
+			for i := 0; i < len(f.Plane0); i += step {
+				sum += int64(f.Plane0[i])
+				count++
+			}
+			if count == 0 {
+				return 0, false
+			}
+			return float64(sum) / float64(count), true
+		}
+
 		ticker := time.NewTicker(time.Duration(pollMs) * time.Millisecond)
 		defer ticker.Stop()
 
@@ -226,6 +550,10 @@ func runGUI(conf *config.Config) {
 		const triggerDiffBase = 1.4
 		const noiseAlpha = 0.18
 		const seqWindow = 550 * time.Millisecond
+		const stripeThreshold = 5.0
+		// Frames with whole-screen luma below this are treated as the dark album loading screen.
+		// Song-select / band-confirm UIs are typically luma 100-150; the loading screen is ~35-55.
+		const albumDarkThreshold = 60.0
 
 		var last, lastTop, lastMid, lastBottom float64
 		hasLast := false
@@ -233,6 +561,13 @@ func runGUI(conf *config.Config) {
 		noiseEMA := 0.6
 		var riseTopAt, riseMidAt time.Time
 		lastDebugAt := time.Time{}
+		lastVisionStage := ""
+		var stripeVar float64
+		var screenLuma float64
+		// Primary gate: only arm after the dark album-loading screen has been seen once.
+		// This prevents false triggers on any pre-game UI screen (song select, band confirm, etc.).
+		hasSeenDark := startHasSeenDark
+		inGame := startHasSeenDark // if nav pipeline already passed dark screen, start armed
 
 		publishDebug := func(v gui.AutoTriggerDebug, force bool) {
 			if !force && !lastDebugAt.IsZero() && time.Since(lastDebugAt) < 120*time.Millisecond {
@@ -241,42 +576,95 @@ func runGUI(conf *config.Config) {
 			lastDebugAt = time.Now()
 			srv.SetAutoTriggerDebug(v)
 		}
+		logVisionStage := func(stageName, action string) {
+			if stageName == "" || stageName == lastVisionStage {
+				return
+			}
+			lastVisionStage = stageName
+			switch stageName {
+			case "WAIT_ALBUM_DARK":
+				action = "→ 監控 frame luma < threshold，等待黑畫面與封面切換"
+			case "WAIT_STAGE":
+				action = "→ WAIT_STAGE (3~4 sec): stripe variance 偵測音軌出現"
+			case "VISION_TRIGGER":
+				action = "→ VISION_TRIGGER: 開始打歌偵測"
+			}
+			log.Infof("[%s] %s", stageName, action)
+		}
 
 		for {
 			select {
 			case <-ctx.Done():
-				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: mode, Armed: false, Fired: false, PollMs: pollMs, ROI: roi, Message: "stopped"})
+				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: mode, Armed: false, Fired: false, PollMs: pollMs, ROI: roi, NavStage: "VISION_TRIGGER", Message: "stopped"})
 				return false
 			case <-ticker.C:
 			}
 
+			stageName := "VISION_TRIGGER"
+			switch {
+			case !hasSeenDark:
+				stageName = "WAIT_ALBUM_DARK"
+			case !inGame:
+				stageName = "WAIT_STAGE"
+			}
+			logVisionStage(stageName, "Vision loop active")
+
 			frame, ok := sc.LatestFrame()
 			if !ok {
 				publishDebug(gui.AutoTriggerDebug{
-					Enabled: true,
-					Mode:    mode,
-					Armed:   true,
-					Fired:   false,
-					PollMs:  pollMs,
-					ROI:     roi,
-					Message: "no decoded frame",
+					Enabled:  true,
+					Mode:     mode,
+					Armed:    true,
+					Fired:    false,
+					PollMs:   pollMs,
+					ROI:      roi,
+					NavStage: stageName,
+					Message:  "VISION_TRIGGER -> no decoded frame",
 				}, false)
 				continue
+			}
+
+			// Sample whole-frame luma first — updates the dark-screen gate.
+			if fl, flOk := sampleFrameLuma(frame); flOk {
+				screenLuma = fl
+				if screenLuma < albumDarkThreshold {
+					hasSeenDark = true
+				}
 			}
 
 			cur, curTop, curMid, curBottom, ok := sampleLumaBand(frame)
 			if !ok {
 				publishDebug(gui.AutoTriggerDebug{
-					Enabled: true,
-					Mode:    mode,
-					Armed:   true,
-					Fired:   false,
-					PollMs:  pollMs,
-					ROI:     roi,
-					Message: "invalid roi on frame",
+					Enabled:     true,
+					Mode:        mode,
+					Armed:       false,
+					Fired:       false,
+					PollMs:      pollMs,
+					ROI:         roi,
+					ScreenLuma:  screenLuma,
+					HasSeenDark: hasSeenDark,
+					NavStage:    stageName,
+					Message:     "VISION_TRIGGER -> invalid roi on frame",
 				}, false)
 				continue
 			}
+
+			// inGame = hasSeenDark (primary gate: album loading screen seen)
+			//        AND stripeVar >= threshold (secondary: lane structure visible in HUD).
+			// hasSeenDark alone prevents the song-select / band-confirm screens from arming
+			// even when the album art on those screens produces a high stripe variance.
+			if sv, svOk := sampleStripeVariance(frame); svOk {
+				stripeVar = sv
+				inGame = hasSeenDark && stripeVar >= stripeThreshold
+			}
+			stageName = "VISION_TRIGGER"
+			switch {
+			case !hasSeenDark:
+				stageName = "WAIT_ALBUM_DARK"
+			case !inGame:
+				stageName = "WAIT_STAGE"
+			}
+			logVisionStage(stageName, "Gate status updated")
 
 			delta := 0.0
 			dTop, dMid, dBottom := 0.0, 0.0, 0.0
@@ -297,56 +685,83 @@ func runGUI(conf *config.Config) {
 				triggerDiff := max(triggerDiffBase, noiseEMA*3.2)
 				riseDiff := max(0.9, noiseEMA*2.2)
 
-				nowT := time.Now()
-				if dTop >= riseDiff {
-					riseTopAt = nowT
-				}
-				if dMid >= riseDiff && !riseTopAt.IsZero() && nowT.Sub(riseTopAt) <= seqWindow {
-					riseMidAt = nowT
-				}
-				flowTriggered := dBottom >= riseDiff && !riseMidAt.IsZero() && nowT.Sub(riseMidAt) <= seqWindow
-
-				if absDelta <= stableBand {
-					stableCount++
+				if !inGame {
+					// Gates not met: hard-reset stability counters.
+					stableCount = 0
+					riseTopAt = time.Time{}
+					riseMidAt = time.Time{}
 				} else {
-					if flowTriggered || (stableCount >= stableNeed && delta >= triggerDiff) {
-						reason := "luma"
-						if flowTriggered {
-							reason = "flow"
-						}
-						publishDebug(gui.AutoTriggerDebug{
-							Enabled:     true,
-							Mode:        mode,
-							Armed:       true,
-							Fired:       true,
-							PollMs:      pollMs,
-							Luma:        cur,
-							Delta:       delta,
-							StableCount: stableCount,
-							ROI:         roi,
-							Message:     fmt.Sprintf("triggered[%s] (thr=%.2f rise=%.2f noise=%.2f)", reason, triggerDiff, riseDiff, noiseEMA),
-						}, true)
-						log.Debugf("Vision auto trigger fired: reason=%s pollMs=%d stable=%d delta=%.2f dTop=%.2f dMid=%.2f dBottom=%.2f triggerThr=%.2f riseThr=%.2f noise=%.2f", reason, pollMs, stableCount, delta, dTop, dMid, dBottom, triggerDiff, riseDiff, noiseEMA)
-						return true
+					nowT := time.Now()
+					if dTop >= riseDiff {
+						riseTopAt = nowT
 					}
-					// Soften reset on noisy devices.
-					if stableCount > 0 {
-						stableCount--
+					if dMid >= riseDiff && !riseTopAt.IsZero() && nowT.Sub(riseTopAt) <= seqWindow {
+						riseMidAt = nowT
+					}
+					flowTriggered := dBottom >= riseDiff && !riseMidAt.IsZero() && nowT.Sub(riseMidAt) <= seqWindow
+
+					if absDelta <= stableBand {
+						stableCount++
+					} else {
+						if flowTriggered || (stableCount >= stableNeed && delta >= triggerDiff) {
+							reason := "luma"
+							if flowTriggered {
+								reason = "flow"
+							}
+							publishDebug(gui.AutoTriggerDebug{
+								Enabled:     true,
+								Mode:        mode,
+								Armed:       true,
+								Fired:       true,
+								PollMs:      pollMs,
+								Luma:        cur,
+								Delta:       delta,
+								StableCount: stableCount,
+								ROI:         roi,
+								StripeVar:   stripeVar,
+								InGame:      inGame,
+								ScreenLuma:  screenLuma,
+								HasSeenDark: hasSeenDark,
+								NavStage:    "VISION_TRIGGER",
+								Message:     fmt.Sprintf("VISION_TRIGGER -> triggered[%s] thr=%.2f rise=%.2f noise=%.2f stripe=%.2f luma=%.1f", reason, triggerDiff, riseDiff, noiseEMA, stripeVar, screenLuma),
+							}, true)
+							log.Debugf("Vision trigger fired: reason=%s stable=%d delta=%.2f stripe=%.2f screenLuma=%.1f dark=%v", reason, stableCount, delta, stripeVar, screenLuma, hasSeenDark)
+							return true
+						}
+						// Soften reset on noisy devices.
+						if stableCount > 0 {
+							stableCount--
+						}
 					}
 				}
 			}
 
+			armed := inGame && stableCount >= stableNeed
+			var stateMsg string
+			switch {
+			case !hasSeenDark:
+				stateMsg = fmt.Sprintf("WAIT_ALBUM_DARK -> monitor frame luma (%.1f > %.0f)", screenLuma, albumDarkThreshold)
+			case !inGame:
+				stateMsg = fmt.Sprintf("WAIT_STAGE (3~4 sec) -> waiting stripe variance (%.2f < %.2f), luma=%.1f", stripeVar, stripeThreshold, screenLuma)
+			default:
+				stateMsg = fmt.Sprintf("VISION_TRIGGER -> HUD ready stripe=%.2f noise=%.2f d=%.2f/%.2f/%.2f", stripeVar, noiseEMA, dTop, dMid, dBottom)
+			}
 			publishDebug(gui.AutoTriggerDebug{
 				Enabled:     true,
 				Mode:        mode,
-				Armed:       stableCount >= stableNeed,
+				Armed:       armed,
 				Fired:       false,
 				PollMs:      pollMs,
 				Luma:        cur,
 				Delta:       delta,
 				StableCount: stableCount,
 				ROI:         roi,
-				Message:     fmt.Sprintf("watching (noise=%.2f d=%.2f/%.2f/%.2f)", noiseEMA, dTop, dMid, dBottom),
+				StripeVar:   stripeVar,
+				InGame:      inGame,
+				ScreenLuma:  screenLuma,
+				HasSeenDark: hasSeenDark,
+				NavStage:    stageName,
+				Message:     stateMsg,
 			}, false)
 
 			last = cur
@@ -355,6 +770,415 @@ func runGUI(conf *config.Config) {
 			lastBottom = curBottom
 			hasLast = true
 		}
+	}
+
+	// bangNavPipeline drives pre-game navigation using ROI-center taps and
+	// luma-based screen detection. No OCR required.
+	bangNavPipeline := func(ctx context.Context, device *adb.Device, sc *controllers.ScrcpyController, _ /*expectedSongTitle*/, targetDiff string) bool {
+		const (
+			stageWaitReady        = "WAIT_READY"
+			stageClickDifficulty  = "CLICK_DIFFICULTY"
+			stageClickKettei      = "CLICK_KETTEI"
+			stageBandConfirm      = "BAND_CONFIRM"
+			stageLiveSettingCheck = "LIVE_SETTING_CHECK"
+			stageWaitAlbumDark    = "WAIT_ALBUM_DARK"
+			preStartActionDelay   = 2 * time.Second
+		)
+
+		sampleFrameLuma := func(f controllers.ScrcpyFrame) float64 {
+			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
+				return 0
+			}
+			step := max(1, f.Width*f.Height/1024)
+			var sum int64
+			count := 0
+			for i := 0; i < len(f.Plane0); i += step {
+				sum += int64(f.Plane0[i])
+				count++
+			}
+			if count == 0 {
+				return 0
+			}
+			return float64(sum) / float64(count)
+		}
+
+		tapAt := func(x, y int) {
+			device.RawSh("input", "tap", strconv.Itoa(x), strconv.Itoa(y)) //nolint
+			log.Infof("[NAV_ACTION] tap (%d,%d)", x, y)
+		}
+
+		lastUIKey := ""
+		lastUILogAt := time.Time{}
+		lastLogStage := ""
+		emitStage := func(stageName, sceneName, action string, screenLuma float64, hasSeenDark bool, force bool) {
+			msg := fmt.Sprintf("%s\n  %s", stageName, action)
+			uiKey := fmt.Sprintf("%s|%s|%s", stageName, sceneName, action)
+			if force || uiKey != lastUIKey || time.Since(lastUILogAt) >= 700*time.Millisecond {
+				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+					Enabled:     true,
+					Mode:        "bang",
+					NavStage:    stageName,
+					NavScene:    sceneName,
+					ScreenLuma:  screenLuma,
+					HasSeenDark: hasSeenDark,
+					Message:     msg,
+				})
+				lastUIKey = uiKey
+				lastUILogAt = time.Now()
+			}
+			if force || stageName != lastLogStage {
+				log.Infof("[NAV] %s", action)
+				lastLogStage = stageName
+			} else {
+				log.Debugf("[NAV] %s", action)
+			}
+		}
+
+		stageName := stageWaitReady
+		stageEnteredAt := time.Now()
+		setStage := func(next string) {
+			if stageName == next {
+				return
+			}
+			stageName = next
+			stageEnteredAt = time.Now()
+		}
+
+		hasSeenDark := false
+		lastTapAt := time.Time{}
+		const pauseNccThreshold = 0.40
+		const maxIter = 180
+
+		for i := 0; i < maxIter; i++ {
+			select {
+			case <-ctx.Done():
+				return false
+			default:
+			}
+
+			frame, ok := sc.LatestFrame()
+			if !ok || frame.Width == 0 || len(frame.Plane0) < frame.Width*frame.Height {
+				emitStage(stageName, "", "→ waiting decoded frame", 0, hasSeenDark, false)
+				time.Sleep(220 * time.Millisecond)
+				continue
+			}
+
+			screenLuma := sampleFrameLuma(frame)
+
+			switch stageName {
+			case stageWaitReady:
+				// Wait 1.5 s to let 楽曲選択 fully render, then start navigating.
+				emitStage(stageWaitReady, "楽曲選択", "→ 等待畫面就緒", screenLuma, hasSeenDark, false)
+				if time.Since(stageEnteredAt) >= 1500*time.Millisecond {
+					setStage(stageClickDifficulty)
+				}
+
+			case stageClickDifficulty:
+				if targetDiff == "" {
+					setStage(stageClickKettei)
+					continue
+				}
+
+				x, y, found := difficultyTapPointPx(frame, "bang", targetDiff)
+				if !found {
+					log.Warnf("[NAV] unknown difficulty: %s", targetDiff)
+					setStage(stageClickKettei)
+					continue
+				}
+
+				if lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay {
+					emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, hasSeenDark, true)
+					tapAt(x, y)
+					lastTapAt = time.Now()
+					time.Sleep(preStartActionDelay)
+					setStage(stageClickKettei)
+					continue
+				}
+
+				emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 等待點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, hasSeenDark, false)
+				continue
+
+			case stageClickKettei:
+				x, y, found := roiCenterPx(frame, roiKettei)
+				if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
+					emitStage(stageClickKettei, "楽曲選択", "→ 點擊 決定", screenLuma, hasSeenDark, true)
+					tapAt(x, y)
+					lastTapAt = time.Now()
+					setStage(stageBandConfirm)
+					time.Sleep(preStartActionDelay)
+				}
+
+			case stageBandConfirm:
+				if detectDialogByLuma(frame) {
+					emitStage(stageBandConfirm, "ライブ設定", "→ dialog 出現，跳至 LIVE_SETTING_CHECK", screenLuma, hasSeenDark, true)
+					setStage(stageLiveSettingCheck)
+					continue
+				}
+				// Wait 2 s for バンド確認 to load before tapping ライブスタート.
+				emitStage(stageBandConfirm, "バンド確認", fmt.Sprintf("→ 等待 バンド確認 (%.0fms)", time.Since(stageEnteredAt).Seconds()*1000), screenLuma, hasSeenDark, false)
+				if time.Since(stageEnteredAt) >= 2000*time.Millisecond {
+					x, y, found := roiCenterPx(frame, roiLiveStart)
+					if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
+						emitStage(stageBandConfirm, "バンド確認", "→ 點擊 ライブスタート", screenLuma, hasSeenDark, true)
+						tapAt(x, y)
+						lastTapAt = time.Now()
+						setStage(stageLiveSettingCheck)
+						time.Sleep(preStartActionDelay)
+					}
+				}
+
+			case stageLiveSettingCheck:
+				if time.Since(stageEnteredAt) < preStartActionDelay {
+					time.Sleep(120 * time.Millisecond)
+					continue
+				}
+				if detectDialogByLuma(frame) {
+					emitStage(stageLiveSettingCheck, "ライブ設定", "→ dialog 出現，點擊 OK", screenLuma, hasSeenDark, true)
+					x, y, found := roiCenterPx(frame, roiDialogOK)
+					if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
+						tapAt(x, y)
+						lastTapAt = time.Now()
+						time.Sleep(preStartActionDelay)
+					}
+				} else {
+					emitStage(stageLiveSettingCheck, "loading", "→ 無 dialog，繼續等待讀取", screenLuma, hasSeenDark, false)
+				}
+				setStage(stageWaitAlbumDark)
+				continue
+
+			case stageWaitAlbumDark:
+				ncc, loaded := MatchPauseButton(frame, roiPauseButton)
+				if !loaded {
+					emitStage(stageWaitAlbumDark, "loading", "→ 暫停鍵範本未載入，請設定 SSM_PAUSE_TEMPLATE", screenLuma, hasSeenDark, false)
+				} else {
+					emitStage(stageWaitAlbumDark, "loading", fmt.Sprintf("→ 等待暫停鍵出現 (ncc=%.3f)", ncc), screenLuma, hasSeenDark, false)
+					if ncc >= pauseNccThreshold {
+						emitStage(stageWaitAlbumDark, "in-game", fmt.Sprintf("→ 暫停鍵已偵測 (ncc=%.3f)，等待 4 秒後開始", ncc), screenLuma, hasSeenDark, true)
+						time.Sleep(4 * time.Second)
+						return true
+					}
+				}
+			}
+
+			time.Sleep(240 * time.Millisecond)
+		}
+
+		emitStage(stageWaitAlbumDark, "timeout", "→ navigation timed out", 0, hasSeenDark, true)
+		return false
+	}
+
+	// pjskNavPipeline drives pre-game navigation for Project Sekai using ROI-center
+	// taps and luma-based screen detection. No OCR required.
+	pjskNavPipeline := func(ctx context.Context, device *adb.Device, sc *controllers.ScrcpyController, _ /*expectedSongTitle*/, targetDiff string) bool {
+		const (
+			stageWaitReady          = "WAIT_READY"
+			stageClickDifficulty    = "CLICK_DIFFICULTY"
+			stageFlipDifficultyPage = "FLIP_DIFFICULTY_PAGE"
+			stageClickKettei        = "CLICK_KETTEI"
+			stageBandConfirm        = "BAND_CONFIRM"
+			stageLiveSettingCheck   = "LIVE_SETTING_CHECK"
+			stageWaitAlbumDark      = "WAIT_ALBUM_DARK"
+			preStartActionDelay     = 2 * time.Second
+		)
+
+		sampleFrameLuma := func(f controllers.ScrcpyFrame) float64 {
+			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
+				return 0
+			}
+			step := max(1, f.Width*f.Height/1024)
+			var sum int64
+			count := 0
+			for i := 0; i < len(f.Plane0); i += step {
+				sum += int64(f.Plane0[i])
+				count++
+			}
+			if count == 0 {
+				return 0
+			}
+			return float64(sum) / float64(count)
+		}
+
+		tapAt := func(x, y int) {
+			device.RawSh("input", "tap", strconv.Itoa(x), strconv.Itoa(y)) //nolint
+			log.Infof("[PJSK_NAV] tap (%d,%d)", x, y)
+		}
+
+		lastUIKey := ""
+		lastUILogAt := time.Time{}
+		lastLogStage := ""
+		emitStage := func(stageName, sceneName, action string, screenLuma float64, stageGate bool, force bool) {
+			msg := fmt.Sprintf("%s\n  %s", stageName, action)
+			uiKey := fmt.Sprintf("%s|%s|%s", stageName, sceneName, action)
+			if force || uiKey != lastUIKey || time.Since(lastUILogAt) >= 700*time.Millisecond {
+				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+					Enabled:     true,
+					Mode:        "pjsk",
+					NavStage:    stageName,
+					NavScene:    sceneName,
+					ScreenLuma:  screenLuma,
+					HasSeenDark: stageGate,
+					Message:     msg,
+				})
+				lastUIKey = uiKey
+				lastUILogAt = time.Now()
+			}
+			if force || stageName != lastLogStage {
+				log.Infof("[PJSK_NAV] %s", action)
+				lastLogStage = stageName
+			} else {
+				log.Debugf("[PJSK_NAV] %s", action)
+			}
+		}
+
+		stageName := stageWaitReady
+		stageEnteredAt := time.Now()
+		setStage := func(next string) {
+			if stageName == next {
+				return
+			}
+			stageName = next
+			stageEnteredAt = time.Now()
+		}
+
+		seenWhiteLoading := false
+		lastTapAt := time.Time{}
+		const pauseNccThreshold = 0.40
+		const maxIter = 220
+
+		for i := 0; i < maxIter; i++ {
+			select {
+			case <-ctx.Done():
+				return false
+			default:
+			}
+
+			frame, ok := sc.LatestFrame()
+			if !ok || frame.Width == 0 || len(frame.Plane0) < frame.Width*frame.Height {
+				emitStage(stageName, "", "→ waiting decoded frame", 0, seenWhiteLoading, false)
+				time.Sleep(220 * time.Millisecond)
+				continue
+			}
+
+			screenLuma := sampleFrameLuma(frame)
+
+			switch stageName {
+			case stageWaitReady:
+				emitStage(stageWaitReady, "楽曲選択", "→ 等待畫面就緒", screenLuma, seenWhiteLoading, false)
+				if time.Since(stageEnteredAt) >= 1500*time.Millisecond {
+					setStage(stageClickDifficulty)
+				}
+
+			case stageClickDifficulty:
+				if targetDiff == "" {
+					setStage(stageClickKettei)
+					continue
+				}
+				if targetDiff == "append" {
+					setStage(stageFlipDifficultyPage)
+					continue
+				}
+
+				x, y, found := difficultyTapPointPx(frame, "pjsk", targetDiff)
+				if !found {
+					log.Warnf("[PJSK_NAV] unknown difficulty: %s", targetDiff)
+					setStage(stageClickKettei)
+					continue
+				}
+
+				if lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay {
+					emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, seenWhiteLoading, true)
+					tapAt(x, y)
+					lastTapAt = time.Now()
+					time.Sleep(preStartActionDelay)
+					setStage(stageClickKettei)
+					continue
+				}
+
+				emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 等待點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, seenWhiteLoading, false)
+				continue
+
+			case stageFlipDifficultyPage:
+				if lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay {
+					onPage1 := pjskIsOnDifficultyPage1ByOCR(device)
+					if onPage1 {
+						ax, ay, ok := pjskDifficultyPageArrowPx(frame)
+						if ok {
+							emitStage(stageFlipDifficultyPage, "楽曲選択", "→ 翻頁至 APPEND 頁", screenLuma, seenWhiteLoading, true)
+							tapAt(ax, ay)
+							lastTapAt = time.Now()
+							time.Sleep(preStartActionDelay)
+						}
+					}
+					ax, ay, _ := difficultyTapPointPx(frame, "pjsk", "append")
+					emitStage(stageFlipDifficultyPage, "楽曲選択", "→ 點擊 APPEND", screenLuma, seenWhiteLoading, true)
+					tapAt(ax, ay)
+					lastTapAt = time.Now()
+					time.Sleep(preStartActionDelay)
+					setStage(stageClickKettei)
+					continue
+				}
+
+				emitStage(stageFlipDifficultyPage, "楽曲選択", "→ 等待點擊 APPEND", screenLuma, seenWhiteLoading, false)
+				continue
+
+			case stageClickKettei:
+				x, y, found := roiCenterPx(frame, roiKettei)
+				if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
+					emitStage(stageClickKettei, "楽曲選択", "→ 點擊 決定", screenLuma, seenWhiteLoading, true)
+					tapAt(x, y)
+					lastTapAt = time.Now()
+					setStage(stageBandConfirm)
+					time.Sleep(preStartActionDelay)
+				}
+
+			case stageBandConfirm:
+				x, y, ok := roiCenterPx(frame, roiBandConfirmTap)
+				if ok && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
+					emitStage(stageBandConfirm, "バンド確認", "→ 點擊確認按鈕", screenLuma, seenWhiteLoading, true)
+					tapAt(x, y)
+					lastTapAt = time.Now()
+					setStage(stageLiveSettingCheck)
+					time.Sleep(preStartActionDelay)
+				}
+
+			case stageLiveSettingCheck:
+				if time.Since(stageEnteredAt) < preStartActionDelay {
+					time.Sleep(120 * time.Millisecond)
+					continue
+				}
+				if detectDialogByLuma(frame) {
+					emitStage(stageLiveSettingCheck, "dialog", "→ dialog 出現，點擊確認", screenLuma, seenWhiteLoading, true)
+					x, y, found := roiCenterPx(frame, roiDialogOK)
+					if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
+						tapAt(x, y)
+						lastTapAt = time.Now()
+						time.Sleep(preStartActionDelay)
+					}
+				} else {
+					emitStage(stageLiveSettingCheck, "loading", "→ 無 dialog，繼續等待", screenLuma, seenWhiteLoading, false)
+				}
+				setStage(stageWaitAlbumDark)
+				continue
+
+			case stageWaitAlbumDark:
+				ncc, loaded := MatchPauseButton(frame, roiPauseButton)
+				if !loaded {
+					emitStage(stageWaitAlbumDark, "loading", "→ 暫停鍵範本未載入，請設定 SSM_PAUSE_TEMPLATE", screenLuma, seenWhiteLoading, false)
+				} else {
+					emitStage(stageWaitAlbumDark, "loading", fmt.Sprintf("→ 等待暫停鍵出現 (ncc=%.3f)", ncc), screenLuma, seenWhiteLoading, false)
+					if ncc >= pauseNccThreshold {
+						emitStage(stageWaitAlbumDark, "in-game", fmt.Sprintf("→ 暫停鍵已偵測 (ncc=%.3f)，等待 4 秒後開始", ncc), screenLuma, seenWhiteLoading, true)
+						time.Sleep(4 * time.Second)
+						return true
+					}
+				}
+			}
+
+			time.Sleep(240 * time.Millisecond)
+		}
+
+		emitStage(stageWaitAlbumDark, "timeout", "→ navigation timed out", 0, seenWhiteLoading, true)
+		return false
 	}
 
 	// Ensure only one playback goroutine runs at a time.
@@ -394,6 +1218,205 @@ func runGUI(conf *config.Config) {
 			chartPath = req.ChartPath
 			deviceSerial = req.DeviceSerial
 			pjskMode = req.Mode == "pjsk"
+			applyNavSongNameROI(req.Mode, req.NavSongROIBang, req.NavSongROIPjsk)
+			detectedSongTitle := ""
+
+			var ctrl controllers.Controller
+			var events []common.ViscousEventItem
+			var adbDevice *adb.Device
+			var scrcpyCtrl *controllers.ScrcpyController
+			var hidCtrl *controllers.HIDController
+			var deviceCfg *config.DeviceConfig
+
+			switch backend {
+			case "adb":
+				ok, err := hasValidScrcpyServer()
+				if err != nil {
+					srv.SetError("Failed to verify scrcpy-server: " + err.Error())
+					return
+				}
+				if !ok {
+					srv.SetError("scrcpy-server is not ready. Restart SSM GUI and approve the download prompt, or place the server file manually.")
+					return
+				}
+				if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
+					srv.SetError("Failed to start ADB server: " + err.Error())
+					return
+				}
+				client := adb.NewDefaultClient()
+				devices, err := client.Devices()
+				if err != nil || len(devices) == 0 {
+					srv.SetError("No ADB devices found. Please make sure the device is connected.")
+					return
+				}
+				if deviceSerial == "" {
+					adbDevice = adb.FirstAuthorizedDevice(devices)
+				} else {
+					for _, d := range devices {
+						if d.Serial() == deviceSerial {
+							adbDevice = d
+							break
+						}
+					}
+				}
+				if adbDevice == nil {
+					srv.SetError("No authorized ADB device found.")
+					return
+				}
+				scrcpyCtrl = controllers.NewScrcpyController(adbDevice)
+				if err := scrcpyCtrl.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
+					srv.SetError("Failed to connect to device: " + err.Error())
+					return
+				}
+				defer scrcpyCtrl.Close()
+				deviceCfg = conf.Get(adbDevice.Serial())
+				if deviceCfg == nil {
+					srv.SetError(fmt.Sprintf("Device [%s] not configured. Please add it in Settings first.", adbDevice.Serial()))
+					return
+				}
+				ctrl = scrcpyCtrl
+
+			default: // hid
+				if deviceSerial == "" {
+					serials := controllers.FindHIDDevices()
+					if len(serials) == 0 {
+						srv.SetError("No HID devices found. Please make sure USB is connected.")
+						return
+					}
+					deviceSerial = serials[0]
+				}
+				deviceCfg = conf.Get(deviceSerial)
+				hidCtrl = controllers.NewHIDController(deviceCfg)
+				if err := hidCtrl.Open(); err != nil {
+					srv.SetError("Failed to initialize HID: " + err.Error())
+					return
+				}
+				defer hidCtrl.Close()
+				ctrl = hidCtrl
+			}
+
+			if req.AutoDetectSong && chartPath == "" && songID <= 0 {
+				if adbDevice == nil {
+					srv.SetError("Auto song detection requires ADB backend.")
+					return
+				}
+				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+					Enabled: true, Mode: req.Mode,
+					NavStage: "SCREEN_CHECK", NavScene: "screen-check",
+					Message: "SCREEN_CHECK\n  → OCR 左上標題 ROI，確認楽曲選択",
+				})
+				pngData, scErr := adbDevice.ScreencapPNGBytes()
+				if scErr != nil {
+					srv.SetError("screencap failed: " + scErr.Error())
+					return
+				}
+				var texts []string
+				detectedID, detectedTitle := 0, ""
+
+				ocrC, ocrErr := getOCRClient()
+				if ocrErr != nil {
+					log.Warnf("GoOCR unavailable: %v", ocrErr)
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+						Enabled: true, Mode: req.Mode,
+						NavStage: "SONG_DETECT", NavScene: "song-detecting",
+						Message: "SONG_DETECT\n  → GoOCR unavailable",
+					})
+					srv.SetError("Auto song detect failed: GoOCR unavailable: " + ocrErr.Error())
+					return
+				}
+
+				titleROI := [4]float64{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2}
+				titleTexts, ocrErr := ocrC.OCR(pngData, &titleROI)
+				if ocrErr != nil {
+					log.Warnf("SCREEN_CHECK failed: %v", ocrErr)
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+						Enabled: true, Mode: req.Mode,
+						NavStage: "SCREEN_CHECK", NavScene: "screen-check",
+						Message: "SCREEN_CHECK\n  → GoOCR failed",
+					})
+					srv.SetError("Auto song detect failed at SCREEN_CHECK: GoOCR failed: " + ocrErr.Error())
+					return
+				}
+				titleScore := songSelectTitleScore(titleTexts)
+				log.Infof("SCREEN_CHECK title OCR texts: %v", titleTexts)
+				log.Infof("SCREEN_CHECK title OCR normalized: %v", normalizeSceneTexts(titleTexts))
+				log.Infof("SCREEN_CHECK title score: %.2f", titleScore)
+				if !isSongSelectTitle(titleTexts) {
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+						Enabled: true, Mode: req.Mode,
+						NavStage: "SCREEN_CHECK", NavScene: "screen-check",
+						Message: "SCREEN_CHECK\n  → not on 楽曲選択",
+					})
+					srv.SetError(fmt.Sprintf("Auto song detect aborted: not on 楽曲選択 screen (score=%.2f, title OCR=%v). If needed, adjust SCREEN_CHECK title ROI in ROI Box Tool.", titleScore, titleTexts))
+					return
+				}
+
+				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+					Enabled: true, Mode: req.Mode,
+					NavStage: "SONG_DETECT", NavScene: "song-detecting",
+					Message: "SONG_DETECT\n  → OCR 歌名 ROI (ROI-only)",
+				})
+
+				roi := [4]float64{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2}
+				texts, ocrErr = ocrC.OCR(pngData, &roi)
+				if ocrErr != nil {
+					log.Warnf("GoOCR failed: %v", ocrErr)
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+						Enabled: true, Mode: req.Mode,
+						NavStage: "SONG_DETECT", NavScene: "song-detecting",
+						Message: "SONG_DETECT\n  → GoOCR failed",
+					})
+					srv.SetError("Auto song detect failed: GoOCR failed: " + ocrErr.Error())
+					return
+				}
+
+				log.Infof("AutoDetectSong GoOCR texts: %v", texts)
+				oCRPreview := firstNStrings(texts, 8)
+				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+					Enabled: true, Mode: req.Mode,
+					NavStage: "SONG_DETECT", NavScene: "song-detecting",
+					Message: fmt.Sprintf("SONG_DETECT\n  → OCR texts: %v", oCRPreview),
+				})
+
+				id, title, score, sourceText, topCandidates, ok := gui.DetectSongByTextsDetailed(texts, req.Mode)
+				topSummary := formatSongDetectCandidates(topCandidates, 3)
+				if topSummary != "" {
+					log.Infof("AutoDetectSong top candidates: %s", topSummary)
+				}
+				if ok {
+					detectedID, detectedTitle = id, title
+					log.Infof("AutoDetectSong best OCR hit: source=%q score=%d", sourceText, score)
+					msg := fmt.Sprintf("SONG_DETECT\n  → GoOCR(score=%d) 命中: #%d %s", score, detectedID, detectedTitle)
+					if sourceText != "" {
+						msg = fmt.Sprintf("%s\n  → source: %q", msg, sourceText)
+					}
+					if topSummary != "" {
+						msg = fmt.Sprintf("%s\n  → top: %s", msg, topSummary)
+					}
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+						Enabled: true, Mode: req.Mode,
+						NavStage: "SONG_DETECT", NavScene: "song-detected",
+						Message: msg,
+					})
+				}
+
+				if detectedID <= 0 {
+					errMsg := fmt.Sprintf("Auto song detect failed (GoOCR texts: %v", texts)
+					if score > 0 {
+						errMsg = fmt.Sprintf("%s, bestScore=%d", errMsg, score)
+					}
+					if topSummary != "" {
+						errMsg = fmt.Sprintf("%s, top=%s", errMsg, topSummary)
+					}
+					errMsg = fmt.Sprintf("%s). Keep the song selected on 楽曲選択 and retry, or set Song ID manually.", errMsg)
+					srv.SetError(errMsg)
+					return
+				}
+				songID = detectedID
+				req.SongID = detectedID
+				detectedSongTitle = detectedTitle
+				log.Infof("AutoDetectSong: detected songID=%d title=%q via=GoOCR", detectedID, detectedTitle)
+			}
 
 			var chartText []byte
 			var err error
@@ -484,79 +1507,23 @@ func runGUI(conf *config.Config) {
 			rawEvents, greatApplied := scores.GenerateTouchEvent(genConfig, chart)
 			srv.SetGreatStats(req.GreatCount, int64(greatApplied))
 
-			var ctrl controllers.Controller
-			var events []common.ViscousEventItem
-
-			switch backend {
-			case "adb":
-				checkOrDownload()
-				if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
-					srv.SetError("Failed to start ADB server: " + err.Error())
-					return
-				}
-				client := adb.NewDefaultClient()
-				devices, err := client.Devices()
-				if err != nil || len(devices) == 0 {
-					srv.SetError("No ADB devices found. Please make sure the device is connected.")
-					return
-				}
-				var device *adb.Device
-				if deviceSerial == "" {
-					device = adb.FirstAuthorizedDevice(devices)
-				} else {
-					for _, d := range devices {
-						if d.Serial() == deviceSerial {
-							device = d
-							break
-						}
-					}
-				}
-				if device == nil {
-					srv.SetError("No authorized ADB device found.")
-					return
-				}
-				scrcpy := controllers.NewScrcpyController(device)
-				if err := scrcpy.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
-					srv.SetError("Failed to connect to device: " + err.Error())
-					return
-				}
-				defer scrcpy.Close()
-				dc := conf.Get(device.Serial())
-				if dc == nil {
-					srv.SetError(fmt.Sprintf("Device [%s] not configured. Please add it in Settings first.", device.Serial()))
-					return
-				}
-				events = scrcpy.Preprocess(rawEvents, direction == "right", dc, getJudgeLineCalculator())
-				ctrl = scrcpy
-
-			default: // hid
-				if deviceSerial == "" {
-					serials := controllers.FindHIDDevices()
-					if len(serials) == 0 {
-						srv.SetError("No HID devices found. Please make sure USB is connected.")
-						return
-					}
-					deviceSerial = serials[0]
-				}
-				dc := conf.Get(deviceSerial)
-				hidCtrl := controllers.NewHIDController(dc)
-				if err := hidCtrl.Open(); err != nil {
-					srv.SetError("Failed to initialize HID: " + err.Error())
-					return
-				}
-				defer hidCtrl.Close()
+			if scrcpyCtrl != nil {
+				events = scrcpyCtrl.Preprocess(rawEvents, direction == "right", deviceCfg, getJudgeLineCalculator())
+			} else if hidCtrl != nil {
 				events = hidCtrl.Preprocess(rawEvents, direction == "right", getJudgeLineCalculator())
-				ctrl = hidCtrl
 			}
 
 			np := gui.NowPlaying{
-				SongID:    req.SongID,
-				Diff:      req.Diff,
+				SongID:    songID,
+				Diff:      difficulty,
 				Mode:      req.Mode,
 				Title:     req.NowPlaying.Title,
 				Artist:    req.NowPlaying.Artist,
 				DiffLevel: req.NowPlaying.DiffLevel,
 				JacketURL: req.NowPlaying.JacketURL,
+			}
+			if np.Title == "" && detectedSongTitle != "" {
+				np.Title = detectedSongTitle
 			}
 
 			srv.SetReady(ctrl, events, np)
@@ -565,6 +1532,33 @@ func runGUI(conf *config.Config) {
 
 			if !srv.WaitForStart(ctx) {
 				return
+			}
+
+			// Navigation pipeline: automatically click through pre-game screens.
+			// Returns once the dark album-loading screen is confirmed, at which point
+			// autoTriggerByVision starts with hasSeenDark already true.
+			navHasSeenDark := false
+			if req.AutoNavigation {
+				sc, ok := ctrl.(*controllers.ScrcpyController)
+				if !ok || adbDevice == nil {
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, Message: "auto-nav requires ADB+scrcpy backend"})
+					log.Warn("AutoNavigation requires ADB backend")
+					return
+				}
+				navExpectedTitle := detectedSongTitle
+				if navExpectedTitle == "" {
+					navExpectedTitle = req.NowPlaying.Title
+				}
+				if req.Mode == "pjsk" {
+					if !pjskNavPipeline(ctx, adbDevice, sc, navExpectedTitle, difficulty) {
+						return
+					}
+				} else {
+					if !bangNavPipeline(ctx, adbDevice, sc, navExpectedTitle, difficulty) {
+						return
+					}
+				}
+				navHasSeenDark = true
 			}
 
 			if req.AutoTriggerVision {
@@ -580,7 +1574,7 @@ func runGUI(conf *config.Config) {
 					log.Warn("Auto Trigger (Vision) requested but video decode is disabled; set SSM_ENABLE_VIDEO_DECODE=0 to disable (default is enabled)")
 					return
 				}
-				if !autoTriggerByVision(ctx, sc, req.Mode, roi, req.AutoTriggerPollMs) {
+				if !autoTriggerByVision(ctx, sc, req.Mode, roi, req.AutoTriggerPollMs, navHasSeenDark) {
 					return
 				}
 			}
@@ -646,41 +1640,182 @@ func downloadServer() {
 		log.Die("`scrcpy-server` is required.")
 	}
 	log.Infoln("Downloading... Please wait.")
-	res, err := http.Get(SERVER_FILE_DOWNLOAD_URL)
-	if err != nil {
+	if err := downloadServerBinary(); err != nil {
 		log.Dieln("Failed to download `scrcpy-server`.", fmt.Sprintf("Error: %s", err))
 	}
+}
+
+func downloadServerBinary() error {
+	res, err := http.Get(SERVER_FILE_DOWNLOAD_URL)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected HTTP status: %s", res.Status)
+	}
+
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Dieln("Failed to download.", fmt.Sprintf("Error: %s", err))
+		return err
 	}
 	h := crypto.SHA256.New()
 	h.Write(data)
 	if fmt.Sprintf("%x", h.Sum(nil)) != SERVER_FILE_SHA256 {
-		log.Die("Checksum mismatch.")
+		return fmt.Errorf("checksum mismatch")
 	}
 	if err := os.WriteFile(SERVER_FILE, data, 0o644); err != nil {
-		log.Die("Failed to save:", err)
+		return err
+	}
+	return nil
+}
+
+func hasValidScrcpyServer() (bool, error) {
+	if _, err := os.Stat(SERVER_FILE); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	data, err := os.ReadFile(SERVER_FILE)
+	if err != nil {
+		return false, err
+	}
+	h := crypto.SHA256.New()
+	h.Write(data)
+	return fmt.Sprintf("%x", h.Sum(nil)) == SERVER_FILE_SHA256, nil
+}
+
+func promptYesNo(question string, defaultYes bool) bool {
+	suffix := "[y/N]"
+	if defaultYes {
+		suffix = "[Y/n]"
+	}
+	fmt.Printf("%s %s: ", question, suffix)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		line = strings.TrimSpace(strings.ToLower(line))
+		switch line {
+		case "y", "yes":
+			return true
+		case "n", "no":
+			return false
+		case "":
+			return defaultYes
+		default:
+			return defaultYes
+		}
+	}
+
+	line = strings.TrimSpace(strings.ToLower(line))
+	switch line {
+	case "y", "yes":
+		return true
+	case "n", "no":
+		return false
+	case "":
+		return defaultYes
+	default:
+		return defaultYes
 	}
 }
 
+func runCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func downloadOrUpdateGoOCRAssets() error {
+	if _, err := exec.LookPath("git"); err != nil {
+		return fmt.Errorf("git is not installed or not in PATH")
+	}
+
+	if st, err := os.Stat(GO_OCR_REPO_DIR); err == nil {
+		if !st.IsDir() {
+			return fmt.Errorf("%s exists but is not a directory", GO_OCR_REPO_DIR)
+		}
+		log.Infoln("Updating GoOCR assets in ./" + GO_OCR_REPO_DIR + " ...")
+		if err := runCommand("git", "-C", GO_OCR_REPO_DIR, "pull", "--ff-only"); err != nil {
+			return err
+		}
+	} else if os.IsNotExist(err) {
+		log.Infoln("Cloning GoOCR assets to ./" + GO_OCR_REPO_DIR + " ...")
+		if err := runCommand("git", "clone", GO_OCR_REPO_URL, GO_OCR_REPO_DIR); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+
+	if _, err := resolveGoOCRPaths(); err != nil {
+		return fmt.Errorf("assets still missing after download: %w", err)
+	}
+	return nil
+}
+
+func maybePrepareScrcpyServerForGUI() {
+	ok, err := hasValidScrcpyServer()
+	if err != nil {
+		log.Warnf("Unable to verify scrcpy-server: %v", err)
+		return
+	}
+	if ok {
+		return
+	}
+
+	log.Infoln("ADB backend requires scrcpy-server.")
+	log.Infoln("SSM GUI can download it now from the official release URL.")
+	if !promptYesNo("Download scrcpy-server now?", false) {
+		log.Infoln("Skipped scrcpy-server download. ADB backend will not work until the file is available.")
+		return
+	}
+
+	if err := downloadServerBinary(); err != nil {
+		log.Warnf("Failed to download scrcpy-server: %v", err)
+		return
+	}
+	log.Infoln("scrcpy-server is ready.")
+}
+
+func maybePrepareGoOCRAssetsForGUI() {
+	if _, err := resolveGoOCRPaths(); err == nil {
+		return
+	}
+
+	log.Infoln("GoOCR assets are required for auto song detection and Detect Song Name.")
+	log.Infoln("SSM GUI can download them using: git clone " + GO_OCR_REPO_URL)
+	if !promptYesNo("Download GoOCR assets now?", false) {
+		log.Infoln("Skipped GoOCR assets download. OCR features will remain unavailable until assets are configured.")
+		return
+	}
+
+	if err := downloadOrUpdateGoOCRAssets(); err != nil {
+		log.Warnf("Failed to prepare GoOCR assets: %v", err)
+		log.Infoln("Tip: ensure Git (and Git LFS if needed) is installed, then retry.")
+		return
+	}
+	log.Infoln("GoOCR assets are ready.")
+}
+
+func prepareGUIPrerequisites() {
+	maybePrepareScrcpyServerForGUI()
+	maybePrepareGoOCRAssetsForGUI()
+}
+
 func checkOrDownload() {
-	if _, err := os.Stat(SERVER_FILE); err != nil {
-		if !os.IsNotExist(err) {
-			log.Die("Failed to locate server file:", err)
+	ok, err := hasValidScrcpyServer()
+	if err != nil {
+		log.Die("Failed to verify server file:", err)
+	}
+	if !ok {
+		if _, statErr := os.Stat(SERVER_FILE); statErr == nil {
+			log.Warn("Checksum mismatch.")
 		}
 		downloadServer()
-	} else {
-		data, err := os.ReadFile(SERVER_FILE)
-		if err != nil {
-			log.Die("Failed to read:", err)
-		}
-		h := crypto.SHA256.New()
-		h.Write(data)
-		if fmt.Sprintf("%x", h.Sum(nil)) != SERVER_FILE_SHA256 {
-			log.Warn("Checksum mismatch.")
-			downloadServer()
-		}
 	}
 }
 

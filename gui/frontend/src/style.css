@@ -2252,3 +2252,121 @@ kbd {
     font-size: 11px;
   }
 }
+
+.roi-editor-wrap {
+  margin: 12px 0 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.roi-editor-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.roi-editor-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.roi-editor-controls select {
+  min-width: 260px;
+  max-width: 100%;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--color-ssm-text);
+  font-size: 12px;
+}
+
+.roi-editor-controls .btn {
+  padding: 6px 10px;
+  min-height: 30px;
+  font-size: 11px;
+}
+
+.roi-editor-stage {
+  position: relative;
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  background: #0a0a0a;
+  min-height: 280px;
+  width: 100%;
+  height: min(76vh, 900px);
+}
+
+#roi-editor-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+#roi-editor-overlay {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+}
+
+#roi-editor-box {
+  position: absolute;
+  display: none;
+  border: 2px solid #22d3ee;
+  background: rgba(34, 211, 238, 0.16);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 10px rgba(34, 211, 238, 0.45);
+  pointer-events: none;
+}
+
+.roi-editor-meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  color: var(--color-ssm-hint);
+}
+
+#roi-editor-value-percent,
+#roi-editor-value-pixel {
+  color: #60a5fa;
+}
+
+.roi-editor-all {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.roi-editor-all-title {
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--color-ssm-hint);
+}
+
+#roi-editor-all-values {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-ssm-text);
+}
