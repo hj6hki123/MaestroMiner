@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  MAA_FRAMEWORK_VERSION: v5.9.2
+  MAA_FRAMEWORK_VERSION: v5.10.0
 
 jobs:
   build_on_linux_amd64:
@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
+          sudo apt-get install -y build-essential clang lld llvm libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -51,6 +51,8 @@ jobs:
       - name: Build MaaFramework runtime (Linux x64)
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CC: clang
+          CXX: clang++
         run: |
           git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
           cd maa-framework-src
@@ -88,7 +90,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
+          sudo apt-get install -y build-essential clang lld llvm libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -113,6 +115,8 @@ jobs:
       - name: Build MaaFramework runtime (Linux arm64)
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CC: clang
+          CXX: clang++
         run: |
           git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
           cd maa-framework-src

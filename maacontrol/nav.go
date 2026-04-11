@@ -162,8 +162,8 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 
 	// Register custom recognitions
 	for name, rec := range map[string]maa.CustomRecognitionRunner{
-		"ROICenterRec":   &roiCenterRec{nav: n},
-		"PauseButtonRec": &pauseNccRec{nav: n},
+		"ROICenterRec":    &roiCenterRec{nav: n},
+		"PauseButtonRec":  &pauseNccRec{nav: n},
 		"DialogDetectRec": &dialogDetectRec{nav: n},
 	} {
 		if err := res.RegisterCustomRecognition(name, rec); err != nil {
@@ -764,7 +764,10 @@ func ensureMaaInit(libDir string) error {
 		if libDir != "" {
 			opts = append(opts, maa.WithLibDir(libDir))
 		}
-		maaInitErr = maa.Init(opts...)
+		err := maa.Init(opts...)
+		if err != nil && err != maa.ErrAlreadyInitialized {
+			maaInitErr = err
+		}
 	})
 	return maaInitErr
 }

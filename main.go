@@ -770,7 +770,10 @@ func runGUI(conf *config.Config) {
 
 	// Ensure only one playback goroutine runs at a time — placeholder to satisfy linter.
 	_ = func(ctx context.Context, device *adb.Device, sc *controllers.ScrcpyController, _ /*expectedSongTitle*/, targetDiff string) bool {
-		_ = ctx; _ = device; _ = sc; _ = targetDiff
+		_ = ctx
+		_ = device
+		_ = sc
+		_ = targetDiff
 		return false
 	}
 
@@ -906,15 +909,15 @@ func runGUI(conf *config.Config) {
 				var texts []string
 				detectedID, detectedTitle := 0, ""
 
-				ocrC, ocrErr := getOCRClient()
+				ocrC, ocrErr := maacontrol.GetOCRClient()
 				if ocrErr != nil {
-					log.Warnf("GoOCR unavailable: %v", ocrErr)
+					log.Warnf("OCR unavailable: %v", ocrErr)
 					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
 						Enabled: true, Mode: req.Mode,
 						NavStage: "SONG_DETECT", NavScene: "song-detecting",
-						Message: "SONG_DETECT\n  → GoOCR unavailable",
+						Message: "SONG_DETECT\n  → OCR unavailable",
 					})
-					srv.SetError("Auto song detect failed: GoOCR unavailable: " + ocrErr.Error())
+					srv.SetError("Auto song detect failed: OCR unavailable: " + ocrErr.Error())
 					return
 				}
 
@@ -925,9 +928,9 @@ func runGUI(conf *config.Config) {
 					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
 						Enabled: true, Mode: req.Mode,
 						NavStage: "SCREEN_CHECK", NavScene: "screen-check",
-						Message: "SCREEN_CHECK\n  → GoOCR failed",
+						Message: "SCREEN_CHECK\n  → OCR failed",
 					})
-					srv.SetError("Auto song detect failed at SCREEN_CHECK: GoOCR failed: " + ocrErr.Error())
+					srv.SetError("Auto song detect failed at SCREEN_CHECK: OCR failed: " + ocrErr.Error())
 					return
 				}
 				titleScore := songSelectTitleScore(titleTexts)
@@ -953,17 +956,17 @@ func runGUI(conf *config.Config) {
 				roi := [4]float64{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2}
 				texts, ocrErr = ocrC.OCR(pngData, &roi)
 				if ocrErr != nil {
-					log.Warnf("GoOCR failed: %v", ocrErr)
+					log.Warnf("OCR failed: %v", ocrErr)
 					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
 						Enabled: true, Mode: req.Mode,
 						NavStage: "SONG_DETECT", NavScene: "song-detecting",
-						Message: "SONG_DETECT\n  → GoOCR failed",
+						Message: "SONG_DETECT\n  → OCR failed",
 					})
-					srv.SetError("Auto song detect failed: GoOCR failed: " + ocrErr.Error())
+					srv.SetError("Auto song detect failed: OCR failed: " + ocrErr.Error())
 					return
 				}
 
-				log.Infof("AutoDetectSong GoOCR texts: %v", texts)
+				log.Infof("AutoDetectSong OCR texts: %v", texts)
 				oCRPreview := firstNStrings(texts, 8)
 				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
 					Enabled: true, Mode: req.Mode,
@@ -979,7 +982,7 @@ func runGUI(conf *config.Config) {
 				if ok {
 					detectedID, detectedTitle = id, title
 					log.Infof("AutoDetectSong best OCR hit: source=%q score=%d", sourceText, score)
-					msg := fmt.Sprintf("SONG_DETECT\n  → GoOCR(score=%d) 命中: #%d %s", score, detectedID, detectedTitle)
+					msg := fmt.Sprintf("SONG_DETECT\n  → OCR(score=%d) 命中: #%d %s", score, detectedID, detectedTitle)
 					if sourceText != "" {
 						msg = fmt.Sprintf("%s\n  → source: %q", msg, sourceText)
 					}
@@ -994,7 +997,7 @@ func runGUI(conf *config.Config) {
 				}
 
 				if detectedID <= 0 {
-					errMsg := fmt.Sprintf("Auto song detect failed (GoOCR texts: %v", texts)
+					errMsg := fmt.Sprintf("Auto song detect failed (OCR texts: %v", texts)
 					if score > 0 {
 						errMsg = fmt.Sprintf("%s, bestScore=%d", errMsg, score)
 					}
@@ -1008,7 +1011,7 @@ func runGUI(conf *config.Config) {
 				songID = detectedID
 				req.SongID = detectedID
 				detectedSongTitle = detectedTitle
-				log.Infof("AutoDetectSong: detected songID=%d title=%q via=GoOCR", detectedID, detectedTitle)
+				log.Infof("AutoDetectSong: detected songID=%d title=%q via=OCR", detectedID, detectedTitle)
 			}
 
 			var chartText []byte
@@ -1158,7 +1161,7 @@ func runGUI(conf *config.Config) {
 					BandConfirmROI: maacontrol.ROI{roiBandConfirmTap.x1, roiBandConfirmTap.y1, roiBandConfirmTap.x2, roiBandConfirmTap.y2},
 					DialogOKROI:    maacontrol.ROI{roiDialogOK.x1, roiDialogOK.y1, roiDialogOK.x2, roiDialogOK.y2},
 					DialogTitleROI: maacontrol.ROI{roiDialogTitle.x1, roiDialogTitle.y1, roiDialogTitle.x2, roiDialogTitle.y2},
-				PauseButtonROI: maacontrol.ROI{roiPauseButton.x1, roiPauseButton.y1, roiPauseButton.x2, roiPauseButton.y2},
+					PauseButtonROI: maacontrol.ROI{roiPauseButton.x1, roiPauseButton.y1, roiPauseButton.x2, roiPauseButton.y2},
 
 					DifficultyTapFn: difficultyTapCoords,
 					PageArrowFn:     pjskDifficultyPageArrowCoords,

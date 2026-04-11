@@ -14,6 +14,7 @@ import (
 	"github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/gui"
+	"github.com/kvarenzn/ssm/maacontrol"
 )
 
 // navROI defines a rectangular region of interest as normalized fractions [0,1] of frame dimensions.
@@ -350,18 +351,12 @@ func difficultyTapPointByOCR(device *adb.Device, mode, diff string) (int, int, b
 		return 0, 0, false, "", err
 	}
 
-	oc, err := getOCRClient()
+	oc, err := maacontrol.GetOCRClient()
 	if err != nil {
 		return 0, 0, false, "", err
 	}
 
-	oc.mu.Lock()
-	defer oc.mu.Unlock()
-	if oc.engine == nil {
-		return 0, 0, false, "", fmt.Errorf("go-ocr engine not initialized")
-	}
-
-	rawResults, err := oc.engine.RunOCR(img)
+	rawResults, err := oc.OCRWithBoxes(pngBytes, nil)
 	if err != nil {
 		return 0, 0, false, "", err
 	}
