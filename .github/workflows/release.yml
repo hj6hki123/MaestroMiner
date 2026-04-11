@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential binutils gcc g++ libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
+          sudo apt-get install -y build-essential curl unzip libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -48,38 +48,20 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
-      - name: Build MaaFramework runtime (Linux x64)
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          CC: gcc
-          CXX: g++
+      - name: Download MaaFramework runtime (Linux x64)
         run: |
-          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
-          cd maa-framework-src
-          python3 tools/maadeps-download.py x64-linux
-          cat > no-lld-toolchain.cmake <<'EOF'
-          include("${CMAKE_CURRENT_LIST_DIR}/source/MaaUtils/MaaDeps/cmake/maa-x64-linux-toolchain.cmake")
-          set(CMAKE_LINKER_TYPE "DEFAULT" CACHE STRING "" FORCE)
-          EOF
-          cmake --preset "NinjaMulti Linux x64" \
-            -DMAADEPS_TRIPLET="maa-x64-linux" \
-            -DCMAKE_TOOLCHAIN_FILE="$PWD/no-lld-toolchain.cmake" \
-            -DCMAKE_LINKER=/usr/bin/ld \
-            -DCMAKE_LINKER_TYPE=DEFAULT \
-            -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=bfd" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=bfd" \
-            -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=bfd" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=bfd" \
-            -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=bfd" \
-            -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=bfd"
-          cmake --build build --preset "NinjaMulti Linux x64 - Release" -j 8
-          cmake --install build --prefix install --config Release
+          MAA_ZIP="MAA-linux-x86_64-${MAA_FRAMEWORK_VERSION}.zip"
+          curl -fL --retry 5 --retry-delay 2 -o "$MAA_ZIP" "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAA_FRAMEWORK_VERSION}/${MAA_ZIP}"
+          rm -rf maa-runtime
+          mkdir -p maa-runtime
+          unzip -q "$MAA_ZIP" -d maa-runtime
+          test -d maa-runtime/bin
 
       - name: Copy binary and Maa runtime
         run: |
           mkdir build
           cp ./ssm-gui ./build/
-          cp -r ./maa-framework-src/install/bin/. ./build/
+          cp -r ./maa-runtime/bin/. ./build/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -104,7 +86,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential binutils gcc g++ libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
+          sudo apt-get install -y build-essential curl unzip libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -126,38 +108,20 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
-      - name: Build MaaFramework runtime (Linux arm64)
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          CC: gcc
-          CXX: g++
+      - name: Download MaaFramework runtime (Linux arm64)
         run: |
-          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
-          cd maa-framework-src
-          python3 tools/maadeps-download.py arm64-linux
-          cat > no-lld-toolchain.cmake <<'EOF'
-          include("${CMAKE_CURRENT_LIST_DIR}/source/MaaUtils/MaaDeps/cmake/maa-arm64-linux-toolchain.cmake")
-          set(CMAKE_LINKER_TYPE "DEFAULT" CACHE STRING "" FORCE)
-          EOF
-          cmake --preset "NinjaMulti Linux arm64" \
-            -DMAADEPS_TRIPLET="maa-arm64-linux" \
-            -DCMAKE_TOOLCHAIN_FILE="$PWD/no-lld-toolchain.cmake" \
-            -DCMAKE_LINKER=/usr/bin/ld \
-            -DCMAKE_LINKER_TYPE=DEFAULT \
-            -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=bfd" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=bfd" \
-            -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=bfd" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=bfd" \
-            -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=bfd" \
-            -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=bfd"
-          cmake --build build --preset "NinjaMulti Linux arm64 - Release" -j 8
-          cmake --install build --prefix install --config Release
+          MAA_ZIP="MAA-linux-aarch64-${MAA_FRAMEWORK_VERSION}.zip"
+          curl -fL --retry 5 --retry-delay 2 -o "$MAA_ZIP" "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAA_FRAMEWORK_VERSION}/${MAA_ZIP}"
+          rm -rf maa-runtime
+          mkdir -p maa-runtime
+          unzip -q "$MAA_ZIP" -d maa-runtime
+          test -d maa-runtime/bin
 
       - name: Copy binary and Maa runtime
         run: |
           mkdir build
           cp ./ssm-gui ./build/
-          cp -r ./maa-framework-src/install/bin/. ./build/
+          cp -r ./maa-runtime/bin/. ./build/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -214,26 +178,23 @@ jobs:
           $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
           go build -ldflags "-X main.SSM_VERSION=$env:VERSION" -o ssm-gui.exe
 
-      - name: Build MaaFramework runtime (Windows x64)
+      - name: Download MaaFramework runtime (Windows x64)
         shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          git clone --depth 1 --branch $env:MAA_FRAMEWORK_VERSION --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
-          Push-Location maa-framework-src
-          python tools/maadeps-download.py x64-windows
-          cmake --preset "MSVC 2022" -DMAADEPS_TRIPLET="maa-x64-windows"
-          cmake --build build --preset "MSVC 2022 - Release" -j 8
-          cmake --install build --prefix install --config Release
-          Pop-Location
+          $zipName = "MAA-win-x86_64-$env:MAA_FRAMEWORK_VERSION.zip"
+          $uri = "https://github.com/MaaXYZ/MaaFramework/releases/download/$env:MAA_FRAMEWORK_VERSION/$zipName"
+          Invoke-WebRequest -Uri $uri -OutFile $zipName
+          if (Test-Path "maa-runtime") { Remove-Item -Recurse -Force "maa-runtime" }
+          Expand-Archive -Path $zipName -DestinationPath "maa-runtime" -Force
+          if (!(Test-Path "maa-runtime/bin")) { throw "maa-runtime/bin not found in $zipName" }
 
       - name: Copy exe and dlls
         shell: bash
         run: |
           mkdir build
           cp ./ssm-gui.exe ./build/
-          for dll in ./maa-framework-src/install/bin/*.dll; do
+          for dll in ./maa-runtime/bin/*.dll; do
             if [ -f "$dll" ]; then
               cp -v "$dll" ./build/
             fi
@@ -293,22 +254,20 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
-      - name: Build MaaFramework runtime (macOS x64)
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Download MaaFramework runtime (macOS x64)
         run: |
-          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
-          cd maa-framework-src
-          python3 tools/maadeps-download.py x64-osx
-          cmake --preset "NinjaMulti" -DMAADEPS_TRIPLET="maa-x64-osx" -DCMAKE_OSX_SYSROOT=macosx -DCMAKE_OSX_ARCHITECTURES="x86_64"
-          cmake --build build --preset "NinjaMulti - Release" -j 8
-          cmake --install build --prefix install --config Release
+          MAA_ZIP="MAA-macos-x86_64-${MAA_FRAMEWORK_VERSION}.zip"
+          curl -fL --retry 5 --retry-delay 2 -o "$MAA_ZIP" "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAA_FRAMEWORK_VERSION}/${MAA_ZIP}"
+          rm -rf maa-runtime
+          mkdir -p maa-runtime
+          unzip -q "$MAA_ZIP" -d maa-runtime
+          test -d maa-runtime/bin
 
       - name: Copy binary and Maa runtime
         run: |
           mkdir build
           cp ./ssm-gui ./build/
-          cp -r ./maa-framework-src/install/bin/. ./build/
+          cp -r ./maa-runtime/bin/. ./build/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -355,22 +314,20 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
-      - name: Build MaaFramework runtime (macOS arm64)
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Download MaaFramework runtime (macOS arm64)
         run: |
-          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
-          cd maa-framework-src
-          python3 tools/maadeps-download.py arm64-osx
-          cmake --preset "NinjaMulti" -DMAADEPS_TRIPLET="maa-arm64-osx" -DCMAKE_OSX_SYSROOT=macosx -DCMAKE_OSX_ARCHITECTURES="arm64"
-          cmake --build build --preset "NinjaMulti - Release" -j 8
-          cmake --install build --prefix install --config Release
+          MAA_ZIP="MAA-macos-aarch64-${MAA_FRAMEWORK_VERSION}.zip"
+          curl -fL --retry 5 --retry-delay 2 -o "$MAA_ZIP" "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAA_FRAMEWORK_VERSION}/${MAA_ZIP}"
+          rm -rf maa-runtime
+          mkdir -p maa-runtime
+          unzip -q "$MAA_ZIP" -d maa-runtime
+          test -d maa-runtime/bin
 
       - name: Copy binary and Maa runtime
         run: |
           mkdir build
           cp ./ssm-gui ./build/
-          cp -r ./maa-framework-src/install/bin/. ./build/
+          cp -r ./maa-runtime/bin/. ./build/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
