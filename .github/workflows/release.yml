@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  MAA_FRAMEWORK_VERSION: v5.9.2
+
 jobs:
   build_on_linux_amd64:
     runs-on: ubuntu-latest
@@ -23,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev
+          sudo apt-get install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -45,11 +48,28 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
+      - name: Build MaaFramework runtime (Linux x64)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
+          cd maa-framework-src
+          python3 tools/maadeps-download.py x64-linux
+          cmake --preset "NinjaMulti Linux x64" -DMAADEPS_TRIPLET="maa-x64-linux"
+          cmake --build build --preset "NinjaMulti Linux x64 - Release" -j 8
+          cmake --install build --prefix install --config Release
+
+      - name: Copy binary and Maa runtime
+        run: |
+          mkdir build
+          cp ./ssm-gui ./build/
+          cp -r ./maa-framework-src/install/bin/. ./build/
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ssm-gui-linux-${{ steps.version.outputs.version }}-amd64
-          path: ./ssm-gui
+          path: ./build/
 
   build_on_linux_arm64:
     runs-on: ubuntu-24.04-arm
@@ -68,7 +88,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev
+          sudo apt-get install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev ninja-build cmake python3
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -90,11 +110,28 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
+      - name: Build MaaFramework runtime (Linux arm64)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
+          cd maa-framework-src
+          python3 tools/maadeps-download.py arm64-linux
+          cmake --preset "NinjaMulti Linux arm64" -DMAADEPS_TRIPLET="maa-arm64-linux"
+          cmake --build build --preset "NinjaMulti Linux arm64 - Release" -j 8
+          cmake --install build --prefix install --config Release
+
+      - name: Copy binary and Maa runtime
+        run: |
+          mkdir build
+          cp ./ssm-gui ./build/
+          cp -r ./maa-framework-src/install/bin/. ./build/
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ssm-gui-linux-${{ steps.version.outputs.version }}-arm64
-          path: ./ssm-gui
+          path: ./build/
 
   build_on_windows_amd64:
     runs-on: windows-latest
@@ -145,11 +182,30 @@ jobs:
           $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
           go build -ldflags "-X main.SSM_VERSION=$env:VERSION" -o ssm-gui.exe
 
+      - name: Build MaaFramework runtime (Windows x64)
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          git clone --depth 1 --branch $env:MAA_FRAMEWORK_VERSION --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
+          Push-Location maa-framework-src
+          python tools/maadeps-download.py x64-windows
+          cmake --preset "MSVC 2022" -DMAADEPS_TRIPLET="maa-x64-windows"
+          cmake --build build --preset "MSVC 2022 - Release" -j 8
+          cmake --install build --prefix install --config Release
+          Pop-Location
+
       - name: Copy exe and dlls
         shell: bash
         run: |
           mkdir build
           cp ./ssm-gui.exe ./build/
+          for dll in ./maa-framework-src/install/bin/*.dll; do
+            if [ -f "$dll" ]; then
+              cp -v "$dll" ./build/
+            fi
+          done
           for dll in $(/c/msys64/mingw64/bin/ntldd.exe -R ./ssm-gui.exe | awk '{ if ($3 ~ /^C:\\msys64/) print $3; }'); do
             cp -v $dll ./build/
           done
@@ -183,7 +239,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install ffmpeg libusb
+          brew install ffmpeg libusb ninja
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -205,11 +261,28 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
+      - name: Build MaaFramework runtime (macOS x64)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
+          cd maa-framework-src
+          python3 tools/maadeps-download.py x64-osx
+          cmake --preset "NinjaMulti" -DMAADEPS_TRIPLET="maa-x64-osx" -DCMAKE_OSX_SYSROOT=macosx -DCMAKE_OSX_ARCHITECTURES="x86_64"
+          cmake --build build --preset "NinjaMulti - Release" -j 8
+          cmake --install build --prefix install --config Release
+
+      - name: Copy binary and Maa runtime
+        run: |
+          mkdir build
+          cp ./ssm-gui ./build/
+          cp -r ./maa-framework-src/install/bin/. ./build/
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ssm-gui-darwin-${{ steps.version.outputs.version }}-amd64
-          path: ./ssm-gui
+          path: ./build/
 
   build_on_macos_arm64:
     runs-on: macos-14
@@ -228,7 +301,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install ffmpeg libusb
+          brew install ffmpeg libusb ninja
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -250,11 +323,28 @@ jobs:
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION" -o ssm-gui
 
+      - name: Build MaaFramework runtime (macOS arm64)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch "$MAA_FRAMEWORK_VERSION" --recurse-submodules https://github.com/MaaXYZ/MaaFramework.git maa-framework-src
+          cd maa-framework-src
+          python3 tools/maadeps-download.py arm64-osx
+          cmake --preset "NinjaMulti" -DMAADEPS_TRIPLET="maa-arm64-osx" -DCMAKE_OSX_SYSROOT=macosx -DCMAKE_OSX_ARCHITECTURES="arm64"
+          cmake --build build --preset "NinjaMulti - Release" -j 8
+          cmake --install build --prefix install --config Release
+
+      - name: Copy binary and Maa runtime
+        run: |
+          mkdir build
+          cp ./ssm-gui ./build/
+          cp -r ./maa-framework-src/install/bin/. ./build/
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ssm-gui-darwin-${{ steps.version.outputs.version }}-arm64
-          path: ./ssm-gui
+          path: ./build/
 
   github_release:
     runs-on: ubuntu-22.04

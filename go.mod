@@ -14,7 +14,8 @@ require (
 )
 
 require (
-	github.com/ebitengine/purego v0.9.0 // indirect
+	github.com/MaaXYZ/maa-framework-go/v4 v4.0.0-beta.14 // indirect
+	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/getcharzp/onnxruntime_purego v0.0.0-20260118041137-401482b32507 // indirect
 	github.com/up-zero/gotool v0.0.0-20260120011100-d685b2532b5a // indirect
 )

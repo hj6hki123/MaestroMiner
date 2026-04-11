@@ -1,5 +1,9 @@
+github.com/MaaXYZ/maa-framework-go/v4 v4.0.0-beta.14 h1:7DHibysUOWuAXy9R6BDc9o+ZMjyb2UJh4BF38X9n83E=
+github.com/MaaXYZ/maa-framework-go/v4 v4.0.0-beta.14/go.mod h1:kDxaU/NZDmLRfxnZtn+UnVWw9Egv0i0yQgnjz7ho6Oo=
 github.com/ebitengine/purego v0.9.0 h1:mh0zpKBIXDceC63hpvPuGLiJ8ZAa3DfrFTudmfi8A4k=
 github.com/ebitengine/purego v0.9.0/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
+github.com/ebitengine/purego v0.9.1 h1:a/k2f2HQU3Pi399RPW1MOaZyhKJL9w/xFpKAg4q1s0A=
+github.com/ebitengine/purego v0.9.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 github.com/getcharzp/go-ocr v0.0.0-20260126073315-15e83dd6ccce h1:m/BT4Fk9h2aum7JJ3JewqyRrDySUQ/xGhH05mfJfLrQ=
 github.com/getcharzp/go-ocr v0.0.0-20260126073315-15e83dd6ccce/go.mod h1:2MBjAl0RZOpexoNRywB+yjpXd018HH3AVlV3EZBpTAE=
 github.com/getcharzp/onnxruntime_purego v0.0.0-20260118041137-401482b32507 h1:d+3aUbLHK9Nfaex6GLlIhb0R7wLHV7LkiUiy0qwU54g=

@@ -18,7 +18,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -32,6 +31,7 @@ import (
 	"github.com/kvarenzn/ssm/db"
 	"github.com/kvarenzn/ssm/gui" // newly added
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/maacontrol"
 	"github.com/kvarenzn/ssm/scores"
 	"github.com/kvarenzn/ssm/stage"
 	"github.com/kvarenzn/ssm/term"
@@ -309,10 +309,6 @@ func formatSongDetectCandidates(cands []gui.SongDetectCandidate, n int) string {
 func runGUI(conf *config.Config) {
 	srv := gui.NewServer(guiPort, conf)
 	prepareGUIPrerequisites()
-
-	if err := LoadPauseTemplate(); err != nil {
-		log.Warnf("pause template: %v", err)
-	}
 
 	normalizeROI := func(mode string, bang gui.ROI, pjsk gui.ROI) gui.ROI {
 		roi := bang
@@ -772,412 +768,9 @@ func runGUI(conf *config.Config) {
 		}
 	}
 
-	// bangNavPipeline drives pre-game navigation using ROI-center taps and
-	// luma-based screen detection. No OCR required.
-	bangNavPipeline := func(ctx context.Context, device *adb.Device, sc *controllers.ScrcpyController, _ /*expectedSongTitle*/, targetDiff string) bool {
-		const (
-			stageWaitReady        = "WAIT_READY"
-			stageClickDifficulty  = "CLICK_DIFFICULTY"
-			stageClickKettei      = "CLICK_KETTEI"
-			stageBandConfirm      = "BAND_CONFIRM"
-			stageLiveSettingCheck = "LIVE_SETTING_CHECK"
-			stageWaitAlbumDark    = "WAIT_ALBUM_DARK"
-			preStartActionDelay   = 2 * time.Second
-		)
-
-		sampleFrameLuma := func(f controllers.ScrcpyFrame) float64 {
-			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
-				return 0
-			}
-			step := max(1, f.Width*f.Height/1024)
-			var sum int64
-			count := 0
-			for i := 0; i < len(f.Plane0); i += step {
-				sum += int64(f.Plane0[i])
-				count++
-			}
-			if count == 0 {
-				return 0
-			}
-			return float64(sum) / float64(count)
-		}
-
-		tapAt := func(x, y int) {
-			device.RawSh("input", "tap", strconv.Itoa(x), strconv.Itoa(y)) //nolint
-			log.Infof("[NAV_ACTION] tap (%d,%d)", x, y)
-		}
-
-		lastUIKey := ""
-		lastUILogAt := time.Time{}
-		lastLogStage := ""
-		emitStage := func(stageName, sceneName, action string, screenLuma float64, hasSeenDark bool, force bool) {
-			msg := fmt.Sprintf("%s\n  %s", stageName, action)
-			uiKey := fmt.Sprintf("%s|%s|%s", stageName, sceneName, action)
-			if force || uiKey != lastUIKey || time.Since(lastUILogAt) >= 700*time.Millisecond {
-				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-					Enabled:     true,
-					Mode:        "bang",
-					NavStage:    stageName,
-					NavScene:    sceneName,
-					ScreenLuma:  screenLuma,
-					HasSeenDark: hasSeenDark,
-					Message:     msg,
-				})
-				lastUIKey = uiKey
-				lastUILogAt = time.Now()
-			}
-			if force || stageName != lastLogStage {
-				log.Infof("[NAV] %s", action)
-				lastLogStage = stageName
-			} else {
-				log.Debugf("[NAV] %s", action)
-			}
-		}
-
-		stageName := stageWaitReady
-		stageEnteredAt := time.Now()
-		setStage := func(next string) {
-			if stageName == next {
-				return
-			}
-			stageName = next
-			stageEnteredAt = time.Now()
-		}
-
-		hasSeenDark := false
-		lastTapAt := time.Time{}
-		const pauseNccThreshold = 0.40
-		const maxIter = 180
-
-		for i := 0; i < maxIter; i++ {
-			select {
-			case <-ctx.Done():
-				return false
-			default:
-			}
-
-			frame, ok := sc.LatestFrame()
-			if !ok || frame.Width == 0 || len(frame.Plane0) < frame.Width*frame.Height {
-				emitStage(stageName, "", "→ waiting decoded frame", 0, hasSeenDark, false)
-				time.Sleep(220 * time.Millisecond)
-				continue
-			}
-
-			screenLuma := sampleFrameLuma(frame)
-
-			switch stageName {
-			case stageWaitReady:
-				// Wait 1.5 s to let 楽曲選択 fully render, then start navigating.
-				emitStage(stageWaitReady, "楽曲選択", "→ 等待畫面就緒", screenLuma, hasSeenDark, false)
-				if time.Since(stageEnteredAt) >= 1500*time.Millisecond {
-					setStage(stageClickDifficulty)
-				}
-
-			case stageClickDifficulty:
-				if targetDiff == "" {
-					setStage(stageClickKettei)
-					continue
-				}
-
-				x, y, found := difficultyTapPointPx(frame, "bang", targetDiff)
-				if !found {
-					log.Warnf("[NAV] unknown difficulty: %s", targetDiff)
-					setStage(stageClickKettei)
-					continue
-				}
-
-				if lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay {
-					emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, hasSeenDark, true)
-					tapAt(x, y)
-					lastTapAt = time.Now()
-					time.Sleep(preStartActionDelay)
-					setStage(stageClickKettei)
-					continue
-				}
-
-				emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 等待點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, hasSeenDark, false)
-				continue
-
-			case stageClickKettei:
-				x, y, found := roiCenterPx(frame, roiKettei)
-				if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
-					emitStage(stageClickKettei, "楽曲選択", "→ 點擊 決定", screenLuma, hasSeenDark, true)
-					tapAt(x, y)
-					lastTapAt = time.Now()
-					setStage(stageBandConfirm)
-					time.Sleep(preStartActionDelay)
-				}
-
-			case stageBandConfirm:
-				if detectDialogByLuma(frame) {
-					emitStage(stageBandConfirm, "ライブ設定", "→ dialog 出現，跳至 LIVE_SETTING_CHECK", screenLuma, hasSeenDark, true)
-					setStage(stageLiveSettingCheck)
-					continue
-				}
-				// Wait 2 s for バンド確認 to load before tapping ライブスタート.
-				emitStage(stageBandConfirm, "バンド確認", fmt.Sprintf("→ 等待 バンド確認 (%.0fms)", time.Since(stageEnteredAt).Seconds()*1000), screenLuma, hasSeenDark, false)
-				if time.Since(stageEnteredAt) >= 2000*time.Millisecond {
-					x, y, found := roiCenterPx(frame, roiLiveStart)
-					if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
-						emitStage(stageBandConfirm, "バンド確認", "→ 點擊 ライブスタート", screenLuma, hasSeenDark, true)
-						tapAt(x, y)
-						lastTapAt = time.Now()
-						setStage(stageLiveSettingCheck)
-						time.Sleep(preStartActionDelay)
-					}
-				}
-
-			case stageLiveSettingCheck:
-				if time.Since(stageEnteredAt) < preStartActionDelay {
-					time.Sleep(120 * time.Millisecond)
-					continue
-				}
-				if detectDialogByLuma(frame) {
-					emitStage(stageLiveSettingCheck, "ライブ設定", "→ dialog 出現，點擊 OK", screenLuma, hasSeenDark, true)
-					x, y, found := roiCenterPx(frame, roiDialogOK)
-					if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
-						tapAt(x, y)
-						lastTapAt = time.Now()
-						time.Sleep(preStartActionDelay)
-					}
-				} else {
-					emitStage(stageLiveSettingCheck, "loading", "→ 無 dialog，繼續等待讀取", screenLuma, hasSeenDark, false)
-				}
-				setStage(stageWaitAlbumDark)
-				continue
-
-			case stageWaitAlbumDark:
-				ncc, loaded := MatchPauseButton(frame, roiPauseButton)
-				if !loaded {
-					emitStage(stageWaitAlbumDark, "loading", "→ 暫停鍵範本未載入，請設定 SSM_PAUSE_TEMPLATE", screenLuma, hasSeenDark, false)
-				} else {
-					emitStage(stageWaitAlbumDark, "loading", fmt.Sprintf("→ 等待暫停鍵出現 (ncc=%.3f)", ncc), screenLuma, hasSeenDark, false)
-					if ncc >= pauseNccThreshold {
-						emitStage(stageWaitAlbumDark, "in-game", fmt.Sprintf("→ 暫停鍵已偵測 (ncc=%.3f)，等待 4 秒後開始", ncc), screenLuma, hasSeenDark, true)
-						time.Sleep(4 * time.Second)
-						return true
-					}
-				}
-			}
-
-			time.Sleep(240 * time.Millisecond)
-		}
-
-		emitStage(stageWaitAlbumDark, "timeout", "→ navigation timed out", 0, hasSeenDark, true)
-		return false
-	}
-
-	// pjskNavPipeline drives pre-game navigation for Project Sekai using ROI-center
-	// taps and luma-based screen detection. No OCR required.
-	pjskNavPipeline := func(ctx context.Context, device *adb.Device, sc *controllers.ScrcpyController, _ /*expectedSongTitle*/, targetDiff string) bool {
-		const (
-			stageWaitReady          = "WAIT_READY"
-			stageClickDifficulty    = "CLICK_DIFFICULTY"
-			stageFlipDifficultyPage = "FLIP_DIFFICULTY_PAGE"
-			stageClickKettei        = "CLICK_KETTEI"
-			stageBandConfirm        = "BAND_CONFIRM"
-			stageLiveSettingCheck   = "LIVE_SETTING_CHECK"
-			stageWaitAlbumDark      = "WAIT_ALBUM_DARK"
-			preStartActionDelay     = 2 * time.Second
-		)
-
-		sampleFrameLuma := func(f controllers.ScrcpyFrame) float64 {
-			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
-				return 0
-			}
-			step := max(1, f.Width*f.Height/1024)
-			var sum int64
-			count := 0
-			for i := 0; i < len(f.Plane0); i += step {
-				sum += int64(f.Plane0[i])
-				count++
-			}
-			if count == 0 {
-				return 0
-			}
-			return float64(sum) / float64(count)
-		}
-
-		tapAt := func(x, y int) {
-			device.RawSh("input", "tap", strconv.Itoa(x), strconv.Itoa(y)) //nolint
-			log.Infof("[PJSK_NAV] tap (%d,%d)", x, y)
-		}
-
-		lastUIKey := ""
-		lastUILogAt := time.Time{}
-		lastLogStage := ""
-		emitStage := func(stageName, sceneName, action string, screenLuma float64, stageGate bool, force bool) {
-			msg := fmt.Sprintf("%s\n  %s", stageName, action)
-			uiKey := fmt.Sprintf("%s|%s|%s", stageName, sceneName, action)
-			if force || uiKey != lastUIKey || time.Since(lastUILogAt) >= 700*time.Millisecond {
-				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-					Enabled:     true,
-					Mode:        "pjsk",
-					NavStage:    stageName,
-					NavScene:    sceneName,
-					ScreenLuma:  screenLuma,
-					HasSeenDark: stageGate,
-					Message:     msg,
-				})
-				lastUIKey = uiKey
-				lastUILogAt = time.Now()
-			}
-			if force || stageName != lastLogStage {
-				log.Infof("[PJSK_NAV] %s", action)
-				lastLogStage = stageName
-			} else {
-				log.Debugf("[PJSK_NAV] %s", action)
-			}
-		}
-
-		stageName := stageWaitReady
-		stageEnteredAt := time.Now()
-		setStage := func(next string) {
-			if stageName == next {
-				return
-			}
-			stageName = next
-			stageEnteredAt = time.Now()
-		}
-
-		seenWhiteLoading := false
-		lastTapAt := time.Time{}
-		const pauseNccThreshold = 0.40
-		const maxIter = 220
-
-		for i := 0; i < maxIter; i++ {
-			select {
-			case <-ctx.Done():
-				return false
-			default:
-			}
-
-			frame, ok := sc.LatestFrame()
-			if !ok || frame.Width == 0 || len(frame.Plane0) < frame.Width*frame.Height {
-				emitStage(stageName, "", "→ waiting decoded frame", 0, seenWhiteLoading, false)
-				time.Sleep(220 * time.Millisecond)
-				continue
-			}
-
-			screenLuma := sampleFrameLuma(frame)
-
-			switch stageName {
-			case stageWaitReady:
-				emitStage(stageWaitReady, "楽曲選択", "→ 等待畫面就緒", screenLuma, seenWhiteLoading, false)
-				if time.Since(stageEnteredAt) >= 1500*time.Millisecond {
-					setStage(stageClickDifficulty)
-				}
-
-			case stageClickDifficulty:
-				if targetDiff == "" {
-					setStage(stageClickKettei)
-					continue
-				}
-				if targetDiff == "append" {
-					setStage(stageFlipDifficultyPage)
-					continue
-				}
-
-				x, y, found := difficultyTapPointPx(frame, "pjsk", targetDiff)
-				if !found {
-					log.Warnf("[PJSK_NAV] unknown difficulty: %s", targetDiff)
-					setStage(stageClickKettei)
-					continue
-				}
-
-				if lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay {
-					emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, seenWhiteLoading, true)
-					tapAt(x, y)
-					lastTapAt = time.Now()
-					time.Sleep(preStartActionDelay)
-					setStage(stageClickKettei)
-					continue
-				}
-
-				emitStage(stageClickDifficulty, "楽曲選択", fmt.Sprintf("→ 等待點擊難度 %s", strings.ToUpper(targetDiff)), screenLuma, seenWhiteLoading, false)
-				continue
-
-			case stageFlipDifficultyPage:
-				if lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay {
-					onPage1 := pjskIsOnDifficultyPage1ByOCR(device)
-					if onPage1 {
-						ax, ay, ok := pjskDifficultyPageArrowPx(frame)
-						if ok {
-							emitStage(stageFlipDifficultyPage, "楽曲選択", "→ 翻頁至 APPEND 頁", screenLuma, seenWhiteLoading, true)
-							tapAt(ax, ay)
-							lastTapAt = time.Now()
-							time.Sleep(preStartActionDelay)
-						}
-					}
-					ax, ay, _ := difficultyTapPointPx(frame, "pjsk", "append")
-					emitStage(stageFlipDifficultyPage, "楽曲選択", "→ 點擊 APPEND", screenLuma, seenWhiteLoading, true)
-					tapAt(ax, ay)
-					lastTapAt = time.Now()
-					time.Sleep(preStartActionDelay)
-					setStage(stageClickKettei)
-					continue
-				}
-
-				emitStage(stageFlipDifficultyPage, "楽曲選択", "→ 等待點擊 APPEND", screenLuma, seenWhiteLoading, false)
-				continue
-
-			case stageClickKettei:
-				x, y, found := roiCenterPx(frame, roiKettei)
-				if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
-					emitStage(stageClickKettei, "楽曲選択", "→ 點擊 決定", screenLuma, seenWhiteLoading, true)
-					tapAt(x, y)
-					lastTapAt = time.Now()
-					setStage(stageBandConfirm)
-					time.Sleep(preStartActionDelay)
-				}
-
-			case stageBandConfirm:
-				x, y, ok := roiCenterPx(frame, roiBandConfirmTap)
-				if ok && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
-					emitStage(stageBandConfirm, "バンド確認", "→ 點擊確認按鈕", screenLuma, seenWhiteLoading, true)
-					tapAt(x, y)
-					lastTapAt = time.Now()
-					setStage(stageLiveSettingCheck)
-					time.Sleep(preStartActionDelay)
-				}
-
-			case stageLiveSettingCheck:
-				if time.Since(stageEnteredAt) < preStartActionDelay {
-					time.Sleep(120 * time.Millisecond)
-					continue
-				}
-				if detectDialogByLuma(frame) {
-					emitStage(stageLiveSettingCheck, "dialog", "→ dialog 出現，點擊確認", screenLuma, seenWhiteLoading, true)
-					x, y, found := roiCenterPx(frame, roiDialogOK)
-					if found && (lastTapAt.IsZero() || time.Since(lastTapAt) >= preStartActionDelay) {
-						tapAt(x, y)
-						lastTapAt = time.Now()
-						time.Sleep(preStartActionDelay)
-					}
-				} else {
-					emitStage(stageLiveSettingCheck, "loading", "→ 無 dialog，繼續等待", screenLuma, seenWhiteLoading, false)
-				}
-				setStage(stageWaitAlbumDark)
-				continue
-
-			case stageWaitAlbumDark:
-				ncc, loaded := MatchPauseButton(frame, roiPauseButton)
-				if !loaded {
-					emitStage(stageWaitAlbumDark, "loading", "→ 暫停鍵範本未載入，請設定 SSM_PAUSE_TEMPLATE", screenLuma, seenWhiteLoading, false)
-				} else {
-					emitStage(stageWaitAlbumDark, "loading", fmt.Sprintf("→ 等待暫停鍵出現 (ncc=%.3f)", ncc), screenLuma, seenWhiteLoading, false)
-					if ncc >= pauseNccThreshold {
-						emitStage(stageWaitAlbumDark, "in-game", fmt.Sprintf("→ 暫停鍵已偵測 (ncc=%.3f)，等待 4 秒後開始", ncc), screenLuma, seenWhiteLoading, true)
-						time.Sleep(4 * time.Second)
-						return true
-					}
-				}
-			}
-
-			time.Sleep(240 * time.Millisecond)
-		}
-
-		emitStage(stageWaitAlbumDark, "timeout", "→ navigation timed out", 0, seenWhiteLoading, true)
+	// Ensure only one playback goroutine runs at a time — placeholder to satisfy linter.
+	_ = func(ctx context.Context, device *adb.Device, sc *controllers.ScrcpyController, _ /*expectedSongTitle*/, targetDiff string) bool {
+		_ = ctx; _ = device; _ = sc; _ = targetDiff
 		return false
 	}
 
@@ -1534,29 +1127,65 @@ func runGUI(conf *config.Config) {
 				return
 			}
 
-			// Navigation pipeline: automatically click through pre-game screens.
-			// Returns once the dark album-loading screen is confirmed, at which point
-			// autoTriggerByVision starts with hasSeenDark already true.
+			// Navigation pipeline: automatically click through pre-game screens
+			// using MaaFramework.  The pipeline is defined declaratively in
+			// maacontrol/resource/pipeline/pipeline.json; game-specific logic
+			// (difficulty coordinates, pause-button NCC, dialog detection) is
+			// handled by custom recognitions / actions in the maacontrol package.
 			navHasSeenDark := false
 			if req.AutoNavigation {
-				sc, ok := ctrl.(*controllers.ScrcpyController)
-				if !ok || adbDevice == nil {
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, Message: "auto-nav requires ADB+scrcpy backend"})
+				if adbDevice == nil {
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, Message: "auto-nav requires ADB backend"})
 					log.Warn("AutoNavigation requires ADB backend")
 					return
 				}
-				navExpectedTitle := detectedSongTitle
-				if navExpectedTitle == "" {
-					navExpectedTitle = req.NowPlaying.Title
+
+				// Collect pause-button template images from the assets directory.
+				// Any PNG placed under assets/live/button/ is picked up automatically,
+				// making it trivial to add per-game or per-skin template variants.
+				pauseTemplates, _ := filepath.Glob("assets/live/button/*.png")
+				if len(pauseTemplates) == 0 {
+					pauseTemplates = []string{"assets/live/button/pause.png"}
 				}
-				if req.Mode == "pjsk" {
-					if !pjskNavPipeline(ctx, adbDevice, sc, navExpectedTitle, difficulty) {
-						return
-					}
-				} else {
-					if !bangNavPipeline(ctx, adbDevice, sc, navExpectedTitle, difficulty) {
-						return
-					}
+
+				navCfg := maacontrol.NavConfig{
+					Mode:       req.Mode,
+					Difficulty: difficulty,
+					AdbSerial:  adbDevice.Serial(),
+
+					KetteiROI:      maacontrol.ROI{roiKettei.x1, roiKettei.y1, roiKettei.x2, roiKettei.y2},
+					LiveStartROI:   maacontrol.ROI{roiLiveStart.x1, roiLiveStart.y1, roiLiveStart.x2, roiLiveStart.y2},
+					BandConfirmROI: maacontrol.ROI{roiBandConfirmTap.x1, roiBandConfirmTap.y1, roiBandConfirmTap.x2, roiBandConfirmTap.y2},
+					DialogOKROI:    maacontrol.ROI{roiDialogOK.x1, roiDialogOK.y1, roiDialogOK.x2, roiDialogOK.y2},
+					DialogTitleROI: maacontrol.ROI{roiDialogTitle.x1, roiDialogTitle.y1, roiDialogTitle.x2, roiDialogTitle.y2},
+				PauseButtonROI: maacontrol.ROI{roiPauseButton.x1, roiPauseButton.y1, roiPauseButton.x2, roiPauseButton.y2},
+
+					DifficultyTapFn: difficultyTapCoords,
+					PageArrowFn:     pjskDifficultyPageArrowCoords,
+
+					PauseTemplates:    pauseTemplates,
+					PauseNccThreshold: 0.40,
+
+					OnProgress: func(stage, scene, msg string) {
+						srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+							Enabled:  true,
+							Mode:     req.Mode,
+							NavStage: stage,
+							NavScene: scene,
+							Message:  fmt.Sprintf("%s\n  %s", stage, msg),
+						})
+					},
+				}
+
+				nav, err := maacontrol.NewNavigator(navCfg)
+				if err != nil {
+					srv.SetError("AutoNavigation init failed: " + err.Error())
+					return
+				}
+				defer nav.Destroy()
+
+				if !nav.Run(ctx, req.Mode, difficulty) {
+					return
 				}
 				navHasSeenDark = true
 			}

@@ -219,13 +219,10 @@ func detectDialogByLuma(f controllers.ScrcpyFrame) bool {
 	return dialogLuma > 120 && dialogLuma-overallLuma > 35
 }
 
-// difficultyTapPointPx returns the tap pixel for difficulty selection using
-// full-screen normalized anchors (mode-specific), without relying on ROI.
-func difficultyTapPointPx(f controllers.ScrcpyFrame, mode, diff string) (int, int, bool) {
-	if f.Width <= 0 || f.Height <= 0 {
-		return 0, 0, false
-	}
-
+// difficultyTapCoords returns the device-pixel tap point for difficulty selection
+// given explicit image dimensions.  Used by both the scrcpy-based pipeline and
+// the MAA navigator custom action.
+func difficultyTapCoords(mode, diff string, w, h int) (x, y int, ok bool) {
 	xNorm, yNorm := 0.0, 0.0
 	if mode == "pjsk" {
 		switch diff {
@@ -262,10 +259,26 @@ func difficultyTapPointPx(f controllers.ScrcpyFrame, mode, diff string) (int, in
 			return 0, 0, false
 		}
 	}
-
-	x := iclamp(int(xNorm*float64(f.Width)), 0, f.Width-1)
-	y := iclamp(int(yNorm*float64(f.Height)), 0, f.Height-1)
+	x = iclamp(int(xNorm*float64(w)), 0, w-1)
+	y = iclamp(int(yNorm*float64(h)), 0, h-1)
 	return x, y, true
+}
+
+// difficultyTapPointPx returns the tap pixel for difficulty selection using
+// full-screen normalized anchors (mode-specific), without relying on ROI.
+func difficultyTapPointPx(f controllers.ScrcpyFrame, mode, diff string) (int, int, bool) {
+	if f.Width <= 0 || f.Height <= 0 {
+		return 0, 0, false
+	}
+	return difficultyTapCoords(mode, diff, f.Width, f.Height)
+}
+
+// pjskDifficultyPageArrowCoords returns the tap coordinate of the PJSK difficulty
+// page-flip arrow given explicit image dimensions.
+func pjskDifficultyPageArrowCoords(w, h int) (int, int) {
+	x := iclamp(int(0.88*float64(w)), 0, w-1)
+	y := iclamp(int(0.68*float64(h)), 0, h-1)
+	return x, y
 }
 
 // pjskDifficultyPageArrowPx returns the tap coordinate of the PJSK difficulty
@@ -274,8 +287,7 @@ func pjskDifficultyPageArrowPx(f controllers.ScrcpyFrame) (int, int, bool) {
 	if f.Width <= 0 || f.Height <= 0 {
 		return 0, 0, false
 	}
-	x := iclamp(int(0.88*float64(f.Width)), 0, f.Width-1)
-	y := iclamp(int(0.68*float64(f.Height)), 0, f.Height-1)
+	x, y := pjskDifficultyPageArrowCoords(f.Width, f.Height)
 	return x, y, true
 }
 
