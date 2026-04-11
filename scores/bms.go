@@ -16,84 +16,64 @@ import (
 	"github.com/kvarenzn/ssm/utils"
 )
 
+type bmsChannelKind byte
+
 const (
-	ChannelBackgroundMusic     = "01"
-	ChannelTimeSignature       = "02"
-	ChannelBPMChange           = "03"
-	ChannelBackgroundAnimation = "04"
-	ChannelPoorBitmapChange    = "06"
-	ChannelLayer               = "07"
-	ChannelExtendedBPM         = "08"
-	ChannelStop                = "09"
-
-	ChannelNoteTrack1 = "16"
-	ChannelNoteTrack2 = "11"
-	ChannelNoteTrack3 = "12"
-	ChannelNoteTrack4 = "13"
-	ChannelNoteTrack5 = "14"
-	ChannelNoteTrack6 = "15"
-	ChannelNoteTrack7 = "18"
-
-	ChannelSpecialTrack1 = "36"
-	ChannelSpecialTrack2 = "31"
-	ChannelSpecialTrack3 = "32"
-	ChannelSpecialTrack4 = "33"
-	ChannelSpecialTrack5 = "34"
-	ChannelSpecialTrack6 = "35"
-	ChannelSpecialTrack7 = "38"
-
-	ChannelHoldTrack1 = "56"
-	ChannelHoldTrack2 = "51"
-	ChannelHoldTrack3 = "52"
-	ChannelHoldTrack4 = "53"
-	ChannelHoldTrack5 = "54"
-	ChannelHoldTrack6 = "55"
-	ChannelHoldTrack7 = "58"
+	bmsCKConfig  bmsChannelKind = '0'
+	bmsCKNote    bmsChannelKind = '1'
+	bmsCKSpecial bmsChannelKind = '3'
+	bmsCKHold    bmsChannelKind = '5'
 )
 
-var TRACKS_MAP = map[string]int{
-	ChannelNoteTrack1:    0,
-	ChannelNoteTrack2:    1,
-	ChannelNoteTrack3:    2,
-	ChannelNoteTrack4:    3,
-	ChannelNoteTrack5:    4,
-	ChannelNoteTrack6:    5,
-	ChannelNoteTrack7:    6,
-	ChannelSpecialTrack1: 0,
-	ChannelSpecialTrack2: 1,
-	ChannelSpecialTrack3: 2,
-	ChannelSpecialTrack4: 3,
-	ChannelSpecialTrack5: 4,
-	ChannelSpecialTrack6: 5,
-	ChannelSpecialTrack7: 6,
-	ChannelHoldTrack1:    0,
-	ChannelHoldTrack2:    1,
-	ChannelHoldTrack3:    2,
-	ChannelHoldTrack4:    3,
-	ChannelHoldTrack5:    4,
-	ChannelHoldTrack6:    5,
-	ChannelHoldTrack7:    6,
+const (
+	bmsCTBPMChange   = '3'
+	bmsCTExtendedBPM = '8'
+)
+
+type bmsChannel struct {
+	kind bmsChannelKind
+	typ  byte
 }
 
-var simpleTracks = []string{
-	ChannelNoteTrack1,
-	ChannelNoteTrack2,
-	ChannelNoteTrack3,
-	ChannelNoteTrack4,
-	ChannelNoteTrack5,
-	ChannelNoteTrack6,
-	ChannelNoteTrack7,
+func (c *bmsChannel) String() string {
+	return fmt.Sprintf("%c%c", c.kind, c.typ)
 }
 
-type BasicNoteType byte
+func (c *bmsChannel) trackID() int {
+	if c.kind == bmsCKConfig {
+		log.Fatalf("Config channel has no track id")
+	}
+
+	switch c.typ {
+	case '6':
+		return 0
+	case '1':
+		return 1
+	case '2':
+		return 2
+	case '3':
+		return 3
+	case '4':
+		return 4
+	case '5':
+		return 5
+	case '8':
+		return 6
+	}
+
+	log.Fatalf("Unknown channel data %c", c.typ)
+	return 0
+}
+
+type bmsBasicNoteType byte
 
 const (
-	NoteTypeNote BasicNoteType = iota
-	NoteTypeFlick
-	NoteTypeSlideA
-	NoteTypeSlideB
-	NoteTypeSlideEndA
-	NoteTypeSlideEndFlickA
+	bmsNTTap bmsBasicNoteType = iota
+	bmsNTFlick
+	bmsNTSlideA
+	bmsNTSlideB
+	bmsNTSlideEndA
+	bmsNTSlideEndFlickA
 	NoteTypeSlideEndB
 	NoteTypeSlideEndFlickB
 	NoteTypeFlickLeft
@@ -110,39 +90,40 @@ const (
 	NoteTypeSlideEndDirFlickLeftB
 	NoteTypeSlideEndDirFlickRightA
 	NoteTypeSlideEndDirFlickRightB
+	NoteTypeLaneChange
 )
 
-var wavNoteTypeMap map[string]BasicNoteType = map[string]BasicNoteType{
-	"":                            NoteTypeNote,
-	"bd.wav":                      NoteTypeNote,
-	"flick.wav":                   NoteTypeFlick,
-	"無音_flick.wav":                NoteTypeFlick,
-	"skill.wav":                   NoteTypeNote,
-	"slide_a.wav":                 NoteTypeSlideA,
-	"slide_a_skill.wav":           NoteTypeSlideA,
-	"slide_a_fever.wav":           NoteTypeSlideA,
-	"skill_slide_a.wav":           NoteTypeSlideA,
-	"slide_end_a.wav":             NoteTypeSlideEndA,
-	"slide_end_flick_a.wav":       NoteTypeSlideEndFlickA,
+var wavNoteTypeMap map[string]bmsBasicNoteType = map[string]bmsBasicNoteType{
+	"":                            bmsNTTap,
+	"bd.wav":                      bmsNTTap,
+	"flick.wav":                   bmsNTFlick,
+	"無音_flick.wav":                bmsNTFlick,
+	"skill.wav":                   bmsNTTap,
+	"slide_a.wav":                 bmsNTSlideA,
+	"slide_a_skill.wav":           bmsNTSlideA,
+	"slide_a_fever.wav":           bmsNTSlideA,
+	"skill_slide_a.wav":           bmsNTSlideA,
+	"slide_end_a.wav":             bmsNTSlideEndA,
+	"slide_end_flick_a.wav":       bmsNTSlideEndFlickA,
 	"slide_end_dir_flick_l_a.wav": NoteTypeSlideEndDirFlickLeftA,
 	"slide_end_dir_flick_r_a.wav": NoteTypeSlideEndDirFlickRightA,
-	"slide_b.wav":                 NoteTypeSlideB,
-	"slide_b_skill.wav":           NoteTypeSlideB,
-	"slide_b_fever.wav":           NoteTypeSlideB,
-	"skill_slide_b.wav":           NoteTypeSlideB,
+	"slide_b.wav":                 bmsNTSlideB,
+	"slide_b_skill.wav":           bmsNTSlideB,
+	"slide_b_fever.wav":           bmsNTSlideB,
+	"skill_slide_b.wav":           bmsNTSlideB,
 	"slide_end_b.wav":             NoteTypeSlideEndB,
 	"slide_end_flick_b.wav":       NoteTypeSlideEndFlickB,
 	"slide_end_dir_flick_l_b.wav": NoteTypeSlideEndDirFlickLeftB,
 	"slide_end_dir_flick_r_b.wav": NoteTypeSlideEndDirFlickRightB,
-	"fever_note.wav":              NoteTypeNote,
-	"fever_note_flick.wav":        NoteTypeFlick,
-	"fever_note_slide_a.wav":      NoteTypeSlideA,
-	"fever_note_slide_end_a.wav":  NoteTypeSlideEndA,
-	"fever_note_slide_b.wav":      NoteTypeSlideB,
+	"fever_note.wav":              bmsNTTap,
+	"fever_note_flick.wav":        bmsNTFlick,
+	"fever_note_slide_a.wav":      bmsNTSlideA,
+	"fever_note_slide_end_a.wav":  bmsNTSlideEndA,
+	"fever_note_slide_b.wav":      bmsNTSlideB,
 	"fever_note_slide_end_b.wav":  NoteTypeSlideEndB,
-	"fever_slide_a.wav":           NoteTypeSlideA,
-	"fever_slide_end_a.wav":       NoteTypeSlideEndA,
-	"fever_slide_b.wav":           NoteTypeSlideB,
+	"fever_slide_a.wav":           bmsNTSlideA,
+	"fever_slide_end_a.wav":       bmsNTSlideEndA,
+	"fever_slide_b.wav":           bmsNTSlideB,
 	"fever_slide_end_b.wav":       NoteTypeSlideEndB,
 	"directional_fl_l.wav":        NoteTypeFlickLeft,
 	"directional_fl_r.wav":        NoteTypeFlickRight,
@@ -154,67 +135,67 @@ var wavNoteTypeMap map[string]BasicNoteType = map[string]BasicNoteType{
 	"cont_bezier_back_b.wav":      NoteTypeContBezierBackB,
 	"long_end_dir_flick_l.wav":    NoteTypeLongEndDirFlickLeft,
 	"long_end_dir_flick_r.wav":    NoteTypeLongEndDirFlickRight,
+	"lane_change.wav":             NoteTypeLaneChange,
 }
 
-type NoteType interface {
+type bmsNoteType interface {
 	String() string
-	NoteType() BasicNoteType
-	Mark() string
-	Offset() float64
+	noteType() bmsBasicNoteType
 }
 
-func (n BasicNoteType) String() string {
+func (n bmsBasicNoteType) String() string {
 	switch n {
-	case NoteTypeNote:
+	case bmsNTTap:
 		return "Tap"
-	case NoteTypeFlick:
+	case bmsNTFlick:
 		return "Flick"
-	case NoteTypeSlideA:
+	case NoteTypeFlickLeft:
+		return "Flick Left"
+	case NoteTypeFlickRight:
+		return "Flick Right"
+	case bmsNTSlideA:
 		return "Slide A"
-	case NoteTypeSlideEndA:
+	case bmsNTSlideEndA:
 		return "Slide End A"
-	case NoteTypeSlideEndFlickA:
+	case bmsNTSlideEndFlickA:
 		return "Slide End Flick A"
-	case NoteTypeSlideB:
+	case NoteTypeSlideEndDirFlickLeftA:
+		return "Slide End Dir Flick Left A"
+	case NoteTypeSlideEndDirFlickRightA:
+		return "Slide End Dir Flick Right A"
+	case bmsNTSlideB:
 		return "Slide B"
 	case NoteTypeSlideEndB:
 		return "Slide End B"
 	case NoteTypeSlideEndFlickB:
 		return "Slide End Flick B"
+	case NoteTypeSlideEndDirFlickLeftB:
+		return "Slide End Dir Flick Left B"
+	case NoteTypeSlideEndDirFlickRightB:
+		return "Slide End Dir Flick Right B"
+	case NoteTypeLongEndDirFlickLeft:
+		return "Long End Dir Flick Left"
+	case NoteTypeLongEndDirFlickRight:
+		return "Long End Dir Flick Right"
 	default:
 		return "Unknown"
 	}
 }
 
-func (n BasicNoteType) NoteType() BasicNoteType {
+func (n bmsBasicNoteType) noteType() bmsBasicNoteType {
 	return n
 }
 
-func (n BasicNoteType) Mark() string {
-	switch n {
-	case NoteTypeSlideA, NoteTypeSlideEndA, NoteTypeSlideEndFlickA:
-		return "a"
-	case NoteTypeSlideB, NoteTypeSlideEndB, NoteTypeSlideEndFlickB:
-		return "b"
-	default:
-		return ""
-	}
-}
-
-func (n BasicNoteType) Offset() float64 {
-	return 0.0
-}
-
-type SpecialSlideNoteType struct {
+type bmsSpecialSlideNoteType struct {
 	mark   string
 	offset float64
 }
 
-func NewSpecialSlideNoteType(name string) (SpecialSlideNoteType, error) {
+func newBMSSpecialSlideNoteType(name string) (*bmsSpecialSlideNoteType, error) {
 	re := regexp.MustCompile(`slide_(.)_(L|R)S(\d\d)\.wav`)
 	subs := re.FindStringSubmatch(name)
 	if len(subs) < 3 {
-		return SpecialSlideNoteType{}, fmt.Errorf("not a special slide note type")
+		return &bmsSpecialSlideNoteType{}, fmt.Errorf("not a special slide note type")
 	}
 	mark := subs[1]
 	direction := subs[2]
@@ -230,47 +211,102 @@ func NewSpecialSlideNoteType(name string) (SpecialSlideNoteType, error) {
 		offset = -offset
 	}
 
-	return SpecialSlideNoteType{
+	return &bmsSpecialSlideNoteType{
 		mark:   mark,
 		offset: offset,
 	}, nil
 }
 
-func (n SpecialSlideNoteType) String() string {
+func (n *bmsSpecialSlideNoteType) String() string {
 	return fmt.Sprintf("Slide Special %s", n.mark)
 }
 
-func (n SpecialSlideNoteType) NoteType() BasicNoteType {
+func (n *bmsSpecialSlideNoteType) noteType() bmsBasicNoteType {
 	switch n.mark {
 	case "a":
-		return NoteTypeSlideA
+		return bmsNTSlideA
 	case "b":
-		return NoteTypeSlideB
+		return bmsNTSlideB
 	default:
-		return NoteTypeNote
+		return bmsNTTap
 	}
 }
 
-func (n SpecialSlideNoteType) Mark() string {
-	return n.mark
-}
-
-func (n SpecialSlideNoteType) Offset() float64 {
-	return n.offset
-}
-
-func noteTypeOf(wav string) (NoteType, error) {
+func noteTypeOf(wav string) (bmsNoteType, error) {
 	basicType, ok := wavNoteTypeMap[wav]
 	if ok {
 		return basicType, nil
 	}
 
-	note, err := NewSpecialSlideNoteType(wav)
+	note, err := newBMSSpecialSlideNoteType(wav)
 	if err == nil {
 		return note, nil
 	}
 
-	return NoteTypeNote, fmt.Errorf("unknown wav: %s", wav)
+	return bmsNTTap, fmt.Errorf("unknown wav: %s", wav)
+}
+
+var simpleNoteChannels = []*bmsChannel{
+	{bmsCKNote, '6'},
+	{bmsCKNote, '1'},
+	{bmsCKNote, '2'},
+	{bmsCKNote, '3'},
+	{bmsCKNote, '4'},
+	{bmsCKNote, '5'},
+	{bmsCKNote, '8'},
+}
+
+var channelsMap = map[string]*bmsChannel{
+	"16": simpleNoteChannels[0],
+	"11": simpleNoteChannels[1],
+	"12": simpleNoteChannels[2],
+	"13": simpleNoteChannels[3],
+	"14": simpleNoteChannels[4],
+	"15": simpleNoteChannels[5],
+	"18": simpleNoteChannels[6],
+}
+
+func channelOf(rawChannel string) (*bmsChannel, error) {
+	bytes := []byte(rawChannel)
+	if len(bytes) != 2 {
+		return nil, fmt.Errorf("unknown raw channel: %s", rawChannel)
+	}
+
+	var kind bmsChannelKind
+	switch bytes[0] {
+	case '0':
+		kind = bmsCKConfig
+	case '1':
+		kind = bmsCKNote
+	case '3':
+		kind = bmsCKSpecial
+	case '5':
+		kind = bmsCKHold
+	default:
+		return nil, fmt.Errorf("unknown channel kind: %c", bytes[0])
+	}
+
+	if c, ok := channelsMap[rawChannel]; ok {
+		return c, nil
+	}
+
+	c := &bmsChannel{
+		kind: kind,
+		typ:  bytes[1],
+	}
+
+	channelsMap[rawChannel] = c
+	return c, nil
+}
+
+type parsedNoteEvent struct {
+	channel  *bmsChannel
+	noteType bmsNoteType
+	aux      int
+}
+
+func (ev *parsedNoteEvent) String() string {
+	return fmt.Sprintf("%s(@ %s)", ev.noteType, ev.channel)
 }
 
 func ParseBMS(chartText string) Chart {
@@ -362,7 +398,7 @@ func ParseBMS(chartText string) Chart {
 	lines = lines[1:]
 
 	type rawNoteEvent struct {
-		channel string
+		channel *bmsChannel
 		wav     string
 	}
 	rawNoteEvents := map[float64][]*rawNoteEvent{}
@@ -381,21 +417,24 @@ func ParseBMS(chartText string) Chart {
 
 		for _, ev := range events {
 			tick := ev.Tick()
-			channel := ev.Common.Channel
+			channel, err := channelOf(ev.Common.Channel)
+			if err != nil {
+				log.Fatalf("Failed to parse channel %s: %s", ev.Common.Channel, err)
+			}
 
-			switch channel {
-			case ChannelBackgroundMusic:
-				// do nothing
-			case ChannelBPMChange:
-				value, err := strconv.ParseInt(ev.Type, 16, 64)
-				if err != nil {
-					log.Fatalf("Failed to parse value of line #%d bpm(%s), err: %+v", lineNumber, ev.Type, err)
+			if channel.kind == bmsCKConfig {
+				switch channel.typ {
+				case bmsCTBPMChange:
+					value, err := strconv.ParseInt(ev.Type, 16, 64)
+					if err != nil {
+						log.Fatalf("Failed to parse value of line #%d bpm(%s), err: %+v", lineNumber, ev.Type, err)
+					}
+
+					rawBpmEvents[tick] = float64(value)
+				case bmsCTExtendedBPM:
+					rawBpmEvents[tick] = extendedBPM[ev.Type]
 				}
-
-				rawBpmEvents[tick] = float64(value)
-			case ChannelExtendedBPM:
-				rawBpmEvents[tick] = extendedBPM[ev.Type]
-			default:
+			} else {
 				if _, ok := rawNoteEvents[tick]; !ok {
 					rawNoteEvents[tick] = nil
 				}
@@ -455,11 +494,6 @@ func ParseBMS(chartText string) Chart {
 	// 第三步：将rawNoteEvents初步转换为parsedNoteEvents
 	// 主要是为了将wav解析到音符类型，以及将tick转换为seconds
 	// 在这一步后，时间单位将统一为秒
-	type parsedNoteEvent struct {
-		channel  string
-		noteType NoteType
-		aux      int
-	}
 	parsedNoteEvents := map[float64][]*parsedNoteEvent{}
 	directionalFlickSeconds := map[float64][]byte{}
 	noteTicks := utils.SortedKeysOf(rawNoteEvents)
@@ -473,7 +507,7 @@ func ParseBMS(chartText string) Chart {
 			noteType, err := noteTypeOf(ev.wav)
 			if err != nil {
 				log.Warnf("Unknown wav at channel %s, time: %s: %+v", ev.channel, utils.FormatSeconds(seconds), err)
-				noteType = NoteTypeNote
+				noteType = bmsNTTap
 			}
 			parsedEvents = append(parsedEvents, &parsedNoteEvent{
 				channel:  ev.channel,
@@ -487,9 +521,9 @@ func ParseBMS(chartText string) Chart {
 				}
 				v := directionalFlickSeconds[seconds]
 				if noteType == NoteTypeFlickLeft {
-					v[TRACKS_MAP[ev.channel]] = '<'
+					v[ev.channel.trackID()] = '<'
 				} else {
-					v[TRACKS_MAP[ev.channel]] = '>'
+					v[ev.channel.trackID()] = '>'
 				}
 			}
 		}
@@ -512,7 +546,7 @@ func ParseBMS(chartText string) Chart {
 			} else {
 				if start != -1 {
 					newParsedEvents = append(newParsedEvents, &parsedNoteEvent{
-						channel:  simpleTracks[start],
+						channel:  simpleNoteChannels[start],
 						noteType: NoteTypeFlickRight,
 						aux:      length,
 					})
@@ -535,7 +569,7 @@ func ParseBMS(chartText string) Chart {
 			} else {
 				if start != -1 {
 					newParsedEvents = append(newParsedEvents, &parsedNoteEvent{
-						channel:  simpleTracks[start],
+						channel:  simpleNoteChannels[start],
 						noteType: NoteTypeFlickLeft,
 						aux:      length,
 					})
@@ -560,24 +594,25 @@ func ParseBMS(chartText string) Chart {
 	var slideA, slideB *star
 
 	for _, sec := range noteSeconds {
+		log.Debugln("TIME:", utils.FormatSeconds(sec))
 		events := parsedNoteEvents[sec]
 		slices.SortFunc(events, func(a, b *parsedNoteEvent) int {
-			return -cmp.Compare(a.noteType.NoteType(), b.noteType.NoteType())
+			return -cmp.Compare(a.noteType.noteType(), b.noteType.noteType())
 		})
 
 		for _, ev := range events {
-			switch ev.channel {
-			case ChannelNoteTrack1, ChannelNoteTrack2, ChannelNoteTrack3, ChannelNoteTrack4, ChannelNoteTrack5, ChannelNoteTrack6, ChannelNoteTrack7:
-				trackID := float64(TRACKS_MAP[ev.channel]) / 6
+			switch ev.channel.kind {
+			case bmsCKNote:
+				trackID := float64(ev.channel.trackID()) / 6
 				switch ev.noteType {
 				// normal note
-				case NoteTypeNote:
+				case bmsNTTap:
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
 							markAsTap())
 				// flick note
-				case NoteTypeFlick:
+				case bmsNTFlick:
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
@@ -596,7 +631,7 @@ func ParseBMS(chartText string) Chart {
 							markAsTap().
 							flickToIfOk(true, 0))
 				// slide a
-				case NoteTypeSlideA:
+				case bmsNTSlideA:
 					if slideA == nil {
 						slideA = newStar(sec, trackID, 1.0/6).
 							markAsTap().
@@ -605,14 +640,14 @@ func ParseBMS(chartText string) Chart {
 						slideA = newStar(sec, trackID, 1.0/6).
 							chainsAfter(slideA)
 					}
-				case NoteTypeSlideEndA:
+				case bmsNTSlideEndA:
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
 							chainsAfter(slideA).
 							markAsEnd())
 					slideA = nil
-				case NoteTypeSlideEndFlickA:
+				case bmsNTSlideEndFlickA:
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
@@ -637,7 +672,7 @@ func ParseBMS(chartText string) Chart {
 							markAsEnd())
 					slideA = nil
 				// slide b
-				case NoteTypeSlideB:
+				case bmsNTSlideB:
 					if slideB == nil {
 						slideB = newStar(sec, trackID, 1.0/6).
 							markAsTap().
@@ -647,6 +682,9 @@ func ParseBMS(chartText string) Chart {
 							chainsAfter(slideB)
 					}
 				case NoteTypeSlideEndB:
+					if slideB == nil {
+						log.Fatalf("%s at channel %s time %s has no slide head", ev.noteType, ev.channel, utils.FormatSeconds(sec))
+					}
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
@@ -654,6 +692,9 @@ func ParseBMS(chartText string) Chart {
 							markAsEnd())
 					slideB = nil
 				case NoteTypeSlideEndFlickB:
+					if slideB == nil {
+						log.Fatalf("%s at channel %s time %s has no slide head", ev.noteType, ev.channel, utils.FormatSeconds(sec))
+					}
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
@@ -662,6 +703,9 @@ func ParseBMS(chartText string) Chart {
 							markAsEnd())
 					slideB = nil
 				case NoteTypeSlideEndDirFlickLeftB:
+					if slideB == nil {
+						log.Fatalf("%s at channel %s time %s has no slide head", ev.noteType, ev.channel, utils.FormatSeconds(sec))
+					}
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
@@ -670,6 +714,9 @@ func ParseBMS(chartText string) Chart {
 							markAsEnd())
 					slideB = nil
 				case NoteTypeSlideEndDirFlickRightB:
+					if slideB == nil {
+						log.Fatalf("%s at channel %s time %s has no slide head", ev.noteType, ev.channel, utils.FormatSeconds(sec))
+					}
 					finalEvents = append(
 						finalEvents,
 						newStar(sec, trackID, 1.0/6).
@@ -688,15 +735,19 @@ func ParseBMS(chartText string) Chart {
 				case NoteTypeContBezierBackA:
 				case NoteTypeContBezierBackB:
 
+				case NoteTypeLaneChange:
+					// [TODO] 解析大小键
+					// update: 算了，等下次愚人节再说吧
+
 				// unknown
 				default:
-					log.Warnf("unknown note type %s on note track %d\n", ev.noteType, trackID)
+					log.Warnf("unknown note type %s at track %f time %s\n", ev.noteType, trackID, utils.FormatSeconds(sec))
 				}
-			case ChannelHoldTrack1, ChannelHoldTrack2, ChannelHoldTrack3, ChannelHoldTrack4, ChannelHoldTrack5, ChannelHoldTrack6, ChannelHoldTrack7:
-				trackID := TRACKS_MAP[ev.channel]
+			case bmsCKHold:
+				trackID := ev.channel.trackID()
 				trackX := float64(trackID) / 6
 				switch ev.noteType {
-				case NoteTypeNote:
+				case bmsNTTap:
 					startTick := holdTracks[trackID]
 					if math.IsNaN(startTick) {
 						holdTracks[trackID] = sec
@@ -712,7 +763,7 @@ func ParseBMS(chartText string) Chart {
 								markAsEnd())
 						holdTracks[trackID] = math.NaN()
 					}
-				case NoteTypeFlick:
+				case bmsNTFlick:
 					startTick := holdTracks[trackID]
 					if math.IsNaN(startTick) {
 						log.Fatalf("no hold start data on track %d", trackID)
@@ -763,10 +814,10 @@ func ParseBMS(chartText string) Chart {
 				default:
 					log.Warnf("unknown note type %s at track %d, time %f s\n", ev.noteType, trackID, sec)
 				}
-			case ChannelSpecialTrack1, ChannelSpecialTrack2, ChannelSpecialTrack3, ChannelSpecialTrack4, ChannelSpecialTrack5, ChannelSpecialTrack6, ChannelSpecialTrack7:
-				trackID := float64(TRACKS_MAP[ev.channel]) / 6
+			case bmsCKSpecial:
+				trackID := float64(ev.channel.trackID()) / 6
 				switch nt := ev.noteType.(type) {
-				case SpecialSlideNoteType:
+				case *bmsSpecialSlideNoteType:
 					switch nt.mark {
 					case "a":
 						if slideA == nil {
@@ -789,9 +840,9 @@ func ParseBMS(chartText string) Chart {
 					default:
 						log.Warnf("unknown mark %s\n", nt.mark)
 					}
-				case BasicNoteType:
+				case bmsBasicNoteType:
 					switch nt {
-					case NoteTypeSlideA:
+					case bmsNTSlideA:
 						if slideA == nil {
 							slideA = newStar(sec, trackID, 1.0/6).
 								markAsTap().
@@ -800,7 +851,7 @@ func ParseBMS(chartText string) Chart {
 							slideA = newStar(sec, trackID, 1.0/6).
 								chainsAfter(slideA)
 						}
-					case NoteTypeSlideB:
+					case bmsNTSlideB:
 						if slideB == nil {
 							slideB = newStar(sec, trackID, 1.0/6).
 								markAsTap().
