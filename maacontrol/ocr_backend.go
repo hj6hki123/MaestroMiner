@@ -16,12 +16,13 @@ import (
 	"sync"
 
 	maa "github.com/MaaXYZ/maa-framework-go/v4"
+
+	"github.com/kvarenzn/ssm/log"
 )
 
 // maaOCRBackend is the concrete MAA OCR runtime implementation.
 type maaOCRBackend struct {
 	mu        sync.Mutex
-	ctrl      *maa.Controller
 	res       *maa.Resource
 	tasker    *maa.Tasker
 	modelName string
@@ -29,14 +30,17 @@ type maaOCRBackend struct {
 }
 
 func newMAAOCRBackend() (*maaOCRBackend, error) {
+	log.Infof("[newMAAOCRBackend] step 1: initMAARuntimeForOCR")
 	if err := initMAARuntimeForOCR(); err != nil {
 		return nil, err
 	}
 
+	log.Infof("[newMAAOCRBackend] step 2: resolveMAAOCRModel")
 	modelDir, modelName, cleanup, err := resolveMAAOCRModel()
 	if err != nil {
 		return nil, err
 	}
+	log.Infof("[newMAAOCRBackend] step 3: NewResource")
 
 	res, err := maa.NewResource()
 	if err != nil {
@@ -46,6 +50,7 @@ func newMAAOCRBackend() (*maaOCRBackend, error) {
 		return nil, fmt.Errorf("maa resource: %w", err)
 	}
 
+	log.Infof("[newMAAOCRBackend] step 4: PostOcrModel %q", modelDir)
 	if !res.PostOcrModel(modelDir).Wait().Success() {
 		res.Destroy()
 		if cleanup != nil {
@@ -54,44 +59,18 @@ func newMAAOCRBackend() (*maaOCRBackend, error) {
 		return nil, fmt.Errorf("maa load OCR model from %q failed", modelDir)
 	}
 
-	ctrl, err := maa.NewBlankController()
-	if err != nil {
-		res.Destroy()
-		if cleanup != nil {
-			cleanup()
-		}
-		return nil, fmt.Errorf("maa blank controller: %w", err)
-	}
-	if !ctrl.PostConnect().Wait().Success() {
-		ctrl.Destroy()
-		res.Destroy()
-		if cleanup != nil {
-			cleanup()
-		}
-		return nil, fmt.Errorf("maa blank controller connect failed")
-	}
-
+	log.Infof("[newMAAOCRBackend] step 5: NewTasker")
 	tasker, err := maa.NewTasker()
 	if err != nil {
-		ctrl.Destroy()
 		res.Destroy()
 		if cleanup != nil {
 			cleanup()
 		}
 		return nil, fmt.Errorf("maa tasker: %w", err)
 	}
-	if err := tasker.BindController(ctrl); err != nil {
-		tasker.Destroy()
-		ctrl.Destroy()
-		res.Destroy()
-		if cleanup != nil {
-			cleanup()
-		}
-		return nil, fmt.Errorf("maa bind controller: %w", err)
-	}
+	log.Infof("[newMAAOCRBackend] step 6: BindResource")
 	if err := tasker.BindResource(res); err != nil {
 		tasker.Destroy()
-		ctrl.Destroy()
 		res.Destroy()
 		if cleanup != nil {
 			cleanup()
@@ -99,18 +78,8 @@ func newMAAOCRBackend() (*maaOCRBackend, error) {
 		return nil, fmt.Errorf("maa bind resource: %w", err)
 	}
 
-	if !tasker.Initialized() {
-		tasker.Destroy()
-		ctrl.Destroy()
-		res.Destroy()
-		if cleanup != nil {
-			cleanup()
-		}
-		return nil, fmt.Errorf("maa tasker not initialized")
-	}
-
+	log.Infof("[newMAAOCRBackend] done")
 	return &maaOCRBackend{
-		ctrl:      ctrl,
 		res:       res,
 		tasker:    tasker,
 		modelName: modelName,
@@ -263,6 +232,19 @@ func initMAARuntimeForOCR() error {
 	libDir := strings.TrimSpace(os.Getenv("SSM_MAA_LIB_DIR"))
 	return ensureMaaInit(libDir)
 }
+
+// CheckOCRModels returns true if the MAA OCR model files can be found without
+// initialising the backend.  Use this to decide whether to download models.
+func CheckOCRModels() bool {
+	_, _, cl, err := resolveMAAOCRModel()
+	if cl != nil {
+		cl()
+	}
+	return err == nil
+}
+
+// DefaultOCRModelDir is the preferred local directory for MAA OCR model files.
+const DefaultOCRModelDir = "./maacontrol/resource/model/ocr"
 
 func resolveMAAOCRModel() (modelDir string, modelName string, cleanup func(), err error) {
 	envDir := strings.TrimSpace(os.Getenv("SSM_MAA_OCR_MODEL_DIR"))

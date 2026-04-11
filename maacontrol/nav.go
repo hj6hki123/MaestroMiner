@@ -119,6 +119,7 @@ type Navigator struct {
 // NewNavigator creates a Navigator, connects the MAA ADB controller and loads
 // the pipeline resource bundle.  Call Destroy() when done.
 func NewNavigator(cfg NavConfig) (*Navigator, error) {
+	log.Infof("[NewNavigator] step 1: ensureMaaInit libDir=%q", cfg.MaaLibDir)
 	if err := ensureMaaInit(cfg.MaaLibDir); err != nil {
 		return nil, fmt.Errorf("maa init: %w", err)
 	}
@@ -132,31 +133,44 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 		adbPath = "adb"
 	}
 
+	log.Infof("[NewNavigator] step 2: NewAdbController serial=%q", cfg.AdbSerial)
 	ctrl, err := maa.NewAdbController(
 		adbPath,
 		cfg.AdbSerial,
 		adb.ScreencapDefault,
 		adb.InputAdbShell, // simple, no extra binary required
-		"", "",
+		"{}", "",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("maa adb controller: %w", err)
 	}
+	// Use raw (unscaled) screencap so PostClick coordinates match GetResolution().
+	// MAA's default scales the screencap to ~1280 long-side; without this flag
+	// coordinates computed from GetResolution() would be in device space while
+	// PostClick expects screencap space, causing all clicks to land off-target.
+	if err := ctrl.SetScreenshot(maa.WithScreenshotUseRawSize(true)); err != nil {
+		log.Warnf("[NewNavigator] SetScreenshot raw size: %v", err)
+	}
+
+	log.Infof("[NewNavigator] step 3: PostConnect")
 	if !ctrl.PostConnect().Wait().Success() {
 		ctrl.Destroy()
 		return nil, fmt.Errorf("maa: connect to %q failed", cfg.AdbSerial)
 	}
 
+	log.Infof("[NewNavigator] step 4: NewResource")
 	res, err := maa.NewResource()
 	if err != nil {
 		ctrl.Destroy()
 		return nil, fmt.Errorf("maa resource: %w", err)
 	}
+	log.Infof("[NewNavigator] step 5: PostBundle %q", cfg.ResourceDir)
 	if !res.PostBundle(cfg.ResourceDir).Wait().Success() {
 		res.Destroy()
 		ctrl.Destroy()
 		return nil, fmt.Errorf("maa resource bundle load from %q failed", cfg.ResourceDir)
 	}
+	log.Infof("[NewNavigator] step 6: register custom recs/actions")
 
 	n := &Navigator{cfg: cfg, ctrl: ctrl, res: res}
 
@@ -176,6 +190,7 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 	// Register custom actions
 	for name, act := range map[string]maa.CustomActionRunner{
 		"ClickDifficultyAction": &clickDifficultyAction{nav: n},
+ 		"ClickKetteiAction":     &clickKetteiAction{nav: n},
 		"ClickLiveOrBandAction": &clickLiveOrBandAction{nav: n},
 		"ClickDialogOKAction":   &clickDialogOKAction{nav: n},
 	} {
@@ -192,18 +207,21 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 		ctrl.Destroy()
 		return nil, fmt.Errorf("maa tasker: %w", err)
 	}
+	log.Infof("[NewNavigator] step 7: BindController")
 	if err := tasker.BindController(ctrl); err != nil {
 		tasker.Destroy()
 		res.Destroy()
 		ctrl.Destroy()
 		return nil, fmt.Errorf("maa bind controller: %w", err)
 	}
+	log.Infof("[NewNavigator] step 8: BindResource")
 	if err := tasker.BindResource(res); err != nil {
 		tasker.Destroy()
 		res.Destroy()
 		ctrl.Destroy()
 		return nil, fmt.Errorf("maa bind resource: %w", err)
 	}
+	log.Infof("[NewNavigator] done")
 
 	n.tasker = tasker
 
@@ -405,6 +423,7 @@ func (r *roiCenterRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*ma
 		return nil, false
 	}
 	cx, cy := roiCenterPx(roi, w, h)
+	log.Infof("[MAA_NAV] ROICenterRec[%s]: img=%dx%d → tap=(%d,%d)", arg.CustomRecognitionParam, w, h, cx, cy)
 	return &maa.CustomRecognitionResult{
 		Box:    maa.Rect{cx, cy, 1, 1},
 		Detail: fmt.Sprintf("%s@(%d,%d)", arg.CustomRecognitionParam, cx, cy),
@@ -460,6 +479,7 @@ func (r *pauseNccRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa
 	if thresh <= 0 {
 		thresh = 0.40
 	}
+	log.Infof("[MAA_NAV] PauseButtonRec: img=%dx%d roi=[%d,%d,%d,%d] best_ncc=%.3f thresh=%.2f", w, h, x1, y1, x2, y2, best, thresh)
 	if best < thresh {
 		return nil, false
 	}
@@ -495,6 +515,13 @@ func (a *clickDifficultyAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) 
 		log.Warnf("[MAA_NAV] GetResolution: %v", err)
 		return true // non-fatal: proceed without difficulty tap
 	}
+	// MAA may return landscape dimensions (w>h) even when the game runs in
+	// portrait.  Swap so that our normalised coordinates (designed for portrait)
+	// always receive (portrait_w, portrait_h).
+	if w > h {
+		w, h = h, w
+	}
+	log.Infof("[MAA_NAV] GetResolution (portrait): w=%d h=%d", w, h)
 
 	// PJSK + append requires flipping to the second difficulty page first.
 	if mode == "pjsk" && diff == "append" {
@@ -509,7 +536,7 @@ func (a *clickDifficultyAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) 
 	if fn := n.cfg.DifficultyTapFn; fn != nil {
 		x, y, ok := fn(mode, diff, int(w), int(h))
 		if ok {
-			n.emit("ClickDifficulty", "楽曲選択", fmt.Sprintf("→ 點擊難度 %s", diff), true)
+			n.emit("ClickDifficulty", "楽曲選択", fmt.Sprintf("→ 點擊難度 %s @ (%d,%d)", diff, x, y), true)
 			ctrl.PostClick(int32(x), int32(y)).Wait()
 		}
 	}
@@ -525,16 +552,44 @@ func (a *clickDifficultyAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) 
 type dialogDetectRec struct{ nav *Navigator }
 
 func (r *dialogDetectRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
-	if !detectDialogByLuma(arg.Img, r.nav.cfg.DialogTitleROI) {
-		return nil, false
-	}
 	w := arg.Img.Bounds().Dx()
 	h := arg.Img.Bounds().Dy()
+	visible := detectDialogByLuma(arg.Img, r.nav.cfg.DialogTitleROI)
+	log.Infof("[MAA_NAV] DialogDetectRec: img=%dx%d visible=%v", w, h, visible)
+	if !visible {
+		return nil, false
+	}
 	cx, cy := roiCenterPx(r.nav.cfg.DialogTitleROI, w, h)
 	return &maa.CustomRecognitionResult{
 		Box:    maa.Rect{cx, cy, 1, 1},
 		Detail: "dialog_visible",
 	}, true
+}
+
+// ─────────────────────────────────────────────
+// Custom action: ClickKetteiAction
+// ─────────────────────────────────────────────
+
+// clickKetteiAction taps the 決定 (confirm/select) button using portrait
+// device coordinates via ctrl.PostClick, bypassing MAA's landscape screenshot
+// coordinate system entirely.
+type clickKetteiAction struct{ nav *Navigator }
+
+func (a *clickKetteiAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
+	n := a.nav
+	ctrl := ctx.GetTasker().GetController()
+	w, h, err := ctrl.GetResolution()
+	if err != nil {
+		log.Warnf("[MAA_NAV] GetResolution: %v", err)
+		return true
+	}
+	if w > h {
+		w, h = h, w
+	}
+	cx, cy := roiCenterPx(n.cfg.KetteiROI, int(w), int(h))
+	n.emit("ClickKettei", "楽曲選択", fmt.Sprintf("→ 點擊決定 @ (%d,%d)", cx, cy), true)
+	ctrl.PostClick(int32(cx), int32(cy)).Wait()
+	return true
 }
 
 // ─────────────────────────────────────────────
@@ -553,6 +608,9 @@ func (a *clickLiveOrBandAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) 
 	if err != nil {
 		log.Warnf("[MAA_NAV] GetResolution: %v", err)
 		return true
+	}
+	if w > h {
+		w, h = h, w
 	}
 	roi := n.cfg.LiveStartROI
 	if mode == "pjsk" {
@@ -579,6 +637,9 @@ func (a *clickDialogOKAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bo
 	if err != nil {
 		log.Warnf("[MAA_NAV] GetResolution: %v", err)
 		return true
+	}
+	if w > h {
+		w, h = h, w
 	}
 	cx, cy := roiCenterPx(n.cfg.DialogOKROI, int(w), int(h))
 	n.emit("ClickDialogOK", "ライブ設定", "→ 點擊 OK", true)

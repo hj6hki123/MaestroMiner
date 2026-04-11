@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"math"
 	"net/http"
@@ -66,8 +67,8 @@ const (
 	SERVER_FILE              = "scrcpy-server-v" + SERVER_FILE_VERSION
 	SERVER_FILE_DOWNLOAD_URL = "https://github.com/Genymobile/scrcpy/releases/download/v" + SERVER_FILE_VERSION + "/" + SERVER_FILE
 	SERVER_FILE_SHA256       = "a0f70b20aa4998fbf658c94118cd6c8dab6abbb0647a3bdab344d70bc1ebcbb8"
-	GO_OCR_REPO_URL          = "https://huggingface.co/getcharzp/go-ocr"
-	GO_OCR_REPO_DIR          = "go-ocr"
+	// MAA OCR model files — downloaded individually (no git/git-lfs required).
+	MAA_OCR_MODEL_BASE_URL = "https://huggingface.co/getcharzp/go-ocr/resolve/main/paddle_weights"
 )
 
 func isVideoDecodeEnabled() bool {
@@ -301,6 +302,52 @@ func formatSongDetectCandidates(cands []gui.SongDetectCandidate, n int) string {
 		parts = append(parts, fmt.Sprintf("#%d %s(%d)", c.SongID, c.Title, c.Score))
 	}
 	return strings.Join(parts, " | ")
+}
+
+// ─────────────────────────────────────────────
+// MAA ROI diagnostic draw helpers
+// ─────────────────────────────────────────────
+
+// maaDrawROIBox draws a 3-pixel-wide coloured border for the given normalised ROI.
+func maaDrawROIBox(img *image.RGBA, roi navROI, imgW, imgH int, c color.RGBA) {
+	x1 := iclamp(int(roi.x1*float64(imgW)), 0, imgW-1)
+	x2 := iclamp(int(roi.x2*float64(imgW)), 0, imgW-1)
+	y1 := iclamp(int(roi.y1*float64(imgH)), 0, imgH-1)
+	y2 := iclamp(int(roi.y2*float64(imgH)), 0, imgH-1)
+	const thick = 3
+	b := img.Bounds()
+	setpx := func(x, y int) {
+		if x >= b.Min.X && x < b.Max.X && y >= b.Min.Y && y < b.Max.Y {
+			img.SetRGBA(x, y, c)
+		}
+	}
+	for t := 0; t < thick; t++ {
+		for x := x1; x <= x2; x++ {
+			setpx(x, y1+t)
+			setpx(x, y2-t)
+		}
+		for y := y1; y <= y2; y++ {
+			setpx(x1+t, y)
+			setpx(x2-t, y)
+		}
+	}
+}
+
+// maaDrawCross draws a ±12-pixel cross (3 px thick) to mark a tap point.
+func maaDrawCross(img *image.RGBA, cx, cy int, c color.RGBA) {
+	const arm, thick = 12, 3
+	b := img.Bounds()
+	setpx := func(x, y int) {
+		if x >= b.Min.X && x < b.Max.X && y >= b.Min.Y && y < b.Max.Y {
+			img.SetRGBA(x, y, c)
+		}
+	}
+	for t := -thick / 2; t <= thick/2; t++ {
+		for d := -arm; d <= arm; d++ {
+			setpx(cx+d, cy+t) // horizontal bar
+			setpx(cx+t, cy+d) // vertical bar
+		}
+	}
 }
 
 // ─────────────────────────────────────────────
@@ -1361,34 +1408,6 @@ func runCommand(name string, args ...string) error {
 	return cmd.Run()
 }
 
-func downloadOrUpdateGoOCRAssets() error {
-	if _, err := exec.LookPath("git"); err != nil {
-		return fmt.Errorf("git is not installed or not in PATH")
-	}
-
-	if st, err := os.Stat(GO_OCR_REPO_DIR); err == nil {
-		if !st.IsDir() {
-			return fmt.Errorf("%s exists but is not a directory", GO_OCR_REPO_DIR)
-		}
-		log.Infoln("Updating GoOCR assets in ./" + GO_OCR_REPO_DIR + " ...")
-		if err := runCommand("git", "-C", GO_OCR_REPO_DIR, "pull", "--ff-only"); err != nil {
-			return err
-		}
-	} else if os.IsNotExist(err) {
-		log.Infoln("Cloning GoOCR assets to ./" + GO_OCR_REPO_DIR + " ...")
-		if err := runCommand("git", "clone", GO_OCR_REPO_URL, GO_OCR_REPO_DIR); err != nil {
-			return err
-		}
-	} else {
-		return err
-	}
-
-	if _, err := resolveGoOCRPaths(); err != nil {
-		return fmt.Errorf("assets still missing after download: %w", err)
-	}
-	return nil
-}
-
 func maybePrepareScrcpyServerForGUI() {
 	ok, err := hasValidScrcpyServer()
 	if err != nil {
@@ -1414,23 +1433,62 @@ func maybePrepareScrcpyServerForGUI() {
 }
 
 func maybePrepareGoOCRAssetsForGUI() {
-	if _, err := resolveGoOCRPaths(); err == nil {
+	if maacontrol.CheckOCRModels() {
+		log.Infoln("MAA OCR models found.")
 		return
 	}
 
-	log.Infoln("GoOCR assets are required for auto song detection and Detect Song Name.")
-	log.Infoln("SSM GUI can download them using: git clone " + GO_OCR_REPO_URL)
-	if !promptYesNo("Download GoOCR assets now?", false) {
-		log.Infoln("Skipped GoOCR assets download. OCR features will remain unavailable until assets are configured.")
+	log.Infoln("MAA OCR model files (det.onnx / rec.onnx / keys.txt) are required for OCR features.")
+	log.Infof("They will be downloaded to: %s", maacontrol.DefaultOCRModelDir)
+	if !promptYesNo("Download MAA OCR models now?", true) {
+		log.Infoln("Skipped OCR model download. OCR features will be unavailable.")
 		return
 	}
 
-	if err := downloadOrUpdateGoOCRAssets(); err != nil {
-		log.Warnf("Failed to prepare GoOCR assets: %v", err)
-		log.Infoln("Tip: ensure Git (and Git LFS if needed) is installed, then retry.")
-		return
+	if err := downloadMAAOCRModels(); err != nil {
+		log.Warnf("Failed to download MAA OCR models: %v", err)
+	} else {
+		log.Infoln("MAA OCR models downloaded successfully.")
 	}
-	log.Infoln("GoOCR assets are ready.")
+}
+
+func downloadMAAOCRModels() error {
+	dst := maacontrol.DefaultOCRModelDir
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return fmt.Errorf("create model dir: %w", err)
+	}
+
+	files := []struct{ remote, local string }{
+		{MAA_OCR_MODEL_BASE_URL + "/det.onnx", filepath.Join(dst, "det.onnx")},
+		{MAA_OCR_MODEL_BASE_URL + "/rec.onnx", filepath.Join(dst, "rec.onnx")},
+		{MAA_OCR_MODEL_BASE_URL + "/dict.txt", filepath.Join(dst, "keys.txt")},
+	}
+
+	for _, f := range files {
+		log.Infof("  downloading %s ...", filepath.Base(f.local))
+		if err := downloadFileTo(f.remote, f.local); err != nil {
+			return fmt.Errorf("download %s: %w", filepath.Base(f.local), err)
+		}
+	}
+	return nil
+}
+
+func downloadFileTo(url, dst string) error {
+	resp, err := http.Get(url) //nolint:noctx
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
+	}
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 func prepareGUIPrerequisites() {
