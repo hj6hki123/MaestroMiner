@@ -15,6 +15,7 @@ import (
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/gui"
 	"github.com/kvarenzn/ssm/maacontrol"
+	"github.com/kvarenzn/ssm/songdetect"
 )
 
 // navROI defines a rectangular region of interest as normalized fractions [0,1] of frame dimensions.
@@ -22,7 +23,7 @@ type navROI struct{ x1, y1, x2, y2 float64 }
 
 // Predefined ROIs derived from BanG Dream / PJSK screenshot analysis.
 var (
-	defaultRoiSongNameBang = navROI{0.23, 0.46, 0.47, 0.50}
+	defaultRoiSongNameBang = navROI{0.23, 0.46, 0.47, 0.51}
 	defaultRoiSongNamePjsk = navROI{0.59, 0.46, 0.85, 0.52}
 
 	defaultRoiPageTitleBang = navROI{0.06, 0.04, 0.28, 0.12}
@@ -377,7 +378,7 @@ func difficultyTapPointByOCR(device *adb.Device, mode, diff string) (int, int, b
 		}
 		score := 0.0
 		for _, kw := range keywords {
-			if sc := fuzzyKeywordScore(t, kw); sc > score {
+			if sc := songdetect.FuzzyKeywordScore(t, kw); sc > score {
 				score = sc
 			}
 		}

@@ -1,0 +1,99 @@
+flowchart TD
+    classDef F fill:#5c8a5c,color:#fff,stroke:none
+    classDef C fill:#c87f2a,color:#fff,stroke:none
+    classDef D fill:#3a7abf,color:#fff,stroke:none
+    classDef E fill:#c0392b,color:#fff,stroke:none
+    classDef P fill:#888,color:#fff,stroke:none
+
+    Nav([Nav<br>進入點]) --> main
+
+    main[main<br>無條件進入主流程]:::D
+    main -->|遊戲不在 Live 頁時 JB 導回| return_home[to_tome → menu_home<br>回主頁再進 Live]:::P
+    main --> live_home_button
+    main --> select_live_mode
+    main --> select_song
+
+    live_home_button[live_home_button<br>TemplateMatch: live_home.png<br>點擊 Live 首頁按鈕]:::F
+    live_home_button -->|出現彈窗時 JB 處理| jb_lhb([JumpBack<br>彈窗處理]):::P
+    live_home_button -->|timeout| to_tome[to_tome<br>回主頁]:::P
+    live_home_button --> select_live_mode
+
+    select_live_mode[select_live_mode<br>TemplateMatch: freelive.png → Click<br>點擊「自由 Live」入口]:::F
+    select_live_mode --> select_song
+    select_live_mode -->|timeout| select_song
+
+    select_song[select_song<br>Custom: SongSelectRec<br>確認在選曲畫面]:::C
+    select_song --> random_choice_song
+    select_song -->|timeout| live_home_button
+
+    random_choice_song[random_choice_song<br>TemplateMatch: random_choice_song.png → Click<br>點擊「隨機選曲」]:::F
+    random_choice_song --> get_song_name
+    random_choice_song -->|timeout| get_song_name
+
+    get_song_name[get_song_name<br>Custom: SongRecognition / SaveSong<br>OCR 讀取曲名並儲存 songID]:::C
+    get_song_name --> set_difficulty
+    get_song_name -->|timeout| set_difficulty
+
+    set_difficulty[set_difficulty<br>Custom: DifficultyRec → Click<br>辨識並點擊目標難度按鈕]:::C
+    set_difficulty --> comfirm_song
+    set_difficulty -->|timeout| comfirm_song
+
+    comfirm_song[comfirm_song<br>DirectHit: ClickKetteiAction<br>點擊「決定」確認選曲]:::D
+    comfirm_song -->|出現彈窗 JB 處理後繼續| jb_cs([JumpBack<br>彈窗處理]):::P
+    comfirm_song -->|排練模式切換按鈕可見 threshold=0.9| switch_liveplay_mode
+    comfirm_song -->|ライブスタート 可見| startlive
+    comfirm_song -->|freelive.png 可見 = 未進正式模式| ensure_live_mode
+    comfirm_song -->|timeout| startlive
+
+    %% ── 決定後：模式確認 ─────────────────────────────────────────
+    switch_liveplay_mode[switch_liveplay_mode<br>TemplateMatch: switch_to_live_mode.png threshold=0.9 → Click<br>排練→正式 模式切換按鈕]:::F
+    switch_liveplay_mode --> disable_liveplay
+    switch_liveplay_mode -->|timeout 不在排練模式| disable_liveplay
+
+    ensure_live_mode[ensure_live_mode<br>TemplateMatch: freelive.png → Click<br>出現 freelive.png = 未進入正式模式 → 點擊進入]:::F
+    ensure_live_mode -->|JB: switch_liveplay_mode 按鈕存在| switch_liveplay_mode
+    ensure_live_mode -->|JB: exit_rehearsal 按鈕存在| exit_rehearsal_mode
+    ensure_live_mode --> disable_liveplay
+    ensure_live_mode -->|timeout freelive 不存在 = 已是正式模式| disable_liveplay
+
+    exit_rehearsal_mode[exit_rehearsal_mode<br>TemplateMatch: exit/pink.png / exit/white.png → Click<br>退出排練模式]:::F
+    exit_rehearsal_mode --> ensure_live_mode
+    exit_rehearsal_mode -->|timeout| ensure_live_mode
+
+    %% ── MV/3D 關閉檢查 ───────────────────────────────────────────
+    disable_liveplay[disable_liveplay<br>Custom: LivePlayOffRec / DoNothing<br>偵測 liveplay_off.png<br>已 OFF → 直接繼續]:::C
+    disable_liveplay -->|liveplay_off.png 匹配 = 已關閉| HandleLiveSetting
+    disable_liveplay -->|timeout liveplay_off 不存在 = MV/3D ON| click_liveplay_toggle
+
+    click_liveplay_toggle[click_liveplay_toggle<br>Custom: LivePlayOnRec → Click<br>偵測 liveplay_3d / liveplay_mv<br>點擊左側固定位置關閉]:::C
+    click_liveplay_toggle -->|點擊後 → 再次確認| disable_liveplay
+    click_liveplay_toggle -->|timeout 找不到按鈕| HandleLiveSetting
+
+    %% ── 設定對話框 → LiveBoost → 開始 ───────────────────────────
+    HandleLiveSetting[HandleLiveSetting<br>Custom: DialogDetectRec / ClickDialogOKAction<br>偵測設定對話框並點 OK]:::C
+    HandleLiveSetting --> ensure_liveboost
+    HandleLiveSetting -->|timeout 無對話框| ensure_liveboost
+
+    ensure_liveboost[ensure_liveboost<br>Custom: LiveBoostEnoughRecognition / HandleLiveBoost<br>確認 LiveBoost 足夠]:::C
+    ensure_liveboost --> startlive
+    ensure_liveboost -->|timeout| startlive
+
+    startlive[startlive<br>TemplateMatch: startlive.png → Click<br>點擊「ライブスタート」]:::F
+    startlive -->|出現彈窗時 JB 處理| jb_sl([JumpBack<br>彈窗處理]):::P
+    startlive --> wait_live_start
+    startlive -->|timeout| wait_live_start
+
+    wait_live_start[wait_live_start<br>TemplateMatch: pause.png<br>等待暫停鍵出現，確認 Live 已開始]:::F
+    wait_live_start -->|出現彈窗時 JB 處理| jb_wls([JumpBack<br>彈窗處理]):::P
+    wait_live_start --> NavSuccess
+
+    NavSuccess([NavSuccess<br>導航完成，Stop]):::E
+
+    subgraph Legend [圖例]
+        direction LR
+        lF[TemplateMatch<br>圖像辨識]:::F
+        lC[Custom<br>自訂辨識/動作]:::C
+        lD[DirectHit<br>無條件執行]:::D
+        lE[Stop<br>結束]:::E
+        lP[JumpBack<br>處理後跳回]:::P
+    end

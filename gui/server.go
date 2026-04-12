@@ -136,6 +136,9 @@ type Server struct {
 
 	OnRunRequest     func(req RunRequest)
 	OnExtractRequest func(path string) error
+	// OCRProbe takes an ADB screencap and runs OCR on the given percent ROI.
+	// x1,y1,x2,y2 are 0-100 percent values. Returns OCR texts and song match info as JSON bytes.
+	OCRProbe func(mode string, x1, y1, x2, y2 int) ([]byte, error)
 }
 
 func NewServer(port int, conf *config.Config) *Server {
@@ -842,6 +845,56 @@ func (s *Server) handleVisionROI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleOCRProbe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.mu.Lock()
+	probe := s.OCRProbe
+	req := s.lastRunReq
+	s.mu.Unlock()
+
+	if probe == nil {
+		http.Error(w, "OCR probe unavailable (no ADB device connected)", http.StatusServiceUnavailable)
+		return
+	}
+
+	q := r.URL.Query()
+	parseIntParam := func(key string, def int) int {
+		v := q.Get(key)
+		if v == "" {
+			return def
+		}
+		var n int
+		fmt.Sscanf(v, "%d", &n)
+		return n
+	}
+
+	mode := q.Get("mode")
+	if mode == "" {
+		mode = req.Mode
+	}
+	if mode == "" {
+		mode = "bang"
+	}
+
+	x1 := parseIntParam("x1", 0)
+	y1 := parseIntParam("y1", 0)
+	x2 := parseIntParam("x2", 100)
+	y2 := parseIntParam("y2", 100)
+
+	data, err := probe(mode, x1, y1, x2, y2)
+	if err != nil {
+		http.Error(w, "OCR probe failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Write(data)
+}
+
 func (s *Server) handleNavROI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1014,6 +1067,7 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/detect-adb", s.handleDetectAdb)
 	mux.HandleFunc("/api/vision-roi.png", s.handleVisionROI)
 	mux.HandleFunc("/api/nav-roi.png", s.handleNavROI)
+	mux.HandleFunc("/api/ocr-probe", s.handleOCRProbe)
 	mux.HandleFunc("/api/frame.png", s.handleFrame)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.port))

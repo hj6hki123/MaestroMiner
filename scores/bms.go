@@ -594,7 +594,7 @@ func ParseBMS(chartText string) Chart {
 	var slideA, slideB *star
 
 	for _, sec := range noteSeconds {
-		log.Debugln("TIME:", utils.FormatSeconds(sec))
+		//log.Debugln("TIME:", utils.FormatSeconds(sec))
 		events := parsedNoteEvents[sec]
 		slices.SortFunc(events, func(a, b *parsedNoteEvent) int {
 			return -cmp.Compare(a.noteType.noteType(), b.noteType.noteType())

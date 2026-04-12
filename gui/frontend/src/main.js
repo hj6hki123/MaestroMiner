@@ -216,7 +216,7 @@ function onNavOCRChanged() {
 var ROI_EDITOR_TARGETS = {
   'auto-bang': { kind: 'auto', mode: 'bang', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
   'auto-pjsk': { kind: 'auto', mode: 'pjsk', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
-  'nav-song-bang': { kind: 'nav', mode: 'bang', writable: true, defaults: { x1: 23, y1: 46, x2: 47, y2: 50 } },
+  'nav-song-bang': { kind: 'nav', mode: 'bang', writable: true, defaults: { x1: 23, y1: 46, x2: 47, y2: 51 } },
   'nav-song-pjsk': { kind: 'nav', mode: 'pjsk', writable: true, defaults: { x1: 59, y1: 46, x2: 85, y2: 52 } },
   'screen-title-bang': { kind: 'export', writable: false, defaults: { x1: 6, y1: 4, x2: 28, y2: 12 } },
   'screen-title-pjsk': { kind: 'export', writable: false, defaults: { x1: 6, y1: 4, x2: 28, y2: 12 } },

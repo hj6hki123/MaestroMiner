@@ -21,16 +21,16 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
-	"unicode"
 
 	"github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/db"
-	"github.com/kvarenzn/ssm/gui" // newly added
+	"github.com/kvarenzn/ssm/gui"
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/maacontrol"
 	"github.com/kvarenzn/ssm/scores"
@@ -82,226 +82,6 @@ func isVideoDecodeEnabled() bool {
 	default:
 		return true
 	}
-}
-
-func normalizeSceneText(s string) string {
-	s = strings.TrimSpace(strings.ToLower(s))
-
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
-			continue
-		}
-		switch r {
-		case '樂':
-			r = '楽'
-		case '擇':
-			r = '択'
-		case '选':
-			r = '選'
-		}
-		b.WriteRune(r)
-	}
-
-	return b.String()
-}
-
-func normalizeSceneTexts(texts []string) []string {
-	normalized := make([]string, 0, len(texts))
-	for _, raw := range texts {
-		t := normalizeSceneText(raw)
-		if t != "" {
-			normalized = append(normalized, t)
-		}
-	}
-	return normalized
-}
-
-func runeCount(s string) int {
-	return len([]rune(s))
-}
-
-func levenshteinDistance(a, b string) int {
-	ar := []rune(a)
-	br := []rune(b)
-	la := len(ar)
-	lb := len(br)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 0
-			if ar[i-1] != br[j-1] {
-				cost = 1
-			}
-			ins := curr[j-1] + 1
-			del := prev[j] + 1
-			sub := prev[j-1] + cost
-			v := ins
-			if del < v {
-				v = del
-			}
-			if sub < v {
-				v = sub
-			}
-			curr[j] = v
-		}
-		prev, curr = curr, prev
-	}
-
-	return prev[lb]
-}
-
-func similarityScore(a, b string) float64 {
-	a = normalizeSceneText(a)
-	b = normalizeSceneText(b)
-	if a == "" || b == "" {
-		return 0
-	}
-	maxLen := runeCount(a)
-	if lb := runeCount(b); lb > maxLen {
-		maxLen = lb
-	}
-	if maxLen == 0 {
-		return 0
-	}
-	d := levenshteinDistance(a, b)
-	score := 1 - float64(d)/float64(maxLen)
-	if score < 0 {
-		return 0
-	}
-	if score > 1 {
-		return 1
-	}
-	return score
-}
-
-func fuzzyKeywordScore(text, keyword string) float64 {
-	text = normalizeSceneText(text)
-	keyword = normalizeSceneText(keyword)
-	if text == "" || keyword == "" {
-		return 0
-	}
-	if strings.Contains(text, keyword) {
-		return 1
-	}
-
-	best := similarityScore(text, keyword)
-
-	// If OCR returns a shortened fragment (e.g. 曲選 from 楽曲選択),
-	// reward partial coverage without hard-coding specific characters.
-	if strings.Contains(keyword, text) && runeCount(text) >= 2 {
-		ratio := float64(runeCount(text)) / float64(runeCount(keyword))
-		if ratio > best {
-			best = ratio
-		}
-	}
-
-	textRunes := []rune(text)
-	kwLen := runeCount(keyword)
-	if len(textRunes) > 0 && kwLen > 0 {
-		windowMin := kwLen - 2
-		if windowMin < 2 {
-			windowMin = 2
-		}
-		windowMax := kwLen + 2
-		if windowMax > len(textRunes) {
-			windowMax = len(textRunes)
-		}
-		for w := windowMin; w <= windowMax; w++ {
-			for i := 0; i+w <= len(textRunes); i++ {
-				s := string(textRunes[i : i+w])
-				if sc := similarityScore(s, keyword); sc > best {
-					best = sc
-				}
-			}
-		}
-	}
-
-	if best < 0 {
-		return 0
-	}
-	if best > 1 {
-		return 1
-	}
-	return best
-}
-
-func bestKeywordScore(texts []string, keywords []string) float64 {
-	best := 0.0
-	for _, t := range texts {
-		for _, kw := range keywords {
-			if sc := fuzzyKeywordScore(t, kw); sc > best {
-				best = sc
-			}
-		}
-	}
-	return best
-}
-
-func songSelectTitleScore(texts []string) float64 {
-	normalized := normalizeSceneTexts(texts)
-	if len(normalized) == 0 {
-		return 0
-	}
-
-	combined := strings.Join(normalized, "")
-	candidates := make([]string, 0, len(normalized)+1)
-	candidates = append(candidates, normalized...)
-	if combined != "" {
-		candidates = append(candidates, combined)
-	}
-
-	fullTitleScore := bestKeywordScore(candidates, []string{"楽曲選択", "songselect", "selectsong"})
-	songConceptScore := bestKeywordScore(candidates, []string{"楽曲", "song", "music"})
-	selectConceptScore := bestKeywordScore(candidates, []string{"選択", "select", "choice"})
-
-	conceptScore := songConceptScore
-	if selectConceptScore < conceptScore {
-		conceptScore = selectConceptScore
-	}
-	if fullTitleScore > conceptScore {
-		return fullTitleScore
-	}
-	return conceptScore
-}
-
-func isSongSelectTitle(texts []string) bool {
-	return songSelectTitleScore(texts) >= 0.50
-}
-
-func firstNStrings(items []string, n int) []string {
-	if len(items) <= n {
-		return items
-	}
-	return items[:n]
-}
-
-func formatSongDetectCandidates(cands []gui.SongDetectCandidate, n int) string {
-	if len(cands) == 0 || n <= 0 {
-		return ""
-	}
-	if len(cands) > n {
-		cands = cands[:n]
-	}
-	parts := make([]string, 0, len(cands))
-	for _, c := range cands {
-		parts = append(parts, fmt.Sprintf("#%d %s(%d)", c.SongID, c.Title, c.Score))
-	}
-	return strings.Join(parts, " | ")
 }
 
 // ─────────────────────────────────────────────
@@ -831,6 +611,87 @@ func runGUI(conf *config.Config) {
 		doneCh        chan struct{}
 	)
 
+	// currentAdbDevice holds the ADB device while a run is active.
+	// Used by the OCR probe API so it uses the same screencap source as MAA.
+	var currentAdbDevice atomic.Pointer[adb.Device]
+
+	srv.OCRProbe = func(mode string, x1, y1, x2, y2 int) ([]byte, error) {
+		// Use the active run device if available, otherwise connect on-demand.
+		dev := currentAdbDevice.Load()
+		if dev == nil {
+			serial := deviceSerial
+			if serial == "" {
+				// Pick the first authorized device.
+				client := adb.NewDefaultClient()
+				devices, err := client.Devices()
+				if err != nil || len(devices) == 0 {
+					return nil, fmt.Errorf("no ADB devices found")
+				}
+				dev = adb.FirstAuthorizedDevice(devices)
+				if dev == nil {
+					return nil, fmt.Errorf("no authorized ADB device found")
+				}
+			} else {
+				client := adb.NewDefaultClient()
+				devices, err := client.Devices()
+				if err != nil {
+					return nil, fmt.Errorf("adb devices: %w", err)
+				}
+				for _, d := range devices {
+					if d.Serial() == serial {
+						dev = d
+						break
+					}
+				}
+				if dev == nil {
+					return nil, fmt.Errorf("ADB device %q not found", serial)
+				}
+			}
+		}
+		pngBytes, err := dev.ScreencapPNGBytes()
+		if err != nil {
+			return nil, fmt.Errorf("screencap: %w", err)
+		}
+		clamp := func(v int) float64 {
+			if v < 0 {
+				return 0
+			}
+			if v > 100 {
+				return 1
+			}
+			return float64(v) / 100.0
+		}
+		titleROI := maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2}
+		songROI := maacontrol.ROI{clamp(x1), clamp(y1), clamp(x2), clamp(y2)}
+		res, err := maacontrol.DetectSongFromPNG(mode, pngBytes, titleROI, songROI)
+		if err != nil {
+			return nil, err
+		}
+		type probeResult struct {
+			Mode       string   `json:"mode"`
+			ROI        [4]int   `json:"roi"`
+			SongTexts  []string `json:"songTexts"`
+			TitleTexts []string `json:"titleTexts"`
+			SongID     int      `json:"songId"`
+			SongTitle  string   `json:"songTitle"`
+			SongScore  int      `json:"songScore"`
+			SourceText string   `json:"sourceText"`
+			Top        string   `json:"top"`
+		}
+		out := probeResult{
+			Mode:       mode,
+			ROI:        [4]int{x1, y1, x2, y2},
+			SongTexts:  res.SongTexts,
+			TitleTexts: res.TitleTexts,
+			SongID:     res.SongID,
+			SongTitle:  res.SongTitle,
+			SongScore:  res.SongScore,
+			SourceText: res.SourceText,
+			Top:        res.TopSummary(5),
+		}
+		return json.Marshal(out)
+	}
+
 	runOnce := func(req gui.RunRequest) {
 		// Cancel the previous run and wait for it to finish (including scrcpy.Close).
 		runMu.Lock()
@@ -851,6 +712,7 @@ func runGUI(conf *config.Config) {
 		go func() {
 			defer func() {
 				cancel()
+				currentAdbDevice.Store(nil)
 				close(thisDone)
 			}()
 
@@ -862,7 +724,6 @@ func runGUI(conf *config.Config) {
 			deviceSerial = req.DeviceSerial
 			pjskMode = req.Mode == "pjsk"
 			applyNavSongNameROI(req.Mode, req.NavSongROIBang, req.NavSongROIPjsk)
-			detectedSongTitle := ""
 
 			var ctrl controllers.Controller
 			var events []common.ViscousEventItem
@@ -870,6 +731,7 @@ func runGUI(conf *config.Config) {
 			var scrcpyCtrl *controllers.ScrcpyController
 			var hidCtrl *controllers.HIDController
 			var deviceCfg *config.DeviceConfig
+			var nav *maacontrol.Navigator
 
 			switch backend {
 			case "adb":
@@ -906,6 +768,7 @@ func runGUI(conf *config.Config) {
 					srv.SetError("No authorized ADB device found.")
 					return
 				}
+				currentAdbDevice.Store(adbDevice)
 				scrcpyCtrl = controllers.NewScrcpyController(adbDevice)
 				if err := scrcpyCtrl.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
 					srv.SetError("Failed to connect to device: " + err.Error())
@@ -938,127 +801,103 @@ func runGUI(conf *config.Config) {
 				ctrl = hidCtrl
 			}
 
-			if req.AutoDetectSong && chartPath == "" && songID <= 0 {
+			if req.AutoNavigation {
+				if adbDevice == nil {
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, Message: "auto-nav requires ADB backend"})
+					log.Warn("AutoNavigation requires ADB backend")
+					return
+				}
+
+				navCfg := maacontrol.NavConfig{
+					Mode:       req.Mode,
+					Difficulty: difficulty,
+					AdbSerial:  adbDevice.Serial(),
+
+					KetteiROI:       maacontrol.ROI{roiKettei.x1, roiKettei.y1, roiKettei.x2, roiKettei.y2},
+					LiveStartROI:    maacontrol.ROI{roiLiveStart.x1, roiLiveStart.y1, roiLiveStart.x2, roiLiveStart.y2},
+					BandConfirmROI:  maacontrol.ROI{roiBandConfirmTap.x1, roiBandConfirmTap.y1, roiBandConfirmTap.x2, roiBandConfirmTap.y2},
+					DialogOKROI:     maacontrol.ROI{roiDialogOK.x1, roiDialogOK.y1, roiDialogOK.x2, roiDialogOK.y2},
+					DialogTitleROI:  maacontrol.ROI{roiDialogTitle.x1, roiDialogTitle.y1, roiDialogTitle.x2, roiDialogTitle.y2},
+					SongTitleROI:    maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2},
+					SongNameROI:     maacontrol.ROI{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2},
+					DifficultyTapFn: difficultyTapCoords,
+					PageArrowFn:     pjskDifficultyPageArrowCoords,
+					NodeROIs: map[string][4]float64{
+						// tap_to_next: TAPTONEXT text area (normalised from 1280x720 design)
+						"tap_to_next": {0.400, 0.889, 0.183, 0.071},
+					},
+
+					OnProgress: func(stage, scene, msg string) {
+						srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
+							Enabled:  true,
+							Mode:     req.Mode,
+							NavStage: stage,
+							NavScene: scene,
+							Message:  fmt.Sprintf("%s\n  %s", stage, msg),
+						})
+					},
+				}
+
+				var navErr error
+				nav, navErr = maacontrol.NewNavigator(navCfg)
+				if navErr != nil {
+					srv.SetError("AutoNavigation init failed: " + navErr.Error())
+					return
+				}
+				defer nav.Destroy()
+
+				// Run navigation immediately — nav's SongRecognition pipeline
+				// detects the song internally (SaveSong stores it in lastSongDetect).
+				// Chart loading and event generation happen after nav completes,
+				// so SetReady can provide the correct NowPlaying to the frontend.
+				if !nav.Run(ctx, req.Mode, difficulty) {
+					return
+				}
+
+				if chartPath == "" && songID <= 0 {
+					if navDetect := nav.GetLastSongDetect(); navDetect.SongID > 0 {
+						songID = navDetect.SongID
+						req.SongID = navDetect.SongID
+						if strings.TrimSpace(req.NowPlaying.Title) == "" && navDetect.SongTitle != "" {
+							req.NowPlaying.Title = navDetect.SongTitle
+						}
+						log.Infof("AutoNavigation: detected songID=%d title=%q via=NAV score=%d", navDetect.SongID, navDetect.SongTitle, navDetect.SongScore)
+					}
+				}
+			}
+
+			// AutoDetectSong via screencap: only when AutoNavigation is not active
+			// (navigation already provides song detection via its internal pipeline).
+			if req.AutoDetectSong && !req.AutoNavigation && chartPath == "" && songID <= 0 {
 				if adbDevice == nil {
 					srv.SetError("Auto song detection requires ADB backend.")
 					return
 				}
-				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-					Enabled: true, Mode: req.Mode,
-					NavStage: "SCREEN_CHECK", NavScene: "screen-check",
-					Message: "SCREEN_CHECK\n  → OCR 左上標題 ROI，確認楽曲選択",
-				})
-				pngData, scErr := adbDevice.ScreencapPNGBytes()
-				if scErr != nil {
-					srv.SetError("screencap failed: " + scErr.Error())
-					return
-				}
-				var texts []string
-				detectedID, detectedTitle := 0, ""
-
-				ocrC, ocrErr := maacontrol.GetOCRClient()
-				if ocrErr != nil {
-					log.Warnf("OCR unavailable: %v", ocrErr)
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-						Enabled: true, Mode: req.Mode,
-						NavStage: "SONG_DETECT", NavScene: "song-detecting",
-						Message: "SONG_DETECT\n  → OCR unavailable",
-					})
-					srv.SetError("Auto song detect failed: OCR unavailable: " + ocrErr.Error())
+				detectRes, detectErr := maacontrol.DetectSongForRun(
+					nav,
+					req.Mode,
+					adbDevice,
+					maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2},
+					maacontrol.ROI{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2},
+				)
+				if detectErr != nil {
+					log.Warnf("Auto song detect failed: %v", detectErr)
+					srv.SetError("Auto song detect failed: " + detectErr.Error())
 					return
 				}
 
-				titleROI := [4]float64{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2}
-				titleTexts, ocrErr := ocrC.OCR(pngData, &titleROI)
-				if ocrErr != nil {
-					log.Warnf("SCREEN_CHECK failed: %v", ocrErr)
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-						Enabled: true, Mode: req.Mode,
-						NavStage: "SCREEN_CHECK", NavScene: "screen-check",
-						Message: "SCREEN_CHECK\n  → OCR failed",
-					})
-					srv.SetError("Auto song detect failed at SCREEN_CHECK: OCR failed: " + ocrErr.Error())
-					return
-				}
-				titleScore := songSelectTitleScore(titleTexts)
-				log.Infof("SCREEN_CHECK title OCR texts: %v", titleTexts)
-				log.Infof("SCREEN_CHECK title OCR normalized: %v", normalizeSceneTexts(titleTexts))
-				log.Infof("SCREEN_CHECK title score: %.2f", titleScore)
-				if !isSongSelectTitle(titleTexts) {
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-						Enabled: true, Mode: req.Mode,
-						NavStage: "SCREEN_CHECK", NavScene: "screen-check",
-						Message: "SCREEN_CHECK\n  → not on 楽曲選択",
-					})
-					srv.SetError(fmt.Sprintf("Auto song detect aborted: not on 楽曲選択 screen (score=%.2f, title OCR=%v). If needed, adjust SCREEN_CHECK title ROI in ROI Box Tool.", titleScore, titleTexts))
+				detectedID, detectedTitle, detectErr := detectRes.ResolveSong()
+				if detectErr != nil {
+					srv.SetError("Auto song detect failed: " + detectErr.Error())
 					return
 				}
 
-				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-					Enabled: true, Mode: req.Mode,
-					NavStage: "SONG_DETECT", NavScene: "song-detecting",
-					Message: "SONG_DETECT\n  → OCR 歌名 ROI (ROI-only)",
-				})
-
-				roi := [4]float64{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2}
-				texts, ocrErr = ocrC.OCR(pngData, &roi)
-				if ocrErr != nil {
-					log.Warnf("OCR failed: %v", ocrErr)
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-						Enabled: true, Mode: req.Mode,
-						NavStage: "SONG_DETECT", NavScene: "song-detecting",
-						Message: "SONG_DETECT\n  → OCR failed",
-					})
-					srv.SetError("Auto song detect failed: OCR failed: " + ocrErr.Error())
-					return
-				}
-
-				log.Infof("AutoDetectSong OCR texts: %v", texts)
-				oCRPreview := firstNStrings(texts, 8)
-				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-					Enabled: true, Mode: req.Mode,
-					NavStage: "SONG_DETECT", NavScene: "song-detecting",
-					Message: fmt.Sprintf("SONG_DETECT\n  → OCR texts: %v", oCRPreview),
-				})
-
-				id, title, score, sourceText, topCandidates, ok := gui.DetectSongByTextsDetailed(texts, req.Mode)
-				topSummary := formatSongDetectCandidates(topCandidates, 3)
-				if topSummary != "" {
-					log.Infof("AutoDetectSong top candidates: %s", topSummary)
-				}
-				if ok {
-					detectedID, detectedTitle = id, title
-					log.Infof("AutoDetectSong best OCR hit: source=%q score=%d", sourceText, score)
-					msg := fmt.Sprintf("SONG_DETECT\n  → OCR(score=%d) 命中: #%d %s", score, detectedID, detectedTitle)
-					if sourceText != "" {
-						msg = fmt.Sprintf("%s\n  → source: %q", msg, sourceText)
-					}
-					if topSummary != "" {
-						msg = fmt.Sprintf("%s\n  → top: %s", msg, topSummary)
-					}
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-						Enabled: true, Mode: req.Mode,
-						NavStage: "SONG_DETECT", NavScene: "song-detected",
-						Message: msg,
-					})
-				}
-
-				if detectedID <= 0 {
-					errMsg := fmt.Sprintf("Auto song detect failed (OCR texts: %v", texts)
-					if score > 0 {
-						errMsg = fmt.Sprintf("%s, bestScore=%d", errMsg, score)
-					}
-					if topSummary != "" {
-						errMsg = fmt.Sprintf("%s, top=%s", errMsg, topSummary)
-					}
-					errMsg = fmt.Sprintf("%s). Keep the song selected on 楽曲選択 and retry, or set Song ID manually.", errMsg)
-					srv.SetError(errMsg)
-					return
-				}
 				songID = detectedID
 				req.SongID = detectedID
-				detectedSongTitle = detectedTitle
-				log.Infof("AutoDetectSong: detected songID=%d title=%q via=OCR", detectedID, detectedTitle)
+				if strings.TrimSpace(req.NowPlaying.Title) == "" && detectedTitle != "" {
+					req.NowPlaying.Title = detectedTitle
+				}
+				log.Infof("AutoDetectSong: detected songID=%d title=%q via=OCR score=%d", detectedID, detectedTitle, detectRes.SongScore)
 			}
 
 			var chartText []byte
@@ -1156,89 +995,29 @@ func runGUI(conf *config.Config) {
 				events = hidCtrl.Preprocess(rawEvents, direction == "right", getJudgeLineCalculator())
 			}
 
-			np := gui.NowPlaying{
-				SongID:    songID,
-				Diff:      difficulty,
-				Mode:      req.Mode,
-				Title:     req.NowPlaying.Title,
-				Artist:    req.NowPlaying.Artist,
-				DiffLevel: req.NowPlaying.DiffLevel,
-				JacketURL: req.NowPlaying.JacketURL,
-			}
-			if np.Title == "" && detectedSongTitle != "" {
-				np.Title = detectedSongTitle
-			}
+			np := req.NowPlaying
+			np.SongID = songID
+			np.Diff = difficulty
+			np.Mode = req.Mode
 
 			srv.SetReady(ctrl, events, np)
 
 			srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: req.AutoTriggerVision, Mode: req.Mode, Message: "idle"})
 
+			// Auto mode should continue into navigation immediately after Load.
+			// This keeps the frontend flow aligned with autodori-style one-click run.
+			if req.AutoNavigation {
+				srv.TriggerStart()
+			}
+
 			if !srv.WaitForStart(ctx) {
 				return
 			}
 
-			// Navigation pipeline: automatically click through pre-game screens
-			// using MaaFramework.  The pipeline is defined declaratively in
-			// maacontrol/resource/pipeline/pipeline.json; game-specific logic
-			// (difficulty coordinates, pause-button NCC, dialog detection) is
-			// handled by custom recognitions / actions in the maacontrol package.
-			navHasSeenDark := false
-			if req.AutoNavigation {
-				if adbDevice == nil {
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, Message: "auto-nav requires ADB backend"})
-					log.Warn("AutoNavigation requires ADB backend")
-					return
-				}
-
-				// Collect pause-button template images from the assets directory.
-				// Any PNG placed under assets/live/button/ is picked up automatically,
-				// making it trivial to add per-game or per-skin template variants.
-				pauseTemplates, _ := filepath.Glob("assets/live/button/*.png")
-				if len(pauseTemplates) == 0 {
-					pauseTemplates = []string{"assets/live/button/pause.png"}
-				}
-
-				navCfg := maacontrol.NavConfig{
-					Mode:       req.Mode,
-					Difficulty: difficulty,
-					AdbSerial:  adbDevice.Serial(),
-
-					KetteiROI:      maacontrol.ROI{roiKettei.x1, roiKettei.y1, roiKettei.x2, roiKettei.y2},
-					LiveStartROI:   maacontrol.ROI{roiLiveStart.x1, roiLiveStart.y1, roiLiveStart.x2, roiLiveStart.y2},
-					BandConfirmROI: maacontrol.ROI{roiBandConfirmTap.x1, roiBandConfirmTap.y1, roiBandConfirmTap.x2, roiBandConfirmTap.y2},
-					DialogOKROI:    maacontrol.ROI{roiDialogOK.x1, roiDialogOK.y1, roiDialogOK.x2, roiDialogOK.y2},
-					DialogTitleROI: maacontrol.ROI{roiDialogTitle.x1, roiDialogTitle.y1, roiDialogTitle.x2, roiDialogTitle.y2},
-					PauseButtonROI: maacontrol.ROI{roiPauseButton.x1, roiPauseButton.y1, roiPauseButton.x2, roiPauseButton.y2},
-
-					DifficultyTapFn: difficultyTapCoords,
-					PageArrowFn:     pjskDifficultyPageArrowCoords,
-
-					PauseTemplates:    pauseTemplates,
-					PauseNccThreshold: 0.40,
-
-					OnProgress: func(stage, scene, msg string) {
-						srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-							Enabled:  true,
-							Mode:     req.Mode,
-							NavStage: stage,
-							NavScene: scene,
-							Message:  fmt.Sprintf("%s\n  %s", stage, msg),
-						})
-					},
-				}
-
-				nav, err := maacontrol.NewNavigator(navCfg)
-				if err != nil {
-					srv.SetError("AutoNavigation init failed: " + err.Error())
-					return
-				}
-				defer nav.Destroy()
-
-				if !nav.Run(ctx, req.Mode, difficulty) {
-					return
-				}
-				navHasSeenDark = true
-			}
+			// navHasSeenDark: AutoNavigation already ran the full pipeline which
+			// includes the live-loading dark screen, so the vision trigger can
+			// skip waiting for it again.
+			navHasSeenDark := req.AutoNavigation
 
 			if req.AutoTriggerVision {
 				roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)

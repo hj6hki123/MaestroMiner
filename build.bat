@@ -10,14 +10,14 @@ call npm --prefix gui\frontend run build
 :: Check if frontend build succeeded; stop if it failed
 if %errorlevel% neq 0 (
     echo.
-    echo ❌ Frontend build failed. Please check the error messages!
+    echo  Frontend build failed. Please check the error messages!
     pause
     exit /b %errorlevel%
 )
 
 echo.
 echo ========================================
-echo [2/2] Building Go executable...
+echo [2/3] Building Go executable...
 echo ========================================
 
 :: Set Go build environment variables
@@ -26,16 +26,31 @@ set PKG_CONFIG_PATH=C:\msys64\mingw64\lib\pkgconfig
 set PATH=C:\msys64\mingw64\bin;%PATH%
 
 :: Run Go build
-go build -ldflags "-X main.SSM_VERSION=gui-custom" -o ssm-gui.exe
+go build -ldflags "-X main.SSM_VERSION=gui-custom" -o D:\tool\ssm\ssm-gui-windows-2.0.2-full-amd64\ssm-gui.exe
 
 :: Check if Go build succeeded
 if %errorlevel% neq 0 (
     echo.
-    echo ❌ Go build failed!
+    echo  Go build failed!
     pause
     exit /b %errorlevel%
 )
 
 echo.
-echo ✅ Done! Successfully generated ssm-gui.exe
+echo  Go build Done! 
+echo ========================================
+echo [3/3] Copying maacontrol\resource to release folder...
+echo ========================================
+
+xcopy /E /I /Y maacontrol\resource D:\tool\ssm\ssm-gui-windows-2.0.2-full-amd64\maacontrol\resource
+
+if %errorlevel% neq 0 (
+    echo.
+    echo  Resource copy failed!
+    pause
+    exit /b %errorlevel%
+)
+
+echo.
+echo  Done! Output: D:\tool\ssm\ssm-gui-windows-2.0.2-full-amd64
 pause
