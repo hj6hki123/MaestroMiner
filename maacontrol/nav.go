@@ -471,13 +471,7 @@ func (n *Navigator) PollLiveFailed(ctrl *maa.Controller) bool {
 	if w <= 0 || h <= 0 {
 		return false
 	}
-	// ROI from live.json "live_failed": [x=256,y=227,w=155,h=38] at 1280×720
-	roi := ROI{
-		256.0 / float64(w),
-		227.0 / float64(h),
-		(256.0 + 155.0) / float64(w),
-		(227.0 + 38.0) / float64(h),
-	}
+	roi := roiFromBox(liveFailedOCRBox, w, h)
 	texts, err := ocrImageTexts(img, roi)
 	if err != nil {
 		return false
@@ -641,11 +635,23 @@ func templateMatchBest(ctx *maa.Context, template string) (score float64, box ma
 	return tmr.Score, tmr.Box, true
 }
 
-var liveBoostRE = regexp.MustCompile(`(\d+)\s*/`)
+var liveBoostRE = regexp.MustCompile(`(\d+)\s*[\/／]\s*\d+`)
 
 func parseLiveBoostValue(texts []string) (int, bool) {
+	candidates := make([]string, 0, len(texts)+1)
+	joined := strings.Builder{}
 	for _, raw := range texts {
-		text := strings.ReplaceAll(raw, " ", "")
+		text := strings.ReplaceAll(strings.TrimSpace(raw), " ", "")
+		if text == "" {
+			continue
+		}
+		candidates = append(candidates, text)
+		joined.WriteString(text)
+	}
+	if joined.Len() > 0 {
+		candidates = append(candidates, joined.String())
+	}
+	for _, text := range candidates {
 		m := liveBoostRE.FindStringSubmatch(text)
 		if len(m) < 2 {
 			continue
@@ -673,6 +679,42 @@ func screencapDims(ctrl *maa.Controller) (w, h int, err error) {
 	}
 	b := img.Bounds()
 	return b.Dx(), b.Dy(), nil
+}
+
+// Absolute pixel ROIs calibrated for the current navigation recognizers.
+// Edit these boxes if you want to switch to device-specific absolute coords.
+var (
+	liveFailedOCRBox     = maa.Rect{256, 227, 155, 38}
+	songNameOCRBox       = maa.Rect{386, 327, 316, 33}
+	liveBoostValueOCRBox = maa.Rect{1210, 24, 63, 23}
+	playResultFieldBoxes = map[string]maa.Rect{
+		"score":     {1100, 199, 165, 35},
+		"max_combo": {1118, 365, 96, 37},
+		"perfect":   {950, 281, 90, 31},
+		"great":     {952, 320, 82, 32},
+		"good":      {951, 361, 85, 28},
+		"bad":       {950, 398, 84, 28},
+		"miss":      {950, 432, 88, 27},
+		"fast":      {1190, 284, 83, 38},
+		"slow":      {1220, 312, 60, 39},
+	}
+)
+
+func roiFromBox(box maa.Rect, w, h int) ROI {
+	x1 := clampI(box[0], 0, w)
+	y1 := clampI(box[1], 0, h)
+	x2 := clampI(box[0]+box[2], 0, w)
+	y2 := clampI(box[1]+box[3], 0, h)
+	return ROI{
+		float64(x1) / float64(w),
+		float64(y1) / float64(h),
+		float64(x2) / float64(w),
+		float64(y2) / float64(h),
+	}
+}
+
+func boxCenter(box maa.Rect) (cx, cy int) {
+	return box[0] + box[2]/2, box[1] + box[3]/2
 }
 
 // roiCenterPx converts a normalised ROI to its centre pixel coordinates.
@@ -810,13 +852,7 @@ func (r *songNameRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa
 	h := arg.Img.Bounds().Dy()
 	log.Infof("[MAA_NAV] SongNameRec img=%dx%d", w, h)
 
-	const roiX, roiY, roiW, roiH = 386, 327, 316, 33
-	songROI := ROI{
-		float64(roiX) / float64(w),
-		float64(roiY) / float64(h),
-		float64(roiX+roiW) / float64(w),
-		float64(roiY+roiH) / float64(h),
-	}
+	songROI := roiFromBox(songNameOCRBox, w, h)
 	songTexts, err := ocrImageTexts(arg.Img, songROI)
 	if err != nil {
 		log.Warnf("[MAA_NAV] SongNameRec song OCR failed: %v", err)
@@ -849,7 +885,7 @@ func (r *songNameRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa
 	log.Infof("[MAA_NAV] SongNameRec matched id=%d title=%q score=%d source=%q",
 		res.SongID, res.SongTitle, res.SongScore, res.SourceText)
 
-	cx, cy := roiX+roiW/2, roiY+roiH/2
+	cx, cy := boxCenter(songNameOCRBox)
 	return &maa.CustomRecognitionResult{
 		Box:    maa.Rect{cx, cy, 1, 1},
 		Detail: fmt.Sprintf("song_id=%d title=%s score=%d", res.SongID, res.SongTitle, res.SongScore),
@@ -905,14 +941,7 @@ func (r *liveBoostEnoughRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg
 	if w <= 0 || h <= 0 {
 		return nil, false
 	}
-	// absolute pixel ROI matching autodori: x=1210, y=24, w=63, h=23
-	const roiX, roiY, roiW, roiH = 1210, 24, 63, 23
-	roi := ROI{
-		float64(roiX) / float64(w),
-		float64(roiY) / float64(h),
-		float64(roiX+roiW) / float64(w),
-		float64(roiY+roiH) / float64(h),
-	}
+	roi := roiFromBox(liveBoostValueOCRBox, w, h)
 	texts, err := ocrImageTexts(arg.Img, roi)
 	if err != nil {
 		log.Warnf("[MAA_NAV] LiveBoostEnoughRecognition OCR failed: %v", err)
@@ -927,7 +956,7 @@ func (r *liveBoostEnoughRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg
 
 	log.Infof("[MAA_NAV] LiveBoostEnoughRecognition boost=%d", boost)
 	return &maa.CustomRecognitionResult{
-		Box:    maa.Rect{roiX, roiY, roiW, roiH},
+		Box:    liveBoostValueOCRBox,
 		Detail: fmt.Sprintf("%d", boost),
 	}, true
 }
@@ -935,23 +964,6 @@ func (r *liveBoostEnoughRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg
 // ─────────────────────────────────────────────
 // Custom recognition: PlayResultRecognition
 // ─────────────────────────────────────────────
-
-// absROI is an absolute-pixel ROI in [x, y, w, h] format.
-type absROI struct{ x, y, w, h int }
-
-// playResultROIs maps field names to absolute pixel ROIs calibrated for 1280×720.
-// These match the positions used by autodori's PlayResultRecognition.
-var playResultFieldROIs = map[string]absROI{
-	"score":     {1028, 192, 144, 35},
-	"max_combo": {1009, 391, 91, 28},
-	"perfect":   {829, 282, 90, 28},
-	"great":     {828, 322, 91, 27},
-	"good":      {829, 363, 91, 27},
-	"bad":       {829, 401, 90, 27},
-	"miss":      {830, 438, 91, 28},
-	"fast":      {1088, 283, 90, 27},
-	"slow":      {1088, 323, 91, 28},
-}
 
 // playResultRec OCRs each score field on the post-live result screen and
 // returns the values as a JSON object in Detail.
@@ -964,14 +976,9 @@ func (r *playResultRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*m
 		return nil, false
 	}
 
-	fields := make(map[string]int, len(playResultFieldROIs))
-	for name, roi := range playResultFieldROIs {
-		norm := ROI{
-			float64(roi.x) / float64(imgW),
-			float64(roi.y) / float64(imgH),
-			float64(roi.x+roi.w) / float64(imgW),
-			float64(roi.y+roi.h) / float64(imgH),
-		}
+	fields := make(map[string]int, len(playResultFieldBoxes))
+	for name, box := range playResultFieldBoxes {
+		norm := roiFromBox(box, imgW, imgH)
 		texts, err := ocrImageTexts(arg.Img, norm)
 		val := -1
 		if err == nil {

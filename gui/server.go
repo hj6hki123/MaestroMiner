@@ -343,7 +343,7 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	s.broadcastState()
 
-	if s.OnRunRequest != nil && (st == StatePlaying || st == StateDone) {
+	if s.OnRunRequest != nil && !req.AutoNavigation && (st == StatePlaying || st == StateDone) {
 		go s.OnRunRequest(req)
 	}
 
@@ -647,7 +647,7 @@ done:
 			s.mu.Unlock()
 			s.broadcastState()
 
-			if s.OnRunRequest != nil {
+			if s.OnRunRequest != nil && !req.AutoNavigation {
 				s.OnRunRequest(req)
 			}
 		}()
