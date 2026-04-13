@@ -15,15 +15,14 @@ package maacontrol
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	maa "github.com/MaaXYZ/maa-framework-go/v4"
 	"github.com/MaaXYZ/maa-framework-go/v4/controller/adb"
@@ -145,23 +144,9 @@ type NavConfig struct {
 	// libraries (.dll / .so / .dylib).  Empty = use PATH or CWD.
 	MaaLibDir string
 
-	// Normalised ROIs for each UI element (caller supplies mode-correct values).
-	KetteiROI      ROI
-	LiveStartROI   ROI
-	BandConfirmROI ROI // PJSK-specific band-confirm tap
-	DialogOKROI    ROI
-	DialogTitleROI ROI // used for luma-based dialog detection
-	SongTitleROI   ROI // used for SCREEN_CHECK title OCR
-	SongNameROI    ROI // used for SONG_DETECT name OCR
-
-	// DifficultyTapFn returns the device-pixel tap point for difficulty
-	// selection given the screenshot dimensions.
-	// Returns ok=false when the difficulty does not need tapping.
-	DifficultyTapFn func(mode, diff string, w, h int) (x, y int, ok bool)
-
-	// PageArrowFn returns the pixel tap point for the PJSK difficulty
-	// page-flip arrow (used when difficulty == "append").
-	PageArrowFn func(w, h int) (x, y int)
+	// Normalised ROIs for song detection (caller supplies mode-correct values).
+	SongTitleROI ROI // used for SCREEN_CHECK title OCR
+	SongNameROI  ROI // used for SONG_DETECT name OCR
 
 	// NodeROIs maps pipeline node names to normalised [x, y, w, h] ROIs
 	// (each value in [0.0, 1.0]).  At run time these are converted to absolute
@@ -172,6 +157,34 @@ type NavConfig struct {
 	// OnProgress is called on every significant navigation stage change.
 	// May be nil.
 	OnProgress func(stage, scene, msg string)
+
+	// PlaySong is called from the MAA "Play" custom action when the game has
+	// entered the live screen (pause button is visible).  It must:
+	//   1. load + preprocess the chart events,
+	//   2. call srv.SetReady / TriggerStart / WaitForStart,
+	//   3. run the scrcpy/HID event playback (blocking),
+	//   4. call ResetTouch,
+	//   5. return nil on normal completion (success or live_failed detected).
+	// A non-nil return value causes Play.Run() to return false, which lets
+	// MAA try the on_error path instead of next.
+	// Use Navigator.PollLiveFailedOnce() inside the function for live_failed checks.
+	// May be nil; if nil the Play action is a no-op passthrough.
+	PlaySong func(ctx context.Context) error
+}
+
+// PlayResult holds OCR-extracted score data from the post-live result screen.
+// All numeric fields are -1 when OCR failed for that field.
+type PlayResult struct {
+	Succeed  bool `json:"succeed"`
+	Score    int  `json:"score"`
+	MaxCombo int  `json:"max_combo"`
+	Perfect  int  `json:"perfect"`
+	Great    int  `json:"great"`
+	Good     int  `json:"good"`
+	Bad      int  `json:"bad"`
+	Miss     int  `json:"miss"`
+	Fast     int  `json:"fast"`
+	Slow     int  `json:"slow"`
 }
 
 // ─────────────────────────────────────────────
@@ -189,8 +202,10 @@ type Navigator struct {
 	mu             sync.RWMutex
 	mode           string
 	diff           string
+	goCtx          context.Context // set at the start of Run(); used by playAction
 	lastSongDetect SongDetectResult
 	lastLiveBoost  int
+	lastPlayResult PlayResult
 }
 
 // NewNavigator creates a Navigator, connects the MAA ADB controller and loads
@@ -252,15 +267,11 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 
 	// Register custom recognitions
 	for name, rec := range map[string]maa.CustomRecognitionRunner{
-		"ROICenterRec":               &roiCenterRec{nav: n},
-		"DialogDetectRec":            &dialogDetectRec{nav: n},
 		"DifficultyRec":              &difficultyRec{nav: n},
-		"SongSelectRec":              &songSelectRec{nav: n},
-		"SongNameRec":                &songNameRec{nav: n},
 		"SongRecognition":            &songNameRec{nav: n},
-		"LivePlayOffRec":             &livePlayOffRec{nav: n},
 		"LivePlayOnRec":              &livePlayOnRec{nav: n},
 		"LiveBoostEnoughRecognition": &liveBoostEnoughRec{nav: n},
+		"PlayResultRecognition":      &playResultRec{nav: n},
 	} {
 		if err := res.RegisterCustomRecognition(name, rec); err != nil {
 			res.Destroy()
@@ -272,15 +283,10 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 
 	// Register custom actions
 	for name, act := range map[string]maa.CustomActionRunner{
-		"ClickDifficultyAction":    &clickDifficultyAction{nav: n},
-		"ClickKetteiAction":        &clickKetteiAction{nav: n},
-		"ClickLiveOrBandAction":    &clickLiveOrBandAction{nav: n},
-		"ClickDialogOKAction":      &clickDialogOKAction{nav: n},
-		"SaveSongAction":           &saveSongAction{nav: n},
-		"SaveSong":                 &saveSongAction{nav: n},
-		"HandleLiveBoost":          &handleLiveBoostAction{nav: n},
-		"SwitchLivePlayModeAction": &switchLivePlayModeAction{nav: n},
-		"ExitRehearsalModeAction":  &exitRehearsalModeAction{nav: n},
+		"SaveSongAction":  &saveSongAction{nav: n},
+		"HandleLiveBoost": &handleLiveBoostAction{nav: n},
+		"SavePlayResult":  &savePlayResultAction{nav: n},
+		"Play":            &playAction{nav: n},
 	} {
 		if err := res.RegisterCustomAction(name, act); err != nil {
 			res.Destroy()
@@ -322,6 +328,7 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 	n.mu.Lock()
 	n.mode = mode
 	n.diff = diff
+	n.goCtx = ctx
 	n.lastSongDetect = SongDetectResult{}
 	n.lastLiveBoost = -1
 	n.mu.Unlock()
@@ -425,22 +432,69 @@ func (n *Navigator) getLastLiveBoost() int {
 	return n.lastLiveBoost
 }
 
-// roiByKey returns the normalised ROI [x1,y1,x2,y2] for a named UI element.
-// The key matches the custom_recognition_param values in pipeline/*.json.
-func (n *Navigator) roiByKey(key string) ROI {
-	switch key {
-	case "kettei":
-		return n.cfg.KetteiROI
-	case "live_start":
-		return n.cfg.LiveStartROI
-	case "band_confirm":
-		return n.cfg.BandConfirmROI
-	case "dialog_ok":
-		return n.cfg.DialogOKROI
-	case "dialog_title":
-		return n.cfg.DialogTitleROI
+func (n *Navigator) setLastPlayResult(r PlayResult) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.lastPlayResult = r
+}
+
+// GetLastPlayResult returns the play result stored by SavePlayResult action.
+// Valid after a live has completed within Run().
+func (n *Navigator) GetLastPlayResult() PlayResult {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.lastPlayResult
+}
+
+func (n *Navigator) getGoCtx() context.Context {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	if n.goCtx != nil {
+		return n.goCtx
 	}
-	return ROI{0, 0, 1, 1}
+	return context.Background()
+}
+
+// PollLiveFailed takes one ADB screencap via the MAA controller and checks
+// whether the "演出失败" (Live Failed) text is visible on screen.
+// Safe to call from any goroutine; returns false on any error.
+func (n *Navigator) PollLiveFailed(ctrl *maa.Controller) bool {
+	if !ctrl.PostScreencap().Wait().Success() {
+		return false
+	}
+	img, err := ctrl.CacheImage()
+	if err != nil {
+		return false
+	}
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= 0 || h <= 0 {
+		return false
+	}
+	// ROI from live.json "live_failed": [x=256,y=227,w=155,h=38] at 1280×720
+	roi := ROI{
+		256.0 / float64(w),
+		227.0 / float64(h),
+		(256.0 + 155.0) / float64(w),
+		(227.0 + 38.0) / float64(h),
+	}
+	texts, err := ocrImageTexts(img, roi)
+	if err != nil {
+		return false
+	}
+	for _, t := range texts {
+		if strings.Contains(t, "演出失败") {
+			return true
+		}
+	}
+	return false
+}
+
+// PollLiveFailedOnce takes one ADB screencap via the navigator's own controller
+// and returns true if the "演出失败" (Live Failed) text is visible.
+// Convenience wrapper around PollLiveFailed; safe to call from PlaySong.
+func (n *Navigator) PollLiveFailedOnce() bool {
+	return n.PollLiveFailed(n.ctrl)
 }
 
 func (n *Navigator) emit(stage, scene, msg string, force bool) {
@@ -546,15 +600,6 @@ func (n *Navigator) DetectSong(modeHint string) (SongDetectResult, error) {
 	return detectSongFromImage(img, mode, n.cfg.SongTitleROI, n.cfg.SongNameROI)
 }
 
-// DetectSongTexts is kept for compatibility; prefer DetectSong.
-func (n *Navigator) DetectSongTexts() (titleTexts, songTexts []string, err error) {
-	res, err := n.DetectSong("")
-	if err != nil {
-		return nil, nil, err
-	}
-	return copyStrings(res.TitleTexts), copyStrings(res.SongTexts), nil
-}
-
 func ocrImageTexts(img image.Image, roi ROI) ([]string, error) {
 
 	var buf bytes.Buffer
@@ -594,10 +639,6 @@ func templateMatchBest(ctx *maa.Context, template string) (score float64, box ma
 		return 0, maa.Rect{}, false
 	}
 	return tmr.Score, tmr.Box, true
-}
-
-func roiCenterFromBox(box maa.Rect) (x, y int) {
-	return box[0] + box[2]/2, box[1] + box[3]/2
 }
 
 var liveBoostRE = regexp.MustCompile(`(\d+)\s*/`)
@@ -654,113 +695,16 @@ func clampI(v, lo, hi int) int {
 }
 
 // ─────────────────────────────────────────────
-// Luma sampling (dialog detection)
-// ─────────────────────────────────────────────
-
-func sampleROILuma(img image.Image, roi ROI) float64 {
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if w <= 0 || h <= 0 {
-		return 0
-	}
-	x1 := clampI(int(roi[0]*float64(w)), 0, w-1)
-	x2 := clampI(int(roi[2]*float64(w)), 0, w)
-	y1 := clampI(int(roi[1]*float64(h)), 0, h-1)
-	y2 := clampI(int(roi[3]*float64(h)), 0, h)
-	if x2 <= x1 || y2 <= y1 {
-		return 0
-	}
-	stepX := max(1, (x2-x1)/48)
-	stepY := max(1, (y2-y1)/48)
-	var sum int64
-	count := 0
-	for y := y1; y < y2; y += stepY {
-		for x := x1; x < x2; x += stepX {
-			c := color.GrayModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.Gray)
-			sum += int64(c.Y)
-			count++
-		}
-	}
-	if count == 0 {
-		return 0
-	}
-	return float64(sum) / float64(count)
-}
-
-func sampleFullScreenLuma(img image.Image) float64 {
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	n := w * h
-	if n <= 0 {
-		return 0
-	}
-	step := max(1, n/1024)
-	var sum int64
-	count := 0
-	idx := 0
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			if idx%step == 0 {
-				c := color.GrayModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.Gray)
-				sum += int64(c.Y)
-				count++
-			}
-			idx++
-		}
-	}
-	if count == 0 {
-		return 0
-	}
-	return float64(sum) / float64(count)
-}
-
-// detectDialogByLuma mirrors the ScrcpyFrame-based logic but works on image.Image.
-func detectDialogByLuma(img image.Image, dialogTitleROI ROI) bool {
-	dialogLuma := sampleROILuma(img, dialogTitleROI)
-	screenLuma := sampleFullScreenLuma(img)
-	return dialogLuma > 120 && dialogLuma-screenLuma > 35
-}
-
-// ─────────────────────────────────────────────
-// Custom recognition: ROICenterRec
-// ─────────────────────────────────────────────
-
-// roiCenterRec always succeeds and returns the centre pixel of the ROI
-// identified by CustomRecognitionParam.  ClickSelf then taps that pixel.
-type roiCenterRec struct{ nav *Navigator }
-
-func (r *roiCenterRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
-	roi := r.nav.roiByKey(arg.CustomRecognitionParam)
-	w := arg.Img.Bounds().Dx()
-	h := arg.Img.Bounds().Dy()
-	if w <= 0 || h <= 0 {
-		return nil, false
-	}
-	cx, cy := roiCenterPx(roi, w, h)
-	log.Infof("[MAA_NAV] ROICenterRec[%s]: img=%dx%d → tap=(%d,%d)", arg.CustomRecognitionParam, w, h, cx, cy)
-	return &maa.CustomRecognitionResult{
-		Box:    maa.Rect{cx, cy, 1, 1},
-		Detail: fmt.Sprintf("%s@(%d,%d)", arg.CustomRecognitionParam, cx, cy),
-	}, true
-}
-
-// ─────────────────────────────────────────────
 // Custom recognition: DifficultyRec
 // ─────────────────────────────────────────────
 
 // difficultyRec wraps TemplateMatch so the best match score is logged.
 // This is a diagnostic aid: adjust the threshold constant below if needed.
 const difficultyMatchThreshold = 0.80
-const songSelectFallbackThreshold = 0.80
 const livePlayOffMatchThreshold = 0.80
 
-var (
-	defaultSwitchLivePlayROI = ROI{0.320, 0.748, 0.405, 0.790}
-	defaultExitRehearsalROI  = ROI{0.074, 0.595, 0.205, 0.652}
-	defaultLiveBoostROI      = ROI{0.765, 0.042, 0.813, 0.069}
-	// liveplay toggle button, centred at approx (309, 630) on 1544×720
-	defaultLivePlayToggleROI = ROI{0.160, 0.840, 0.250, 0.910}
-)
+// liveplay toggle button, centred at approx (309, 630) on 1544×720
+var defaultLivePlayToggleROI = ROI{0.160, 0.840, 0.250, 0.910}
 
 type difficultyRec struct{ nav *Navigator }
 
@@ -847,29 +791,6 @@ func (r *difficultyRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*m
 }
 
 // ─────────────────────────────────────────────
-// Custom recognition: SongSelectRec
-// ─────────────────────────────────────────────
-
-// songSelectRec validates we are on the song-select scene by random-choice button template match.
-type songSelectRec struct{ nav *Navigator }
-
-func (r *songSelectRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
-	score, box, ok := templateMatchBest(ctx, "live/button/random_choice_song.png")
-	if ok {
-		log.Infof("[MAA_NAV] SongSelectRec fallback template score=%.3f threshold=%.2f", score, songSelectFallbackThreshold)
-		if score >= songSelectFallbackThreshold {
-			cx, cy := roiCenterFromBox(box)
-			return &maa.CustomRecognitionResult{
-				Box:    maa.Rect{cx, cy, 1, 1},
-				Detail: fmt.Sprintf("fallback_score=%.3f", score),
-			}, true
-		}
-	}
-
-	return nil, false
-}
-
-// ─────────────────────────────────────────────
 // Custom recognition: SongNameRec
 // ─────────────────────────────────────────────
 
@@ -887,28 +808,25 @@ func (r *songNameRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa
 	}
 	w := arg.Img.Bounds().Dx()
 	h := arg.Img.Bounds().Dy()
+	log.Infof("[MAA_NAV] SongNameRec img=%dx%d", w, h)
 
-	roi := n.cfg.SongNameROI
-	roiPxX1 := int(roi[0] * float64(w))
-	roiPxY1 := int(roi[1] * float64(h))
-	roiPxX2 := int(roi[2] * float64(w))
-	roiPxY2 := int(roi[3] * float64(h))
-	log.Infof("[MAA_NAV] SongNameRec img=%dx%d songNameROI=[%.4f,%.4f,%.4f,%.4f] → px[%d,%d,%d,%d] wh=[%d,%d]",
-		w, h, roi[0], roi[1], roi[2], roi[3],
-		roiPxX1, roiPxY1, roiPxX2, roiPxY2, roiPxX2-roiPxX1, roiPxY2-roiPxY1)
-
-	res, err := detectSongFromImage(arg.Img, mode, n.cfg.SongTitleROI, n.cfg.SongNameROI)
+	const roiX, roiY, roiW, roiH = 386, 327, 316, 33
+	songROI := ROI{
+		float64(roiX) / float64(w),
+		float64(roiY) / float64(h),
+		float64(roiX+roiW) / float64(w),
+		float64(roiY+roiH) / float64(h),
+	}
+	songTexts, err := ocrImageTexts(arg.Img, songROI)
 	if err != nil {
-		log.Warnf("[MAA_NAV] SongNameRec OCR failed: %v", err)
+		log.Warnf("[MAA_NAV] SongNameRec song OCR failed: %v", err)
 		return nil, false
 	}
+	res := buildSongDetectResult(mode, nil, songTexts)
 	n.setLastSongDetect(res)
 
 	preview := res.SongTextsPreview(6)
 	log.Infof("[MAA_NAV] SongNameRec texts=%v", preview)
-	if !res.OnSongSelectScreen {
-		log.Infof("[MAA_NAV] SongNameRec screen score=%.2f (not confidently on song-select)", res.TitleScore)
-	}
 	if len(res.SongTexts) == 0 {
 		return nil, false
 	}
@@ -931,34 +849,10 @@ func (r *songNameRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa
 	log.Infof("[MAA_NAV] SongNameRec matched id=%d title=%q score=%d source=%q",
 		res.SongID, res.SongTitle, res.SongScore, res.SourceText)
 
-	cx, cy := roiCenterPx(n.cfg.SongNameROI, w, h)
+	cx, cy := roiX+roiW/2, roiY+roiH/2
 	return &maa.CustomRecognitionResult{
 		Box:    maa.Rect{cx, cy, 1, 1},
 		Detail: fmt.Sprintf("song_id=%d title=%s score=%d", res.SongID, res.SongTitle, res.SongScore),
-	}, true
-}
-
-// ─────────────────────────────────────────────
-// Custom recognition: LivePlayOffRec
-// ─────────────────────────────────────────────
-
-// livePlayOffRec checks whether liveplay/mv/3d effects are already disabled.
-type livePlayOffRec struct{ nav *Navigator }
-
-func (r *livePlayOffRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
-	offScore, offBox, ok := templateMatchBest(ctx, "live/button/liveplay_off.png")
-	if !ok {
-		log.Infof("[MAA_NAV] LivePlayOffRec no result")
-		return nil, false
-	}
-	log.Infof("[MAA_NAV] LivePlayOffRec score=%.3f threshold=%.2f", offScore, livePlayOffMatchThreshold)
-	if offScore < livePlayOffMatchThreshold {
-		return nil, false
-	}
-	cx, cy := roiCenterFromBox(offBox)
-	return &maa.CustomRecognitionResult{
-		Box:    maa.Rect{cx, cy, 1, 1},
-		Detail: fmt.Sprintf("off_score=%.3f", offScore),
 	}, true
 }
 
@@ -1011,7 +905,15 @@ func (r *liveBoostEnoughRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg
 	if w <= 0 || h <= 0 {
 		return nil, false
 	}
-	texts, err := ocrImageTexts(arg.Img, defaultLiveBoostROI)
+	// absolute pixel ROI matching autodori: x=1210, y=24, w=63, h=23
+	const roiX, roiY, roiW, roiH = 1210, 24, 63, 23
+	roi := ROI{
+		float64(roiX) / float64(w),
+		float64(roiY) / float64(h),
+		float64(roiX+roiW) / float64(w),
+		float64(roiY+roiH) / float64(h),
+	}
+	texts, err := ocrImageTexts(arg.Img, roi)
 	if err != nil {
 		log.Warnf("[MAA_NAV] LiveBoostEnoughRecognition OCR failed: %v", err)
 		return nil, false
@@ -1023,131 +925,149 @@ func (r *liveBoostEnoughRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg
 	}
 	n.setLastLiveBoost(boost)
 
-	cx, cy := roiCenterPx(defaultLiveBoostROI, w, h)
 	log.Infof("[MAA_NAV] LiveBoostEnoughRecognition boost=%d", boost)
 	return &maa.CustomRecognitionResult{
-		Box:    maa.Rect{cx, cy, 1, 1},
+		Box:    maa.Rect{roiX, roiY, roiW, roiH},
 		Detail: fmt.Sprintf("%d", boost),
 	}, true
 }
 
 // ─────────────────────────────────────────────
-// Custom action: ClickDifficultyAction
+// Custom recognition: PlayResultRecognition
 // ─────────────────────────────────────────────
 
-// clickDifficultyAction handles difficulty selection including the PJSK
-// append page-flip.  It runs immediately after the initial 1.5 s preDelay.
-type clickDifficultyAction struct{ nav *Navigator }
+// absROI is an absolute-pixel ROI in [x, y, w, h] format.
+type absROI struct{ x, y, w, h int }
 
-func (a *clickDifficultyAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
-	n := a.nav
-	mode, diff := n.getModeDiff()
-
-	if diff == "" {
-		n.emit("ClickDifficulty", "楽曲選択", "→ 難度未指定，跳過", false)
-		return true
-	}
-
-	ctrl := ctx.GetTasker().GetController()
-	w, h, err := screencapDims(ctrl)
-	if err != nil {
-		log.Warnf("[MAA_NAV] ClickDifficulty screencapDims: %v", err)
-		return true // non-fatal
-	}
-	log.Infof("[MAA_NAV] ClickDifficulty: screencap=%dx%d landscape=%v", w, h, w > h)
-
-	// PJSK + append requires flipping to the second difficulty page first.
-	if mode == "pjsk" && diff == "append" {
-		if fn := n.cfg.PageArrowFn; fn != nil {
-			ax, ay := fn(int(w), int(h))
-			n.emit("ClickDifficulty", "楽曲選択", "→ PJSK APPEND: 翻至第二頁", true)
-			ctrl.PostClick(int32(ax), int32(ay)).Wait()
-			time.Sleep(2 * time.Second)
-		}
-	}
-
-	if fn := n.cfg.DifficultyTapFn; fn != nil {
-		x, y, ok := fn(mode, diff, int(w), int(h))
-		if ok {
-			n.emit("ClickDifficulty", "楽曲選択", fmt.Sprintf("→ 點擊難度 %s @ (%d,%d)", diff, x, y), true)
-			ctrl.PostClick(int32(x), int32(y)).Wait()
-		}
-	}
-	return true
+// playResultROIs maps field names to absolute pixel ROIs calibrated for 1280×720.
+// These match the positions used by autodori's PlayResultRecognition.
+var playResultFieldROIs = map[string]absROI{
+	"score":     {1028, 192, 144, 35},
+	"max_combo": {1009, 391, 91, 28},
+	"perfect":   {829, 282, 90, 28},
+	"great":     {828, 322, 91, 27},
+	"good":      {829, 363, 91, 27},
+	"bad":       {829, 401, 90, 27},
+	"miss":      {830, 438, 91, 28},
+	"fast":      {1088, 283, 90, 27},
+	"slow":      {1088, 323, 91, 28},
 }
 
-// ─────────────────────────────────────────────
-// Custom recognition: DialogDetectRec
-// ─────────────────────────────────────────────
+// playResultRec OCRs each score field on the post-live result screen and
+// returns the values as a JSON object in Detail.
+type playResultRec struct{ nav *Navigator }
 
-// dialogDetectRec succeeds when a dialog overlay is visible (luma heuristic).
-// The pipeline uses this to branch: next → dialog path, timeout_next → no-dialog path.
-type dialogDetectRec struct{ nav *Navigator }
-
-func (r *dialogDetectRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
-	w := arg.Img.Bounds().Dx()
-	h := arg.Img.Bounds().Dy()
-	visible := detectDialogByLuma(arg.Img, r.nav.cfg.DialogTitleROI)
-	log.Infof("[MAA_NAV] DialogDetectRec: img=%dx%d visible=%v", w, h, visible)
-	if !visible {
+func (r *playResultRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
+	imgW := arg.Img.Bounds().Dx()
+	imgH := arg.Img.Bounds().Dy()
+	if imgW <= 0 || imgH <= 0 {
 		return nil, false
 	}
-	cx, cy := roiCenterPx(r.nav.cfg.DialogTitleROI, w, h)
+
+	fields := make(map[string]int, len(playResultFieldROIs))
+	for name, roi := range playResultFieldROIs {
+		norm := ROI{
+			float64(roi.x) / float64(imgW),
+			float64(roi.y) / float64(imgH),
+			float64(roi.x+roi.w) / float64(imgW),
+			float64(roi.y+roi.h) / float64(imgH),
+		}
+		texts, err := ocrImageTexts(arg.Img, norm)
+		val := -1
+		if err == nil {
+			for _, t := range texts {
+				t = strings.ReplaceAll(t, " ", "")
+				if v, e2 := strconv.Atoi(t); e2 == nil {
+					val = v
+					break
+				}
+			}
+		}
+		fields[name] = val
+		log.Debugf("[PlayResultRecognition] %s=%d texts=%v", name, val, texts)
+	}
+
+	data, _ := json.Marshal(fields)
+	log.Infof("[PlayResultRecognition] %s", data)
 	return &maa.CustomRecognitionResult{
-		Box:    maa.Rect{cx, cy, 1, 1},
-		Detail: "dialog_visible",
+		Box:    maa.Rect{0, 0, 1, 1},
+		Detail: string(data),
 	}, true
 }
 
 // ─────────────────────────────────────────────
-// Custom action: ClickKetteiAction
+// Custom action: SavePlayResult
 // ─────────────────────────────────────────────
 
-// clickKetteiAction taps the 決定 (confirm/select) button using portrait
-// device coordinates via ctrl.PostClick, bypassing MAA's landscape screenshot
-// coordinate system entirely.
-type clickKetteiAction struct{ nav *Navigator }
+// savePlayResultAction parses the recognised score JSON and stores it on
+// Navigator so callers can retrieve it via GetLastPlayResult() after Run().
+type savePlayResultAction struct{ nav *Navigator }
 
-func (a *clickKetteiAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
+func (a *savePlayResultAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	n := a.nav
-	ctrl := ctx.GetTasker().GetController()
-	w, h, err := screencapDims(ctrl)
-	if err != nil {
-		log.Warnf("[MAA_NAV] ClickKettei screencapDims: %v", err)
-		return true
+
+	var param struct {
+		Succeed bool `json:"succeed"`
 	}
-	log.Infof("[MAA_NAV] ClickKettei: screencap=%dx%d landscape=%v", w, h, w > h)
-	cx, cy := roiCenterPx(n.cfg.KetteiROI, w, h)
-	n.emit("ClickKettei", "楽曲選択", fmt.Sprintf("→ 點擊決定 @ (%d,%d)", cx, cy), true)
-	ctrl.PostClick(int32(cx), int32(cy)).Wait()
+	if err := json.Unmarshal([]byte(arg.CustomActionParam), &param); err != nil {
+		log.Warnf("[SavePlayResult] parse param: %v (raw=%q)", err, arg.CustomActionParam)
+	}
+
+	result := PlayResult{Succeed: param.Succeed}
+	if param.Succeed && arg.RecognitionDetail != nil {
+		var fields map[string]int
+		if err := json.Unmarshal([]byte(arg.RecognitionDetail.DetailJson), &fields); err != nil {
+			log.Warnf("[SavePlayResult] parse detail json: %v", err)
+		} else {
+			result.Score = fields["score"]
+			result.MaxCombo = fields["max_combo"]
+			result.Perfect = fields["perfect"]
+			result.Great = fields["great"]
+			result.Good = fields["good"]
+			result.Bad = fields["bad"]
+			result.Miss = fields["miss"]
+			result.Fast = fields["fast"]
+			result.Slow = fields["slow"]
+		}
+	}
+
+	n.setLastPlayResult(result)
+	log.Infof("[SavePlayResult] succeed=%v score=%d maxCombo=%d perfect=%d great=%d good=%d bad=%d miss=%d fast=%d slow=%d",
+		result.Succeed, result.Score, result.MaxCombo, result.Perfect,
+		result.Great, result.Good, result.Bad, result.Miss, result.Fast, result.Slow)
 	return true
 }
 
 // ─────────────────────────────────────────────
-// Custom action: ClickLiveOrBandAction
+// Custom action: Play
 // ─────────────────────────────────────────────
 
-// clickLiveOrBandAction taps ライブスタート (BanG Dream) or バンド確認 (PJSK).
-// Called only when no ライブ設定 dialog appeared after ClickKettei.
-type clickLiveOrBandAction struct{ nav *Navigator }
+// playAction is the custom action for the "playsong" pipeline node.
+// It calls cfg.PlaySong (set by the caller in NavConfig), which loads the
+// chart, starts the scrcpy/HID event playback, polls for live_failed, then
+// cleans up.  The function blocks until playback is fully done.
+//
+// After Run() returns:
+//   - true  → MAA tries wait_playresult (success screen expected)
+//   - false → MAA tries on_error / [JumpBack]live_failed
+//
+// If PlaySong is nil (non-AutoNavigation mode) this is a no-op returning true.
+type playAction struct{ nav *Navigator }
 
-func (a *clickLiveOrBandAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
+func (a *playAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	n := a.nav
-	mode, _ := n.getModeDiff()
-	ctrl := ctx.GetTasker().GetController()
-	w, h, err := screencapDims(ctrl)
-	if err != nil {
-		log.Warnf("[MAA_NAV] ClickLiveOrBand screencapDims: %v", err)
+	fn := n.cfg.PlaySong
+	if fn == nil {
+		// PlaySong not configured – passthrough so non-auto pipelines still work.
 		return true
 	}
-	log.Infof("[MAA_NAV] ClickLiveOrBand: screencap=%dx%d landscape=%v", w, h, w > h)
-	roi := n.cfg.LiveStartROI
-	if mode == "pjsk" {
-		roi = n.cfg.BandConfirmROI
+	goCtx := n.getGoCtx()
+	n.emit("Play", "playsong", "→ PlaySong 開始", true)
+	if err := fn(goCtx); err != nil {
+		log.Warnf("[Play] PlaySong: %v", err)
+		return false
 	}
-	cx, cy := roiCenterPx(roi, w, h)
-	n.emit("ClickLiveOrBand", "バンド確認", "→ 點擊確認/開始", true)
-	ctrl.PostClick(int32(cx), int32(cy)).Wait()
+	n.emit("Play", "playsong", "→ PlaySong 完成", true)
 	return true
 }
 
@@ -1170,44 +1090,7 @@ func (a *handleLiveBoostAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) 
 		ctx.GetTasker().PostStop()
 		return true
 	}
-
-	mode, _ := n.getModeDiff()
-	ctrl := ctx.GetTasker().GetController()
-	w, h, err := screencapDims(ctrl)
-	if err != nil {
-		log.Warnf("[MAA_NAV] HandleLiveBoost screencapDims: %v", err)
-		return true
-	}
-	roi := n.cfg.LiveStartROI
-	if mode == "pjsk" {
-		roi = n.cfg.BandConfirmROI
-	}
-	cx, cy := roiCenterPx(roi, w, h)
-	n.emit("ensure_liveboost", "comfirm_song", "→ 點擊確認/開始", true)
-	ctrl.PostClick(int32(cx), int32(cy)).Wait()
-	return true
-}
-
-// ─────────────────────────────────────────────
-// Custom action: ClickDialogOKAction
-// ─────────────────────────────────────────────
-
-// clickDialogOKAction taps the OK button of the ライブ設定 dialog.
-// Called only when DialogDetectRec succeeds on the HandleLiveSetting node.
-type clickDialogOKAction struct{ nav *Navigator }
-
-func (a *clickDialogOKAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
-	n := a.nav
-	ctrl := ctx.GetTasker().GetController()
-	w, h, err := screencapDims(ctrl)
-	if err != nil {
-		log.Warnf("[MAA_NAV] ClickDialogOK screencapDims: %v", err)
-		return true
-	}
-	log.Infof("[MAA_NAV] ClickDialogOK: screencap=%dx%d landscape=%v", w, h, w > h)
-	cx, cy := roiCenterPx(n.cfg.DialogOKROI, w, h)
-	n.emit("ClickDialogOK", "ライブ設定", "→ 點擊 OK", true)
-	ctrl.PostClick(int32(cx), int32(cy)).Wait()
+	// boost sufficient – let pipeline continue to next node
 	return true
 }
 
@@ -1243,48 +1126,6 @@ func (a *saveSongAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 		msg = fmt.Sprintf("%s\n  → top: %s", msg, topSummary)
 	}
 	n.emit("SONG_DETECT", "song-name", msg, true)
-	return true
-}
-
-// ─────────────────────────────────────────────
-// Custom action: SwitchLivePlayModeAction
-// ─────────────────────────────────────────────
-
-// switchLivePlayModeAction toggles the liveplay/mv/3d option toward OFF.
-type switchLivePlayModeAction struct{ nav *Navigator }
-
-func (a *switchLivePlayModeAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
-	n := a.nav
-	ctrl := ctx.GetTasker().GetController()
-	w, h, err := screencapDims(ctrl)
-	if err != nil {
-		log.Warnf("[MAA_NAV] SwitchLivePlayMode screencapDims: %v", err)
-		return true
-	}
-	cx, cy := roiCenterPx(defaultSwitchLivePlayROI, w, h)
-	n.emit("ensure_live_mode", "switch_liveplay_mode", fmt.Sprintf("→ 切換 LivePlay 模式 @ (%d,%d)", cx, cy), true)
-	ctrl.PostClick(int32(cx), int32(cy)).Wait()
-	return true
-}
-
-// ─────────────────────────────────────────────
-// Custom action: ExitRehearsalModeAction
-// ─────────────────────────────────────────────
-
-// exitRehearsalModeAction exits rehearsal/training overlay when present.
-type exitRehearsalModeAction struct{ nav *Navigator }
-
-func (a *exitRehearsalModeAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
-	n := a.nav
-	ctrl := ctx.GetTasker().GetController()
-	w, h, err := screencapDims(ctrl)
-	if err != nil {
-		log.Warnf("[MAA_NAV] ExitRehearsalMode screencapDims: %v", err)
-		return true
-	}
-	cx, cy := roiCenterPx(defaultExitRehearsalROI, w, h)
-	n.emit("ensure_live_mode", "exit_rehearsal_mode", fmt.Sprintf("→ 退出排練模式 @ (%d,%d)", cx, cy), true)
-	ctrl.PostClick(int32(cx), int32(cy)).Wait()
 	return true
 }
 

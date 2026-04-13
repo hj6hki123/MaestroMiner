@@ -29,73 +29,24 @@ var (
 	defaultRoiPageTitleBang = navROI{0.06, 0.04, 0.28, 0.12}
 	defaultRoiPageTitlePjsk = navROI{0.06, 0.04, 0.28, 0.12}
 
-	defaultRoiDifficultyRowBang = navROI{0.59, 0.68, 0.88, 0.80}
-	defaultRoiDifficultyRowPjsk = navROI{0.60, 0.60, 0.90, 0.76}
-
-	defaultRoiKetteiBang = navROI{0.76, 0.83, 0.92, 0.92}
-	defaultRoiKetteiPjsk = navROI{0.68, 0.76, 0.80, 0.87}
-
-	defaultRoiLiveStartBang = navROI{0.72, 0.72, 0.89, 0.94}
-	defaultRoiLiveStartPjsk = navROI{0.72, 0.71, 0.76, 0.81}
-
 	defaultRoiDialogTitleBang = navROI{0.33, 0.12, 0.47, 0.20}
 	defaultRoiDialogTitlePjsk = navROI{0.26, 0.22, 0.43, 0.32}
 
-	defaultRoiDialogOKBang = navROI{0.50, 0.76, 0.66, 0.87}
-	defaultRoiDialogOKPjsk = navROI{0.50, 0.69, 0.66, 0.81}
-
-	defaultRoiBandSongInfoBang = navROI{0.24, 0.60, 0.80, 0.88}
-	defaultRoiBandSongInfoPjsk = navROI{0.24, 0.60, 0.80, 0.88}
-
-	defaultRoiBandConfirmTapBang = navROI{0.72, 0.72, 0.89, 0.94}
-	defaultRoiBandConfirmTapPjsk = navROI{0.72, 0.71, 0.76, 0.81}
-
-	defaultRoiAlbumCoverBang = navROI{0.00, 0.00, 1.00, 1.00}
-	defaultRoiAlbumCoverPjsk = navROI{0.05, 0.43, 0.53, 0.96}
-
-	// roiPauseButton covers the in-game pause button area.
-	defaultRoiPauseButtonBang = navROI{0.91, 0.00, 0.98, 0.14}
-	defaultRoiPauseButtonPjsk = navROI{0.91, 0.00, 0.98, 0.14}
-
 	roiFullScreen = navROI{0.00, 0.00, 1.00, 1.00}
 
-	roiPageTitle      = defaultRoiPageTitleBang
-	roiDifficultyRow  = defaultRoiDifficultyRowBang
-	roiKettei         = defaultRoiKetteiBang
-	roiLiveStart      = defaultRoiLiveStartBang
-	roiDialogTitle    = defaultRoiDialogTitleBang
-	roiDialogOK       = defaultRoiDialogOKBang
-	roiSongName       = defaultRoiSongNameBang
-	roiBandSongInfo   = defaultRoiBandSongInfoBang
-	roiBandConfirmTap = defaultRoiBandConfirmTapBang
-	roiAlbumCover     = defaultRoiAlbumCoverBang
-	roiPauseButton    = defaultRoiPauseButtonBang
+	roiPageTitle   = defaultRoiPageTitleBang
+	roiDialogTitle = defaultRoiDialogTitleBang
+	roiSongName    = defaultRoiSongNameBang
 )
 
 func applyNavModeProfile(mode string) {
 	if mode == "pjsk" {
 		roiPageTitle = defaultRoiPageTitlePjsk
-		roiDifficultyRow = defaultRoiDifficultyRowPjsk
-		roiKettei = defaultRoiKetteiPjsk
-		roiLiveStart = defaultRoiLiveStartPjsk
 		roiDialogTitle = defaultRoiDialogTitlePjsk
-		roiDialogOK = defaultRoiDialogOKPjsk
-		roiBandSongInfo = defaultRoiBandSongInfoPjsk
-		roiBandConfirmTap = defaultRoiBandConfirmTapPjsk
-		roiAlbumCover = defaultRoiAlbumCoverPjsk
-		roiPauseButton = defaultRoiPauseButtonPjsk
 		return
 	}
 	roiPageTitle = defaultRoiPageTitleBang
-	roiDifficultyRow = defaultRoiDifficultyRowBang
-	roiKettei = defaultRoiKetteiBang
-	roiLiveStart = defaultRoiLiveStartBang
 	roiDialogTitle = defaultRoiDialogTitleBang
-	roiDialogOK = defaultRoiDialogOKBang
-	roiBandSongInfo = defaultRoiBandSongInfoBang
-	roiBandConfirmTap = defaultRoiBandConfirmTapBang
-	roiAlbumCover = defaultRoiAlbumCoverBang
-	roiPauseButton = defaultRoiPauseButtonBang
 }
 
 func normalizePercentROI(roi gui.ROI, fallback navROI) navROI {

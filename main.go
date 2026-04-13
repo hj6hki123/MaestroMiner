@@ -801,6 +801,114 @@ func runGUI(conf *config.Config) {
 				ctrl = hidCtrl
 			}
 
+			// buildPlaybackPlan loads/parses the chart for resolvedSongID, generates
+			// touch events, preprocesses them for the active controller, and returns
+			// them ready for srv.SetReady.  Called from both PlaySong (auto path) and
+			// the non-auto code path below.
+			buildPlaybackPlan := func(resolvedSongID int) ([]common.ViscousEventItem, gui.NowPlaying, error) {
+				var chartText []byte
+				var loadErr error
+				if chartPath == "" {
+					var pathResults []string
+					if pjskMode {
+						pathResults, loadErr = filepath.Glob(filepath.Join("./assets/sekai/assetbundle/resources/startapp/music/music_score/",
+							fmt.Sprintf("%04d_01/%s.txt", resolvedSongID, difficulty)))
+					} else {
+						pathResults, loadErr = filepath.Glob(filepath.Join("./assets/star/forassetbundle/startapp/musicscore/",
+							fmt.Sprintf("musicscore*/%03d/*_%s.txt", resolvedSongID, difficulty)))
+					}
+					if loadErr != nil || len(pathResults) < 1 {
+						msg := "Musicscore not found. Please extract assets first or use a custom chart path."
+						srv.SetError(msg)
+						return nil, gui.NowPlaying{}, fmt.Errorf("%s", msg)
+					}
+					chartText, loadErr = os.ReadFile(pathResults[0])
+				} else {
+					chartText, loadErr = os.ReadFile(chartPath)
+				}
+				if loadErr != nil {
+					srv.SetError("Failed to read musicscore: " + loadErr.Error())
+					return nil, gui.NowPlaying{}, loadErr
+				}
+
+				var parsedChart scores.Chart
+				var parseErr error
+				if pjskMode {
+					parsedChart, parseErr = scores.ParseSUS(string(chartText))
+					if parseErr != nil {
+						srv.SetError("Failed to parse SUS: " + parseErr.Error())
+						return nil, gui.NowPlaying{}, parseErr
+					}
+				} else {
+					parsedChart = scores.ParseBMS(string(chartText))
+				}
+
+				gc := &scores.VTEGenerateConfig{
+					TapDuration:         10,
+					FlickDuration:       60,
+					FlickReportInterval: 5,
+					FlickFactor:         1.0 / 5,
+					FlickPow:            1,
+					SlideReportInterval: 10,
+					TimingJitter:        req.TimingJitter,
+					PositionJitter:      req.PositionJitter,
+					TapDurJitter:        req.TapDurJitter,
+					GreatOffsetMs: func() int64 {
+						v := req.GreatOffsetMs
+						if v < 0 {
+							v = -v
+						}
+						if v == 0 {
+							v = 10
+						}
+						return v
+					}(),
+					GreatTargetCount: func() int64 {
+						v := req.GreatCount
+						if v < 0 {
+							return 0
+						}
+						return v
+					}(),
+				}
+				if pjskMode {
+					gc.FlickFactor = 1.0 / 6
+					gc.FlickDuration = 20
+				}
+				if req.TapDuration > 0 {
+					gc.TapDuration = req.TapDuration
+				}
+				if req.FlickDuration > 0 {
+					gc.FlickDuration = req.FlickDuration
+				}
+				if req.FlickReportInterval > 0 {
+					gc.FlickReportInterval = req.FlickReportInterval
+				}
+				if req.SlideReportInterval > 0 {
+					gc.SlideReportInterval = req.SlideReportInterval
+				}
+				if req.FlickFactor > 0 {
+					gc.FlickFactor = req.FlickFactor
+				}
+				if req.FlickPow > 0 {
+					gc.FlickPow = req.FlickPow
+				}
+				rawEvts, greatApplied := scores.GenerateTouchEvent(gc, parsedChart)
+				srv.SetGreatStats(req.GreatCount, int64(greatApplied))
+
+				var evts []common.ViscousEventItem
+				if scrcpyCtrl != nil {
+					evts = scrcpyCtrl.Preprocess(rawEvts, direction == "right", deviceCfg, getJudgeLineCalculator())
+				} else if hidCtrl != nil {
+					evts = hidCtrl.Preprocess(rawEvts, direction == "right", getJudgeLineCalculator())
+				}
+				np := req.NowPlaying
+				np.SongID = resolvedSongID
+				np.Diff = difficulty
+				np.Mode = req.Mode
+				return evts, np, nil
+			}
+
 			if req.AutoNavigation {
 				if adbDevice == nil {
 					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, Message: "auto-nav requires ADB backend"})
@@ -813,18 +921,11 @@ func runGUI(conf *config.Config) {
 					Difficulty: difficulty,
 					AdbSerial:  adbDevice.Serial(),
 
-					KetteiROI:       maacontrol.ROI{roiKettei.x1, roiKettei.y1, roiKettei.x2, roiKettei.y2},
-					LiveStartROI:    maacontrol.ROI{roiLiveStart.x1, roiLiveStart.y1, roiLiveStart.x2, roiLiveStart.y2},
-					BandConfirmROI:  maacontrol.ROI{roiBandConfirmTap.x1, roiBandConfirmTap.y1, roiBandConfirmTap.x2, roiBandConfirmTap.y2},
-					DialogOKROI:     maacontrol.ROI{roiDialogOK.x1, roiDialogOK.y1, roiDialogOK.x2, roiDialogOK.y2},
-					DialogTitleROI:  maacontrol.ROI{roiDialogTitle.x1, roiDialogTitle.y1, roiDialogTitle.x2, roiDialogTitle.y2},
-					SongTitleROI:    maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2},
-					SongNameROI:     maacontrol.ROI{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2},
-					DifficultyTapFn: difficultyTapCoords,
-					PageArrowFn:     pjskDifficultyPageArrowCoords,
+					SongTitleROI: maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2},
+					SongNameROI:  maacontrol.ROI{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2},
 					NodeROIs: map[string][4]float64{
 						// tap_to_next: TAPTONEXT text area (normalised from 1280x720 design)
-						"tap_to_next": {0.400, 0.889, 0.183, 0.071},
+						"tap_to_next": {0.400 * 1280, 0.889 * 720, 0.183 * 1280, 0.071 * 720},
 					},
 
 					OnProgress: func(stage, scene, msg string) {
@@ -838,32 +939,96 @@ func runGUI(conf *config.Config) {
 					},
 				}
 
+				// PlaySong: called from MAA's Play custom action when wait_live_start
+				// fires (pause button visible). Drives scrcpy/HID playback, polls for
+				// live_failed every 3 s, cleans up the control socket when done.
+				navCfg.PlaySong = func(playCtx context.Context) error {
+					// 1. Resolve song from navigation's SongRecognition pipeline
+					if chartPath == "" && songID <= 0 {
+						if detect := nav.GetLastSongDetect(); detect.SongID > 0 {
+							songID = detect.SongID
+							req.SongID = detect.SongID
+							if strings.TrimSpace(req.NowPlaying.Title) == "" && detect.SongTitle != "" {
+								req.NowPlaying.Title = detect.SongTitle
+							}
+							log.Infof("[PlaySong] detected songID=%d title=%q score=%d", detect.SongID, detect.SongTitle, detect.SongScore)
+						}
+					}
+
+					// 2. Load chart + generate events
+					evts, np, buildErr := buildPlaybackPlan(songID)
+					if buildErr != nil {
+						return buildErr
+					}
+
+					// 3. Set ready + auto-trigger start (AutoNavigation always triggers immediately)
+					srv.SetReady(ctrl, evts, np)
+					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: req.AutoTriggerVision, Mode: req.Mode, Message: "idle"})
+					srv.TriggerStart()
+
+					// 4. Wait for start acknowledgement
+					if !srv.WaitForStart(playCtx) {
+						return fmt.Errorf("cancelled before start")
+					}
+
+					// 5. Vision trigger (AutoNavigation already saw the dark loading screen)
+					if req.AutoTriggerVision {
+						roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)
+						sc, ok := ctrl.(*controllers.ScrcpyController)
+						if !ok {
+							return fmt.Errorf("AutoTriggerVision requires scrcpy backend")
+						}
+						if !autoTriggerByVision(playCtx, sc, req.Mode, roi, req.AutoTriggerPollMs, true /*navHasSeenDark*/) {
+							return fmt.Errorf("cancelled during vision trigger")
+						}
+					}
+
+					// 6. Playback + live_failed polling
+					start := time.Now().Add(-time.Duration(evts[0].Timestamp) * time.Millisecond)
+					playSubCtx, stopPlay := context.WithCancel(playCtx)
+					defer stopPlay()
+					playDone := make(chan struct{})
+					go func() {
+						defer close(playDone)
+						srv.Autoplay(playSubCtx, start)
+					}()
+
+					pollTicker := time.NewTicker(3 * time.Second)
+					defer pollTicker.Stop()
+				playLoop:
+					for {
+						select {
+						case <-playDone:
+							break playLoop
+						case <-playCtx.Done():
+							<-playDone
+							break playLoop
+						case <-pollTicker.C:
+							if nav.PollLiveFailedOnce() {
+								log.Infof("[PlaySong] live_failed detected, aborting playback")
+								stopPlay()
+								<-playDone
+								break playLoop
+							}
+						}
+					}
+
+					// 7. Cleanup control socket
+					if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
+						sc.ResetTouch()
+					}
+					return nil
+				}
+
 				var navErr error
 				nav, navErr = maacontrol.NewNavigator(navCfg)
 				if navErr != nil {
-					srv.SetError("AutoNavigation init failed: " + navErr.Error())
+					srv.SetError("Failed to initialize MAA navigator: " + navErr.Error())
 					return
 				}
 				defer nav.Destroy()
-
-				// Run navigation immediately — nav's SongRecognition pipeline
-				// detects the song internally (SaveSong stores it in lastSongDetect).
-				// Chart loading and event generation happen after nav completes,
-				// so SetReady can provide the correct NowPlaying to the frontend.
-				if !nav.Run(ctx, req.Mode, difficulty) {
-					return
-				}
-
-				if chartPath == "" && songID <= 0 {
-					if navDetect := nav.GetLastSongDetect(); navDetect.SongID > 0 {
-						songID = navDetect.SongID
-						req.SongID = navDetect.SongID
-						if strings.TrimSpace(req.NowPlaying.Title) == "" && navDetect.SongTitle != "" {
-							req.NowPlaying.Title = navDetect.SongTitle
-						}
-						log.Infof("AutoNavigation: detected songID=%d title=%q via=NAV score=%d", navDetect.SongID, navDetect.SongTitle, navDetect.SongScore)
-					}
-				}
+				nav.Run(ctx, req.Mode, difficulty)
+				return
 			}
 
 			// AutoDetectSong via screencap: only when AutoNavigation is not active
@@ -900,124 +1065,21 @@ func runGUI(conf *config.Config) {
 				log.Infof("AutoDetectSong: detected songID=%d title=%q via=OCR score=%d", detectedID, detectedTitle, detectRes.SongScore)
 			}
 
-			var chartText []byte
-			var err error
-			if chartPath == "" {
-				var pathResults []string
-				if pjskMode {
-					pathResults, err = filepath.Glob(filepath.Join("./assets/sekai/assetbundle/resources/startapp/music/music_score/",
-						fmt.Sprintf("%04d_01/%s.txt", songID, difficulty)))
-				} else {
-					pathResults, err = filepath.Glob(filepath.Join("./assets/star/forassetbundle/startapp/musicscore/",
-						fmt.Sprintf("musicscore*/%03d/*_%s.txt", songID, difficulty)))
-				}
-				if err != nil || len(pathResults) < 1 {
-					srv.SetError("Musicscore not found. Please extract assets first or use a custom chart path.")
-					return
-				}
-				chartText, err = os.ReadFile(pathResults[0])
-			} else {
-				chartText, err = os.ReadFile(chartPath)
-			}
-			if err != nil {
-				srv.SetError("Failed to read musicscore: " + err.Error())
+			// Non-auto path: load chart, generate events, set ready.
+			events, np, buildErr := buildPlaybackPlan(songID)
+			if buildErr != nil {
 				return
 			}
-
-			var chart scores.Chart
-			if pjskMode {
-				chart, err = scores.ParseSUS(string(chartText))
-				if err != nil {
-					srv.SetError("Failed to parse SUS: " + err.Error())
-					return
-				}
-			} else {
-				chart = scores.ParseBMS(string(chartText))
-			}
-
-			genConfig := &scores.VTEGenerateConfig{
-				TapDuration:         10,
-				FlickDuration:       60,
-				FlickReportInterval: 5,
-				FlickFactor:         1.0 / 5,
-				FlickPow:            1,
-				SlideReportInterval: 10,
-				TimingJitter:        req.TimingJitter,
-				PositionJitter:      req.PositionJitter,
-				TapDurJitter:        req.TapDurJitter,
-				GreatOffsetMs: func() int64 {
-					v := req.GreatOffsetMs
-					if v < 0 {
-						v = -v
-					}
-					if v == 0 {
-						v = 10
-					}
-					return v
-				}(),
-				GreatTargetCount: func() int64 {
-					v := req.GreatCount
-					if v < 0 {
-						return 0
-					}
-					return v
-				}(),
-			}
-			if pjskMode {
-				genConfig.FlickFactor = 1.0 / 6
-				genConfig.FlickDuration = 20
-			}
-			// Override defaults with user-supplied advanced params (0 = keep default)
-			if req.TapDuration > 0 {
-				genConfig.TapDuration = req.TapDuration
-			}
-			if req.FlickDuration > 0 {
-				genConfig.FlickDuration = req.FlickDuration
-			}
-			if req.FlickReportInterval > 0 {
-				genConfig.FlickReportInterval = req.FlickReportInterval
-			}
-			if req.SlideReportInterval > 0 {
-				genConfig.SlideReportInterval = req.SlideReportInterval
-			}
-			if req.FlickFactor > 0 {
-				genConfig.FlickFactor = req.FlickFactor
-			}
-			if req.FlickPow > 0 {
-				genConfig.FlickPow = req.FlickPow
-			}
-			rawEvents, greatApplied := scores.GenerateTouchEvent(genConfig, chart)
-			srv.SetGreatStats(req.GreatCount, int64(greatApplied))
-
-			if scrcpyCtrl != nil {
-				events = scrcpyCtrl.Preprocess(rawEvents, direction == "right", deviceCfg, getJudgeLineCalculator())
-			} else if hidCtrl != nil {
-				events = hidCtrl.Preprocess(rawEvents, direction == "right", getJudgeLineCalculator())
-			}
-
-			np := req.NowPlaying
-			np.SongID = songID
-			np.Diff = difficulty
-			np.Mode = req.Mode
-
 			srv.SetReady(ctrl, events, np)
-
 			srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: req.AutoTriggerVision, Mode: req.Mode, Message: "idle"})
 
-			// Auto mode should continue into navigation immediately after Load.
-			// This keeps the frontend flow aligned with autodori-style one-click run.
-			if req.AutoNavigation {
-				srv.TriggerStart()
-			}
-
+			// Non-auto path: wait for user to press Start in the UI.
 			if !srv.WaitForStart(ctx) {
 				return
 			}
 
-			// navHasSeenDark: AutoNavigation already ran the full pipeline which
-			// includes the live-loading dark screen, so the vision trigger can
-			// skip waiting for it again.
-			navHasSeenDark := req.AutoNavigation
+			// navHasSeenDark is false for the non-auto path (no navigation ran).
+			const navHasSeenDark = false
 
 			if req.AutoTriggerVision {
 				roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)
