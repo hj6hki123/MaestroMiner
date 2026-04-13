@@ -26,6 +26,8 @@
   "song.orient.left":        "↺ 逆時針",
   "song.orient.right":       "↻ 順時針",
   "song.load":               "▶ 載入並準備播放",
+  "song.automode":           "自動模式",
+  "song.automode.hint":      "透過 OCR 自動辨識歌曲並導航(僅限 ADB)",
 
   "jitter.title":   "人性化抖動設定",
   "jitter.timing":  "時間偏移 ±ms",

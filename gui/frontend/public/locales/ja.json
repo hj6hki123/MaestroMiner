@@ -26,6 +26,8 @@
   "song.orient.left":        "↺ 反時計回り",
   "song.orient.right":       "↻ 時計回り",
   "song.load":               "▶ 読み込んで準備",
+  "song.automode":           "オートモード",
+  "song.automode.hint":      "OCR で楽曲を自動認識・ナビゲート(ADB のみ)",
 
   "jitter.title":   "人間らしいジッター設定",
   "jitter.timing":  "タイミング ±ms",

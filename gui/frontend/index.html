@@ -156,12 +156,35 @@
         <div class="card song-search-card">
           <div class="ct" data-i18n="song.search">Song Search</div>
 
-          <div class="flex items-center gap-3 mb-4 p-3 rounded-xl border border-[#1a3a1a] bg-[#0c1a0c]">
-            <label class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="chk-auto-mode" onchange="onAutoModeChanged()">
-              <span class="text-sm font-bold text-green-400" data-i18n="song.automode">Auto Mode</span>
-            </label>
-            <span class="text-xs text-ssm-hint flex-1" data-i18n="song.automode.hint">Detect song &amp; navigate automatically via OCR (ADB)</span>
+          <div class="auto-mode-banner" id="auto-mode-banner">
+            <div class="amb-col">
+              <label class="amb-toggle-wrap" for="chk-auto-mode">
+                <div class="amb-toggle-track">
+                  <input type="checkbox" id="chk-auto-mode" class="amb-toggle-input" onchange="onAutoModeChanged()">
+                  <span class="amb-toggle-thumb"></span>
+                </div>
+              </label>
+              <div class="amb-text">
+                <div class="amb-label" data-i18n="song.automode">Auto Mode</div>
+                <div class="amb-desc" data-i18n="song.automode.hint">Detect song &amp; navigate automatically via OCR (ADB)</div>
+              </div>
+            </div>
+            <div class="amb-sep"></div>
+            <div class="amb-col">
+              <label class="amb-toggle-wrap" for="chk-autoFirstTap">
+                <div class="amb-toggle-track">
+                  <input type="checkbox" id="chk-autoFirstTap" class="amb-toggle-input" onchange="onAutoTriggerVisionChanged()">
+                  <span class="amb-toggle-thumb"></span>
+                </div>
+              </label>
+              <div class="amb-text">
+                <div class="amb-label" data-i18n="jitter.autoFirstTap">Auto Trigger (Vision)</div>
+                <div class="amb-sub-row">
+                  <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="50" oninput="onAutoTriggerVisionChanged()" class="amb-num-input">
+                  <span class="text-ssm-hint font-mono text-xs" id="val-autoFirstLead">50 ms</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div
@@ -268,15 +291,6 @@
             <span class="jitter-label" data-i18n="jitter.grCount">Great Count</span>
             <input type="number" id="inp-grCount" min="0" max="300" step="1" value="0" oninput="onGreatCountInput()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
             <span class="jitter-val text-ssm-hint" id="val-grCount">OFF</span>
-          </div>
-          <div class="jitter-row">
-            <span class="jitter-label" data-i18n="jitter.autoFirstTap">Auto Trigger (Vision)</span>
-            <label style="display:flex;align-items:center;gap:6px;color:var(--txt);font-size:12px;white-space:nowrap;">
-              <input type="checkbox" id="chk-autoFirstTap" onchange="onAutoTriggerVisionChanged()">
-              <span data-i18n="jitter.enable">Enable</span>
-            </label>
-            <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="50" oninput="onAutoTriggerVisionChanged()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
-            <span class="jitter-val text-ssm-hint" id="val-autoFirstLead">50 ms</span>
           </div>
           <div class="roi-editor-wrap">
             <div class="roi-editor-top">

@@ -590,10 +590,14 @@ function onAutoModeChanged() {
   var on = !!(chk && chk.checked);
   S.autoMode = on;
 
-  // Auto mode owns vision trigger lifecycle: force-enable and lock the toggle.
+  var banner = document.getElementById('auto-mode-banner');
+  if (banner) banner.classList.toggle('active', on);
+
+  // Auto mode owns vision trigger lifecycle: force-enable when on, force-disable when off.
   var atChk = document.getElementById('chk-autoFirstTap');
   if (atChk) {
     if (on) atChk.checked = true;
+    else atChk.checked = false;
     atChk.disabled = on;
   }
 
@@ -772,6 +776,35 @@ function setBackend(b) {
     var img = document.getElementById('roi-editor-frame');
     if (img) img.removeAttribute('src');
   }
+
+  // Lock Auto Mode and Auto Trigger when HID is selected (requires ADB/OCR).
+  var isHid = b === 'hid';
+  var banner = document.getElementById('auto-mode-banner');
+  if (banner) banner.style.opacity = isHid ? '0.35' : '';
+
+  var autoModeChk = document.getElementById('chk-auto-mode');
+  if (autoModeChk) {
+    if (isHid) {
+      autoModeChk.checked = false;
+      autoModeChk.disabled = true;
+      S.autoMode = false;
+    } else {
+      autoModeChk.disabled = false;
+    }
+  }
+
+  var atChk = document.getElementById('chk-autoFirstTap');
+  if (atChk) {
+    if (isHid) {
+      atChk.checked = false;
+      atChk.disabled = true;
+    } else {
+      atChk.disabled = false;
+    }
+  }
+
+  if (banner) banner.classList.toggle('active', !isHid && !!(autoModeChk && autoModeChk.checked));
+  onAutoTriggerVisionChanged();
 }
 function setOrient(o) {
   S.orient = o;

@@ -26,6 +26,8 @@
   "song.orient.left":        "↺ Counter-clockwise",
   "song.orient.right":       "↻ Clockwise",
   "song.load":               "▶ Load &amp; Prepare",
+  "song.automode":           "Auto Mode",
+  "song.automode.hint":      "Detect song &amp; navigate automatically via OCR (ADB only)",
 
   "jitter.title":   "Humanization (Jitter)",
   "jitter.timing":  "Timing ±ms",
