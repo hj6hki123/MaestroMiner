@@ -18,8 +18,9 @@ type DeviceConfig struct {
 }
 
 type Config struct {
-	Path    string                   `json:"-"`
-	Devices map[string]*DeviceConfig `json:"devices"`
+	Path       string                   `json:"-"`
+	Devices    map[string]*DeviceConfig `json:"devices"`
+	GameServer string                   `json:"gameServer"` // "jp", "tw", "en", "cn", "kr"
 }
 
 func (c *Config) askFor(serial string) *DeviceConfig {

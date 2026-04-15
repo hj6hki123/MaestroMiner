@@ -23,10 +23,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	maa "github.com/MaaXYZ/maa-framework-go/v4"
 	"github.com/MaaXYZ/maa-framework-go/v4/controller/adb"
 
+	ssmadb "github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/songdetect"
 )
@@ -136,17 +138,19 @@ type NavConfig struct {
 	AdbPath   string // path to the adb binary; empty = search PATH
 	AdbSerial string // device serial (e.g. "127.0.0.1:16384")
 
-	// ResourceDir is the root of the MAA resource bundle.
+	// GameServer selects the server-specific resource bundle subdirectory.
+	// Valid values: "jp", "tw", "en", "cn", "kr".
+	// Defaults to "jp" when empty.
+	// The resolved bundle path is: ResourceDir + "/" + GameServer
+	GameServer string
+
+	// ResourceDir is the root that contains per-server subdirectories.
 	// Defaults to "./maacontrol/resource" when empty.
 	ResourceDir string
 
 	// MaaLibDir is the directory that contains the MaaFramework native
 	// libraries (.dll / .so / .dylib).  Empty = use PATH or CWD.
 	MaaLibDir string
-
-	// Normalised ROIs for song detection (caller supplies mode-correct values).
-	SongTitleROI ROI // used for SCREEN_CHECK title OCR
-	SongNameROI  ROI // used for SONG_DETECT name OCR
 
 	// NodeROIs maps pipeline node names to normalised [x, y, w, h] ROIs
 	// (each value in [0.0, 1.0]).  At run time these are converted to absolute
@@ -158,16 +162,23 @@ type NavConfig struct {
 	// May be nil.
 	OnProgress func(stage, scene, msg string)
 
+	// OnSongDetected is called by SaveSongAction when a song is confidently
+	// identified via OCR on the 楽曲選択 screen.  songID > 0 is guaranteed.
+	// Use this to push a "now playing" preview to the GUI before PlaySong runs.
+	// May be nil.
+	OnSongDetected func(songID int, title string)
+
 	// PlaySong is called from the MAA "Play" custom action when the game has
 	// entered the live screen (pause button is visible).  It must:
 	//   1. load + preprocess the chart events,
 	//   2. call srv.SetReady / TriggerStart / WaitForStart,
-	//   3. run the scrcpy/HID event playback (blocking),
-	//   4. call ResetTouch,
-	//   5. return nil on normal completion (success or live_failed detected).
-	// A non-nil return value causes Play.Run() to return false, which lets
-	// MAA try the on_error path instead of next.
-	// Use Navigator.PollLiveFailedOnce() inside the function for live_failed checks.
+	//   3. run the scrcpy/HID event playback (blocking until ctx is cancelled or done),
+	//   4. return nil on both normal completion and ctx cancellation.
+	// ResetTouch is handled by srv.Autoplay internally.
+	// A non-nil return value (genuine errors only) causes playAction.Run() to
+	// return false, triggering MAA's on_error path.
+	// live_failed polling is handled by playAction.Run() via ctx.RunTask();
+	// PlaySong does not need to poll for it.
 	// May be nil; if nil the Play action is a no-op passthrough.
 	PlaySong func(ctx context.Context) error
 }
@@ -193,10 +204,11 @@ type PlayResult struct {
 
 // Navigator drives pre-game navigation via MaaFramework.
 type Navigator struct {
-	cfg    NavConfig
-	ctrl   *maa.Controller
-	res    *maa.Resource
-	tasker *maa.Tasker
+	cfg     NavConfig
+	ctrl    *maa.Controller
+	res     *maa.Resource
+	tasker  *maa.Tasker
+	cleanup func() // removes the temp merged-bundle directory
 
 	// mutable state read by custom recognitions / actions
 	mu             sync.RWMutex
@@ -206,6 +218,7 @@ type Navigator struct {
 	lastSongDetect SongDetectResult
 	lastLiveBoost  int
 	lastPlayResult PlayResult
+	lastPlayFields map[string]int
 }
 
 // NewNavigator creates a Navigator, connects the MAA ADB controller and loads
@@ -222,6 +235,14 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 
 	if cfg.ResourceDir == "" {
 		cfg.ResourceDir = "./maacontrol/resource"
+	}
+	if cfg.GameServer == "" {
+		cfg.GameServer = "jp"
+	}
+	// Build a temp bundle: shared pipeline + server-specific patches applied
+	bundleDir, bundleCleanup, err := buildMergedBundle(cfg.ResourceDir, cfg.GameServer)
+	if err != nil {
+		return nil, fmt.Errorf("build merged bundle: %w", err)
 	}
 	if cfg.MinLiveBoost <= 0 {
 		cfg.MinLiveBoost = 1
@@ -255,15 +276,16 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 		ctrl.Destroy()
 		return nil, fmt.Errorf("maa resource: %w", err)
 	}
-	log.Infof("[NewNavigator] step 5: PostBundle %q", cfg.ResourceDir)
-	if !res.PostBundle(cfg.ResourceDir).Wait().Success() {
+	log.Infof("[NewNavigator] step 5: PostBundle %q", bundleDir)
+	if !res.PostBundle(bundleDir).Wait().Success() {
 		res.Destroy()
 		ctrl.Destroy()
-		return nil, fmt.Errorf("maa resource bundle load from %q failed", cfg.ResourceDir)
+		bundleCleanup()
+		return nil, fmt.Errorf("maa resource bundle load from %q failed", bundleDir)
 	}
 	log.Infof("[NewNavigator] step 6: register custom recs/actions")
 
-	n := &Navigator{cfg: cfg, ctrl: ctrl, res: res}
+	n := &Navigator{cfg: cfg, ctrl: ctrl, res: res, cleanup: bundleCleanup}
 
 	// Register custom recognitions
 	for name, rec := range map[string]maa.CustomRecognitionRunner{
@@ -331,6 +353,7 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 	n.goCtx = ctx
 	n.lastSongDetect = SongDetectResult{}
 	n.lastLiveBoost = -1
+	n.lastPlayFields = nil
 	n.mu.Unlock()
 
 	n.emit("Nav", "楽曲選択", "MAA 導航開始", true)
@@ -338,7 +361,7 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 	n.emit("Main", "main-layer", "→ 進入 Main 層", true)
 
 	// Build pipeline override to inject resolution-correct absolute ROIs.
-	var roiOverride string
+	roiOverride := "{}"
 	if len(n.cfg.NodeROIs) > 0 {
 		if w, h, err := screencapDims(n.ctrl); err == nil && w > 0 && h > 0 {
 			parts := make([]string, 0, len(n.cfg.NodeROIs))
@@ -376,7 +399,7 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 	}
 }
 
-// Destroy releases all MAA resources.
+// Destroy releases all MAA resources and removes the temporary bundle dir.
 func (n *Navigator) Destroy() {
 	if n.tasker != nil {
 		n.tasker.Destroy()
@@ -389,6 +412,10 @@ func (n *Navigator) Destroy() {
 	if n.ctrl != nil {
 		n.ctrl.Destroy()
 		n.ctrl = nil
+	}
+	if n.cleanup != nil {
+		n.cleanup()
+		n.cleanup = nil
 	}
 }
 
@@ -446,6 +473,26 @@ func (n *Navigator) GetLastPlayResult() PlayResult {
 	return n.lastPlayResult
 }
 
+func (n *Navigator) setLastPlayFields(fields map[string]int) {
+	cp := make(map[string]int, len(fields))
+	for k, v := range fields {
+		cp[k] = v
+	}
+	n.mu.Lock()
+	n.lastPlayFields = cp
+	n.mu.Unlock()
+}
+
+func (n *Navigator) getLastPlayFields() map[string]int {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	cp := make(map[string]int, len(n.lastPlayFields))
+	for k, v := range n.lastPlayFields {
+		cp[k] = v
+	}
+	return cp
+}
+
 func (n *Navigator) getGoCtx() context.Context {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
@@ -453,42 +500,6 @@ func (n *Navigator) getGoCtx() context.Context {
 		return n.goCtx
 	}
 	return context.Background()
-}
-
-// PollLiveFailed takes one ADB screencap via the MAA controller and checks
-// whether the "演出失败" (Live Failed) text is visible on screen.
-// Safe to call from any goroutine; returns false on any error.
-func (n *Navigator) PollLiveFailed(ctrl *maa.Controller) bool {
-	if !ctrl.PostScreencap().Wait().Success() {
-		return false
-	}
-	img, err := ctrl.CacheImage()
-	if err != nil {
-		return false
-	}
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if w <= 0 || h <= 0 {
-		return false
-	}
-	roi := roiFromBox(liveFailedOCRBox, w, h)
-	texts, err := ocrImageTexts(img, roi)
-	if err != nil {
-		return false
-	}
-	for _, t := range texts {
-		if strings.Contains(t, "演出失败") {
-			return true
-		}
-	}
-	return false
-}
-
-// PollLiveFailedOnce takes one ADB screencap via the navigator's own controller
-// and returns true if the "演出失败" (Live Failed) text is visible.
-// Convenience wrapper around PollLiveFailed; safe to call from PlaySong.
-func (n *Navigator) PollLiveFailedOnce() bool {
-	return n.PollLiveFailed(n.ctrl)
 }
 
 func (n *Navigator) emit(stage, scene, msg string, force bool) {
@@ -567,6 +578,23 @@ func DetectSongFromPNG(mode string, pngBytes []byte, titleROI, songROI ROI) (Son
 	return buildSongDetectResult(mode, titleTexts, songTexts), nil
 }
 
+// DetectSongForRun is the single entry used by run flow:
+// 1) use navigator (if available), otherwise
+// 2) capture one screenshot from ADB and detect directly.
+func DetectSongForRun(nav *Navigator, mode string, device *ssmadb.Device, titleROI, songROI ROI) (SongDetectResult, error) {
+	if nav != nil {
+		return nav.DetectSong(mode)
+	}
+	if device == nil {
+		return SongDetectResult{}, fmt.Errorf("auto song detection requires ADB backend")
+	}
+	pngData, err := device.ScreencapPNGBytes()
+	if err != nil {
+		return SongDetectResult{}, fmt.Errorf("screencap failed: %w", err)
+	}
+	return DetectSongFromPNG(mode, pngData, titleROI, songROI)
+}
+
 func (n *Navigator) detectModeForSong(modeHint string) string {
 	if modeHint != "" {
 		return modeHint
@@ -591,7 +619,11 @@ func (n *Navigator) DetectSong(modeHint string) (SongDetectResult, error) {
 		return SongDetectResult{}, fmt.Errorf("CacheImage: %w", err)
 	}
 	mode := n.detectModeForSong(modeHint)
-	return detectSongFromImage(img, mode, n.cfg.SongTitleROI, n.cfg.SongNameROI)
+	songNameROI := SongNameROIBang
+	if mode == "pjsk" {
+		songNameROI = SongNameROIPjsk
+	}
+	return detectSongFromImage(img, mode, SongTitleROI, songNameROI)
 }
 
 func ocrImageTexts(img image.Image, roi ROI) ([]string, error) {
@@ -681,25 +713,6 @@ func screencapDims(ctrl *maa.Controller) (w, h int, err error) {
 	return b.Dx(), b.Dy(), nil
 }
 
-// Absolute pixel ROIs calibrated for the current navigation recognizers.
-// Edit these boxes if you want to switch to device-specific absolute coords.
-var (
-	liveFailedOCRBox     = maa.Rect{256, 227, 155, 38}
-	songNameOCRBox       = maa.Rect{386, 327, 316, 33}
-	liveBoostValueOCRBox = maa.Rect{1210, 24, 63, 23}
-	playResultFieldBoxes = map[string]maa.Rect{
-		"score":     {1100, 199, 165, 35},
-		"max_combo": {1118, 365, 96, 37},
-		"perfect":   {950, 281, 90, 31},
-		"great":     {952, 320, 82, 32},
-		"good":      {951, 361, 85, 28},
-		"bad":       {950, 398, 84, 28},
-		"miss":      {950, 432, 88, 27},
-		"fast":      {1190, 284, 83, 38},
-		"slow":      {1220, 312, 60, 39},
-	}
-)
-
 func roiFromBox(box maa.Rect, w, h int) ROI {
 	x1 := clampI(box[0], 0, w)
 	y1 := clampI(box[1], 0, h)
@@ -744,9 +757,6 @@ func clampI(v, lo, hi int) int {
 // This is a diagnostic aid: adjust the threshold constant below if needed.
 const difficultyMatchThreshold = 0.80
 const livePlayOffMatchThreshold = 0.80
-
-// liveplay toggle button, centred at approx (309, 630) on 1544×720
-var defaultLivePlayToggleROI = ROI{0.160, 0.840, 0.250, 0.910}
 
 type difficultyRec struct{ nav *Navigator }
 
@@ -916,7 +926,7 @@ func (r *livePlayOnRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*m
 		if err != nil {
 			return nil, false
 		}
-		cx, cy := roiCenterPx(defaultLivePlayToggleROI, w, h)
+		cx, cy := roiCenterPx(livePlayToggleROI, w, h)
 		log.Infof("[MAA_NAV] LivePlayOnRec tap=(%d,%d)", cx, cy)
 		return &maa.CustomRecognitionResult{
 			Box:    maa.Rect{cx, cy, 1, 1},
@@ -996,6 +1006,7 @@ func (r *playResultRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*m
 
 	data, _ := json.Marshal(fields)
 	log.Infof("[PlayResultRecognition] %s", data)
+	r.nav.setLastPlayFields(fields)
 	return &maa.CustomRecognitionResult{
 		Box:    maa.Rect{0, 0, 1, 1},
 		Detail: string(data),
@@ -1021,21 +1032,17 @@ func (a *savePlayResultAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) b
 	}
 
 	result := PlayResult{Succeed: param.Succeed}
-	if param.Succeed && arg.RecognitionDetail != nil {
-		var fields map[string]int
-		if err := json.Unmarshal([]byte(arg.RecognitionDetail.DetailJson), &fields); err != nil {
-			log.Warnf("[SavePlayResult] parse detail json: %v", err)
-		} else {
-			result.Score = fields["score"]
-			result.MaxCombo = fields["max_combo"]
-			result.Perfect = fields["perfect"]
-			result.Great = fields["great"]
-			result.Good = fields["good"]
-			result.Bad = fields["bad"]
-			result.Miss = fields["miss"]
-			result.Fast = fields["fast"]
-			result.Slow = fields["slow"]
-		}
+	if param.Succeed {
+		fields := n.getLastPlayFields()
+		result.Score = fields["score"]
+		result.MaxCombo = fields["max_combo"]
+		result.Perfect = fields["perfect"]
+		result.Great = fields["great"]
+		result.Good = fields["good"]
+		result.Bad = fields["bad"]
+		result.Miss = fields["miss"]
+		result.Fast = fields["fast"]
+		result.Slow = fields["slow"]
 	}
 
 	n.setLastPlayResult(result)
@@ -1070,12 +1077,64 @@ func (a *playAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	}
 	goCtx := n.getGoCtx()
 	n.emit("Play", "playsong", "→ PlaySong 開始", true)
-	if err := fn(goCtx); err != nil {
-		log.Warnf("[Play] PlaySong: %v", err)
+
+	// Run PlaySong in a goroutine so this goroutine can poll for live_failed
+	// using ctx.RunTask(), which is safe inside a custom action callback.
+	// PlaySong no longer needs its own polling loop.
+	playCtx, stopPlay := context.WithCancel(goCtx)
+	defer stopPlay()
+
+	done := make(chan error, 1)
+	go func() { done <- fn(playCtx) }()
+
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case err := <-done:
+			if err != nil {
+				log.Warnf("[Play] PlaySong: %v", err)
+				return false
+			}
+			n.emit("Play", "playsong", "→ PlaySong 完成", true)
+			return true
+		case <-ticker.C:
+			if a.pollLiveFailed(ctx) {
+				log.Infof("[Play] live_failed detected, aborting playback")
+				stopPlay()
+				<-done
+				// Record failure result before touching the screen.
+				a.nav.setLastPlayResult(PlayResult{Succeed: false})
+				// Click white exit → pink confirm.
+				a.clickLiveFailedExit(ctx)
+				// Return false so MAA skips wait_playresult and looks for
+				// [JumpBack]live_failed in playsong.next, which is already
+				// dismissed – the pipeline will naturally fall through to
+				// live_home_button via save_failed_playresult.
+				return false
+			}
+		}
+	}
+}
+
+// pollLiveFailed runs the _live_failed_poll pipeline node defined in live.json.
+// All OCR settings (expected strings, ROI) live in the JSON so server patches
+// applied by buildMergedBundle cover this check automatically.
+func (a *playAction) pollLiveFailed(ctx *maa.Context) bool {
+	detail, err := ctx.RunTask("_live_failed_poll", nil)
+	if err != nil {
+		log.Debugf("[Play] pollLiveFailed: %v", err)
 		return false
 	}
-	n.emit("Play", "playsong", "→ PlaySong 完成", true)
-	return true
+	return detail != nil && detail.Status.Success()
+}
+
+// clickLiveFailedExit runs the two-step exit sequence already defined in the
+// pipeline JSON (live_failed_exit_white → live_failed_exit_pink), so the
+// button templates are maintained in one place only.
+func (a *playAction) clickLiveFailedExit(ctx *maa.Context) {
+	ctx.RunTask("live_failed_exit_white", nil) //nolint:errcheck
 }
 
 // ─────────────────────────────────────────────
@@ -1125,6 +1184,9 @@ func (a *saveSongAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 		msg = fmt.Sprintf("%s\n  → 命中: #%d %s (score=%d)", msg, res.SongID, res.SongTitle, res.SongScore)
 		if res.SourceText != "" {
 			msg = fmt.Sprintf("%s\n  → source: %q", msg, res.SourceText)
+		}
+		if n.cfg.OnSongDetected != nil {
+			n.cfg.OnSongDetected(res.SongID, res.SongTitle)
 		}
 	} else {
 		msg = fmt.Sprintf("%s\n  → 尚未命中曲名 (best=%d)", msg, res.SongScore)

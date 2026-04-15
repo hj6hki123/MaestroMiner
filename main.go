@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"io"
 	"math"
 	"net/http"
@@ -81,52 +80,6 @@ func isVideoDecodeEnabled() bool {
 		return false
 	default:
 		return true
-	}
-}
-
-// ─────────────────────────────────────────────
-// MAA ROI diagnostic draw helpers
-// ─────────────────────────────────────────────
-
-// maaDrawROIBox draws a 3-pixel-wide coloured border for the given normalised ROI.
-func maaDrawROIBox(img *image.RGBA, roi navROI, imgW, imgH int, c color.RGBA) {
-	x1 := iclamp(int(roi.x1*float64(imgW)), 0, imgW-1)
-	x2 := iclamp(int(roi.x2*float64(imgW)), 0, imgW-1)
-	y1 := iclamp(int(roi.y1*float64(imgH)), 0, imgH-1)
-	y2 := iclamp(int(roi.y2*float64(imgH)), 0, imgH-1)
-	const thick = 3
-	b := img.Bounds()
-	setpx := func(x, y int) {
-		if x >= b.Min.X && x < b.Max.X && y >= b.Min.Y && y < b.Max.Y {
-			img.SetRGBA(x, y, c)
-		}
-	}
-	for t := 0; t < thick; t++ {
-		for x := x1; x <= x2; x++ {
-			setpx(x, y1+t)
-			setpx(x, y2-t)
-		}
-		for y := y1; y <= y2; y++ {
-			setpx(x1+t, y)
-			setpx(x2-t, y)
-		}
-	}
-}
-
-// maaDrawCross draws a ±12-pixel cross (3 px thick) to mark a tap point.
-func maaDrawCross(img *image.RGBA, cx, cy int, c color.RGBA) {
-	const arm, thick = 12, 3
-	b := img.Bounds()
-	setpx := func(x, y int) {
-		if x >= b.Min.X && x < b.Max.X && y >= b.Min.Y && y < b.Max.Y {
-			img.SetRGBA(x, y, c)
-		}
-	}
-	for t := -thick / 2; t <= thick/2; t++ {
-		for d := -arm; d <= arm; d++ {
-			setpx(cx+d, cy+t) // horizontal bar
-			setpx(cx+t, cy+d) // vertical bar
-		}
 	}
 }
 
@@ -661,7 +614,7 @@ func runGUI(conf *config.Config) {
 			}
 			return float64(v) / 100.0
 		}
-		titleROI := maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2}
+		titleROI := maacontrol.SongTitleROI
 		songROI := maacontrol.ROI{clamp(x1), clamp(y1), clamp(x2), clamp(y2)}
 		res, err := maacontrol.DetectSongFromPNG(mode, pngBytes, titleROI, songROI)
 		if err != nil {
@@ -723,7 +676,10 @@ func runGUI(conf *config.Config) {
 			chartPath = req.ChartPath
 			deviceSerial = req.DeviceSerial
 			pjskMode = req.Mode == "pjsk"
-			applyNavSongNameROI(req.Mode, req.NavSongROIBang, req.NavSongROIPjsk)
+			songNameROI := maacontrol.SongNameROIBang
+			if req.Mode == "pjsk" {
+				songNameROI = maacontrol.SongNameROIPjsk
+			}
 
 			var ctrl controllers.Controller
 			var events []common.ViscousEventItem
@@ -920,13 +876,7 @@ func runGUI(conf *config.Config) {
 					Mode:       req.Mode,
 					Difficulty: difficulty,
 					AdbSerial:  adbDevice.Serial(),
-
-					SongTitleROI: maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2},
-					SongNameROI:  maacontrol.ROI{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2},
-					NodeROIs: map[string][4]float64{
-						// tap_to_next: TAPTONEXT text area (normalised from 1280x720 design)
-						"tap_to_next": {0.400 * 1280, 0.889 * 720, 0.183 * 1280, 0.071 * 720},
-					},
+					GameServer: req.GameServer,
 
 					OnProgress: func(stage, scene, msg string) {
 						srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
@@ -937,20 +887,29 @@ func runGUI(conf *config.Config) {
 							Message:  fmt.Sprintf("%s\n  %s", stage, msg),
 						})
 					},
+
+					OnSongDetected: func(detectedID int, detectedTitle string) {
+						np := req.NowPlaying
+						np.SongID = detectedID
+						np.Mode = req.Mode
+						np.Title = detectedTitle
+						srv.SetSongPreview(np)
+					},
 				}
 
 				// PlaySong: called from MAA's Play custom action when wait_live_start
-				// fires (pause button visible). Drives scrcpy/HID playback, polls for
-				// live_failed every 3 s, cleans up the control socket when done.
+				// fires (pause button visible). Drives scrcpy/HID playback until ctx
+				// is cancelled or the chart finishes. live_failed polling is handled
+				// by playAction.Run() via ctx.RunTask().
 				navCfg.PlaySong = func(playCtx context.Context) error {
-					// 1. Resolve song from navigation's SongRecognition pipeline
-					if chartPath == "" && songID <= 0 {
+					// 1. Resolve song from navigation's SongRecognition pipeline.
+					// Always re-read the latest detection in auto-navigation mode so that
+					// each loop iteration picks up the newly selected song, not the first one.
+					if chartPath == "" {
 						if detect := nav.GetLastSongDetect(); detect.SongID > 0 {
 							songID = detect.SongID
 							req.SongID = detect.SongID
-							if strings.TrimSpace(req.NowPlaying.Title) == "" && detect.SongTitle != "" {
-								req.NowPlaying.Title = detect.SongTitle
-							}
+							req.NowPlaying.Title = detect.SongTitle
 							log.Infof("[PlaySong] detected songID=%d title=%q score=%d", detect.SongID, detect.SongTitle, detect.SongScore)
 						}
 					}
@@ -968,7 +927,7 @@ func runGUI(conf *config.Config) {
 
 					// 4. Wait for start acknowledgement
 					if !srv.WaitForStart(playCtx) {
-						return fmt.Errorf("cancelled before start")
+						return nil // ctx cancelled externally
 					}
 
 					// 5. Vision trigger (AutoNavigation already saw the dark loading screen)
@@ -979,44 +938,14 @@ func runGUI(conf *config.Config) {
 							return fmt.Errorf("AutoTriggerVision requires scrcpy backend")
 						}
 						if !autoTriggerByVision(playCtx, sc, req.Mode, roi, req.AutoTriggerPollMs, true /*navHasSeenDark*/) {
-							return fmt.Errorf("cancelled during vision trigger")
+							return nil // ctx cancelled externally
 						}
 					}
 
-					// 6. Playback + live_failed polling
+					// 6. Blocking playback. ResetTouch is handled by Autoplay's done
+					// section, so no cleanup needed here.
 					start := time.Now().Add(-time.Duration(evts[0].Timestamp) * time.Millisecond)
-					playSubCtx, stopPlay := context.WithCancel(playCtx)
-					defer stopPlay()
-					playDone := make(chan struct{})
-					go func() {
-						defer close(playDone)
-						srv.Autoplay(playSubCtx, start)
-					}()
-
-					pollTicker := time.NewTicker(3 * time.Second)
-					defer pollTicker.Stop()
-				playLoop:
-					for {
-						select {
-						case <-playDone:
-							break playLoop
-						case <-playCtx.Done():
-							<-playDone
-							break playLoop
-						case <-pollTicker.C:
-							if nav.PollLiveFailedOnce() {
-								log.Infof("[PlaySong] live_failed detected, aborting playback")
-								stopPlay()
-								<-playDone
-								break playLoop
-							}
-						}
-					}
-
-					// 7. Cleanup control socket
-					if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
-						sc.ResetTouch()
-					}
+					srv.Autoplay(playCtx, start)
 					return nil
 				}
 
@@ -1042,8 +971,8 @@ func runGUI(conf *config.Config) {
 					nav,
 					req.Mode,
 					adbDevice,
-					maacontrol.ROI{roiPageTitle.x1, roiPageTitle.y1, roiPageTitle.x2, roiPageTitle.y2},
-					maacontrol.ROI{roiSongName.x1, roiSongName.y1, roiSongName.x2, roiSongName.y2},
+					maacontrol.SongTitleROI,
+					songNameROI,
 				)
 				if detectErr != nil {
 					log.Warnf("Auto song detect failed: %v", detectErr)
@@ -1108,6 +1037,15 @@ func runGUI(conf *config.Config) {
 
 	srv.OnRunRequest = func(req gui.RunRequest) {
 		runOnce(req)
+	}
+
+	srv.OnStop = func() {
+		runMu.Lock()
+		cancel := currentCancel
+		runMu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
 	}
 
 	srv.OnExtractRequest = func(path string) error {
