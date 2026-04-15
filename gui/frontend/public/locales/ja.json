@@ -29,6 +29,13 @@
   "song.automode":           "オートモード",
   "song.automode.hint":      "OCR で楽曲を自動認識・ナビゲート(ADB のみ)",
 
+  "song.server":             "ゲームサーバー",
+  "song.server.jp":          "日本",
+  "song.server.tw":          "台湾",
+  "song.server.en":          "グローバル / EN",
+  "song.server.cn":          "中国（Bilibili）",
+  "song.server.kr":          "韓国",
+
   "jitter.title":   "人間らしいジッター設定",
   "jitter.timing":  "タイミング ±ms",
   "jitter.position":"座標 ±%",

@@ -29,6 +29,13 @@
   "song.automode":           "自動模式",
   "song.automode.hint":      "透過 OCR 自動辨識歌曲並導航(僅限 ADB)",
 
+  "song.server":             "遊戲伺服器",
+  "song.server.jp":          "日服",
+  "song.server.tw":          "台服",
+  "song.server.en":          "國際服",
+  "song.server.cn":          "國服（嗶哩嗶哩）",
+  "song.server.kr":          "韓服",
+
   "jitter.title":   "人性化抖動設定",
   "jitter.timing":  "時間偏移 ±ms",
   "jitter.position":"座標偏移 ±%",

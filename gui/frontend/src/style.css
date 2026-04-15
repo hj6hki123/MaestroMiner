@@ -1447,6 +1447,55 @@ html[data-theme='light'] input[type="number"]::placeholder {
   @apply p-3;
 }
 
+/* ── Server select ── */
+.server-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.server-badge {
+  position: absolute;
+  left: 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--blue, #3b82f6);
+  pointer-events: none;
+  z-index: 1;
+  text-transform: uppercase;
+}
+
+.server-select {
+  width: 100%;
+  padding: 10px 36px 10px 50px;
+  border-radius: 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--ui-input-bg);
+  border: 1px solid var(--ui-input-border);
+  color: var(--ui-input-text);
+  box-shadow: var(--ui-input-shadow);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+.server-select:focus {
+  outline: none;
+  border-color: var(--ui-input-focus-border);
+  box-shadow: var(--ui-input-focus-shadow);
+}
+
+.server-select option {
+  background: var(--ui-bg, #18181b);
+  color: var(--ui-input-text);
+}
+
 .song-setup .bc {
   @apply p-2.5 rounded-lg;
 }

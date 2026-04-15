@@ -29,6 +29,13 @@
   "song.automode":           "Auto Mode",
   "song.automode.hint":      "Detect song &amp; navigate automatically via OCR (ADB only)",
 
+  "song.server":             "Game Server",
+  "song.server.jp":          "Japan",
+  "song.server.tw":          "Taiwan",
+  "song.server.en":          "Global / EN",
+  "song.server.cn":          "China (Bilibili)",
+  "song.server.kr":          "Korea",
+
   "jitter.title":   "Humanization (Jitter)",
   "jitter.timing":  "Timing ±ms",
   "jitter.position":"Position ±%",

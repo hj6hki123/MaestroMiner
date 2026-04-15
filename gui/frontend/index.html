@@ -102,6 +102,19 @@
                 <div class="bcs" data-i18n="song.mode.pjsk">Colorful Stage!</div>
               </div>
             </div>
+            <div class="field !mb-0 mt-3">
+              <label class="!mb-1.5" data-i18n="song.server">Game Server</label>
+              <div class="server-select-wrap">
+                <span class="server-badge" id="server-badge">JP</span>
+                <select id="server-select" class="server-select" onchange="setGameServer(this.value)">
+                  <option value="jp" data-i18n="song.server.jp">JP — 日本</option>
+                  <option value="tw" data-i18n="song.server.tw">TW — 台灣</option>
+                  <option value="en" data-i18n="song.server.en">EN — Global</option>
+                  <option value="cn" data-i18n="song.server.cn">CN — 中国 (Bilibili)</option>
+                  <option value="kr" data-i18n="song.server.kr">KR — 한국</option>
+                </select>
+              </div>
+            </div>
           </div>
           <div class="card song-card">
             <div class="ct flex items-center justify-between">
@@ -299,23 +312,7 @@
                 <select id="roi-target" onchange="onROIEditorTargetChanged()">
                   <option value="auto-bang">Auto Trigger ROI (Bang)</option>
                   <option value="auto-pjsk">Auto Trigger ROI (PJSK)</option>
-                  <option value="nav-song-bang">Nav Song ROI (Bang)</option>
-                  <option value="nav-song-pjsk">Nav Song ROI (PJSK)</option>
-                  <option value="screen-title-bang">SCREEN_CHECK Title ROI (Bang/export)</option>
-                  <option value="screen-title-pjsk">SCREEN_CHECK Title ROI (PJSK/export)</option>
-                  <option value="difficulty-row-bang">SONG_DETECT Difficulty ROI (Bang/export)</option>
-                  <option value="difficulty-row-pjsk">SONG_DETECT Difficulty ROI (PJSK/export)</option>
-                  <option value="kettei-bang">CLICK_KETTEI ROI (Bang/export)</option>
-                  <option value="kettei-pjsk">CLICK_KETTEI ROI (PJSK/export)</option>
-                  <option value="live-start-bang">BAND_CONFIRM ROI (Bang/export)</option>
-                  <option value="live-start-pjsk">BAND_CONFIRM ROI (PJSK/export)</option>
-                  <option value="dialog-title-bang">LIVE_SETTING Title ROI (Bang/export)</option>
-                  <option value="dialog-title-pjsk">LIVE_SETTING Title ROI (PJSK/export)</option>
-                  <option value="dialog-ok-bang">LIVE_SETTING OK ROI (Bang/export)</option>
-                  <option value="dialog-ok-pjsk">LIVE_SETTING OK ROI (PJSK/export)</option>
-                  <option value="band-song-info-bang">BAND_CONFIRM SongInfo ROI (Bang/export)</option>
-                  <option value="band-song-info-pjsk">BAND_CONFIRM SongInfo ROI (PJSK/export)</option>
-                  <option value="album-cover-pjsk">WAIT_ALBUM Cover ROI (PJSK/export)</option>
+
                 </select>
                 <button class="btn" type="button" onclick="refreshROIEditorFrame()">Refresh Frame</button>
                 <button class="btn" type="button" onclick="applyROIEditorToInputs()">Apply ROI</button>
@@ -484,7 +481,6 @@
                 </div>
                 <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
                   <img id="vision-roi-img" alt="vision-roi" style="width:260px;max-width:100%;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:#0a0a0a;image-rendering:pixelated;" />
-                  <img id="nav-roi-img" alt="nav-song-roi" style="width:260px;max-width:100%;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:#0a0a0a;image-rendering:pixelated;" />
                   <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--hint);line-height:1.35;min-width:220px;">
                     <div>state: <span id="play-dbg-at-state">-</span> | mode: <span id="play-dbg-at-mode">-</span></div>
                     <div>Luma: <span id="play-dbg-at-luma">-</span> | Delta: <span id="play-dbg-at-delta">-</span> | Stable: <span id="play-dbg-at-stable">-</span></div>

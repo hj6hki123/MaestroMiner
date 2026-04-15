@@ -72,9 +72,7 @@ type RunRequest struct {
 	AutoTriggerROIPjsk ROI     `json:"autoTriggerRoiPjsk"` // ROI (% space) for PJSK mode
 	AutoNavigation     bool    `json:"autoNavigation"`     // Auto navigate through pre-game screens (ADB only)
 	AutoDetectSong     bool    `json:"autoDetectSong"`     // Auto detect current selected song via OCR on 楽曲選択 screen
-	NavSongROIBang     ROI     `json:"navSongRoiBang"`     // OCR ROI (% space) for song-name panel in Bang mode
-	NavSongROIPjsk     ROI     `json:"navSongRoiPjsk"`     // OCR ROI (% space) for song-name panel in PJSK mode
-
+	GameServer         string  `json:"gameServer"`         // "jp", "tw", "en", "cn", "kr"
 	// Advanced VTE parameters (0 = use mode default)
 	TapDuration         int64   `json:"tapDuration"`
 	FlickDuration       int64   `json:"flickDuration"`
@@ -136,6 +134,11 @@ type Server struct {
 
 	OnRunRequest     func(req RunRequest)
 	OnExtractRequest func(path string) error
+	// OnStop is called whenever the frontend stop button is pressed and there
+	// is an active run (StateReady / StatePlaying / StateDone).  It is called
+	// after stopCh is closed, so Autoplay is already stopping.  Use this to
+	// cancel the run context and stop the MAA navigator.
+	OnStop func()
 	// OCRProbe takes an ADB screencap and runs OCR on the given percent ROI.
 	// x1,y1,x2,y2 are 0-100 percent values. Returns OCR texts and song match info as JSON bytes.
 	OCRProbe func(mode string, x1, y1, x2, y2 int) ([]byte, error)
@@ -324,7 +327,7 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	req := s.lastRunReq
 	s.mu.Unlock()
 
-	if st != StateReady && st != StatePlaying && st != StateDone {
+	if st != StateReady && st != StatePlaying && st != StateDone && st != StateIdle {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -342,6 +345,10 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 	s.state = StateIdle
 	s.mu.Unlock()
 	s.broadcastState()
+
+	if s.OnStop != nil {
+		s.OnStop()
+	}
 
 	if s.OnRunRequest != nil && !req.AutoNavigation && (st == StatePlaying || st == StateDone) {
 		go s.OnRunRequest(req)
@@ -523,6 +530,16 @@ func (s *Server) SetError(msg string) {
 	s.broadcastState()
 }
 
+// SetSongPreview updates nowPlaying without changing playback state.
+// Called during auto-navigation when a song is detected on the select screen,
+// so the Play Control pane shows the matched song before SetReady is invoked.
+func (s *Server) SetSongPreview(np NowPlaying) {
+	s.mu.Lock()
+	s.nowPlaying = np
+	s.mu.Unlock()
+	s.broadcastState()
+}
+
 func (s *Server) SetGreatStats(requested, applied int64) {
 	s.mu.Lock()
 	if requested < 0 {
@@ -572,13 +589,7 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	stopCh := s.stopCh
 	events := s.events
 	offsetCh := s.offsetCh
-	//ctrl := s.controller
 	s.mu.Unlock()
-
-	// if sc, ok := ctrl.(*controllers.ScrcpyController); ok {
-	// 	sc.ResetTouch()
-	// 	time.Sleep(50 * time.Millisecond) // 等待 50ms 讓設備反應
-	// }
 
 	n := len(events)
 	current := 0
@@ -736,47 +747,6 @@ func normalizeAutoTriggerROI(mode string, bang ROI, pjsk ROI) ROI {
 	return roi
 }
 
-func normalizeNavSongROI(mode string, bang ROI, pjsk ROI) ROI {
-	roi := bang
-	if mode == "pjsk" {
-		roi = pjsk
-	}
-
-	if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
-		if mode == "pjsk" {
-			return ROI{X1: 59, Y1: 46, X2: 85, Y2: 52}
-		}
-		return ROI{X1: 23, Y1: 46, X2: 47, Y2: 50}
-	}
-
-	clamp := func(v int) int {
-		if v < 0 {
-			return 0
-		}
-		if v > 100 {
-			return 100
-		}
-		return v
-	}
-	roi.X1 = clamp(roi.X1)
-	roi.Y1 = clamp(roi.Y1)
-	roi.X2 = clamp(roi.X2)
-	roi.Y2 = clamp(roi.Y2)
-	if roi.X2 <= roi.X1 {
-		if roi.X1 >= 99 {
-			roi.X1 = 98
-		}
-		roi.X2 = roi.X1 + 1
-	}
-	if roi.Y2 <= roi.Y1 {
-		if roi.Y1 >= 99 {
-			roi.Y1 = 98
-		}
-		roi.Y2 = roi.Y1 + 1
-	}
-	return roi
-}
-
 func (s *Server) handleVisionROI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -895,74 +865,6 @@ func (s *Server) handleOCRProbe(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func (s *Server) handleNavROI(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	s.mu.Lock()
-	ctrl := s.controller
-	req := s.lastRunReq
-	s.mu.Unlock()
-
-	sc, ok := ctrl.(*controllers.ScrcpyController)
-	if !ok || sc == nil {
-		http.Error(w, "nav preview unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
-	frame, ok := sc.LatestFrame()
-	if !ok || frame.Width <= 0 || frame.Height <= 0 {
-		http.Error(w, "no decoded frame", http.StatusServiceUnavailable)
-		return
-	}
-
-	need := frame.Width * frame.Height
-	if len(frame.Plane0) < need {
-		http.Error(w, "invalid frame", http.StatusServiceUnavailable)
-		return
-	}
-
-	roi := normalizeNavSongROI(req.Mode, req.NavSongROIBang, req.NavSongROIPjsk)
-	x1 := frame.Width * roi.X1 / 100
-	x2 := frame.Width * roi.X2 / 100
-	y1 := frame.Height * roi.Y1 / 100
-	y2 := frame.Height * roi.Y2 / 100
-	if x1 < 0 {
-		x1 = 0
-	}
-	if y1 < 0 {
-		y1 = 0
-	}
-	if x2 > frame.Width {
-		x2 = frame.Width
-	}
-	if y2 > frame.Height {
-		y2 = frame.Height
-	}
-	if x2 <= x1 || y2 <= y1 {
-		http.Error(w, "invalid nav roi", http.StatusBadRequest)
-		return
-	}
-
-	wid := x2 - x1
-	hgt := y2 - y1
-	img := image.NewGray(image.Rect(0, 0, wid, hgt))
-	for y := 0; y < hgt; y++ {
-		srcOff := (y1+y)*frame.Width + x1
-		dstOff := y * img.Stride
-		copy(img.Pix[dstOff:dstOff+wid], frame.Plane0[srcOff:srcOff+wid])
-	}
-
-	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	if err := png.Encode(w, img); err != nil {
-		http.Error(w, "encode failed", http.StatusInternalServerError)
-		return
-	}
-}
-
 func (s *Server) handleFrame(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1066,7 +968,6 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/kill-adb", s.handleKillAdb)
 	mux.HandleFunc("/api/detect-adb", s.handleDetectAdb)
 	mux.HandleFunc("/api/vision-roi.png", s.handleVisionROI)
-	mux.HandleFunc("/api/nav-roi.png", s.handleNavROI)
 	mux.HandleFunc("/api/ocr-probe", s.handleOCRProbe)
 	mux.HandleFunc("/api/frame.png", s.handleFrame)
 

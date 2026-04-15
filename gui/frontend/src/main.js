@@ -193,68 +193,15 @@ function getAutoTriggerVisionConfig() {
   return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk };
 }
 
-function getNavOCRConfig() {
-  return {
-    songBang: getROIForTargetKey('nav-song-bang'),
-    songPjsk: getROIForTargetKey('nav-song-pjsk'),
-  };
-}
-
-function onNavOCRChanged() {
-  var cfg = getNavOCRConfig();
-  var bangVal = document.getElementById('val-nav-song-bang');
-  var pjskVal = document.getElementById('val-nav-song-pjsk');
-  if (bangVal) bangVal.textContent = [cfg.songBang.x1, cfg.songBang.y1, cfg.songBang.x2, cfg.songBang.y2].join(',');
-  if (pjskVal) pjskVal.textContent = [cfg.songPjsk.x1, cfg.songPjsk.y1, cfg.songPjsk.x2, cfg.songPjsk.y2].join(',');
-  S._lastNavRoiFrameAt = 0;
-  renderROIEditorAllValues();
-  if (S && S._roiEditor && (S._roiEditor.targetKey === 'nav-song-bang' || S._roiEditor.targetKey === 'nav-song-pjsk')) {
-    onROIEditorTargetChanged();
-  }
-}
 
 var ROI_EDITOR_TARGETS = {
   'auto-bang': { kind: 'auto', mode: 'bang', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
   'auto-pjsk': { kind: 'auto', mode: 'pjsk', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
-  'nav-song-bang': { kind: 'nav', mode: 'bang', writable: true, defaults: { x1: 23, y1: 46, x2: 47, y2: 51 } },
-  'nav-song-pjsk': { kind: 'nav', mode: 'pjsk', writable: true, defaults: { x1: 59, y1: 46, x2: 85, y2: 52 } },
-  'screen-title-bang': { kind: 'export', writable: false, defaults: { x1: 6, y1: 4, x2: 28, y2: 12 } },
-  'screen-title-pjsk': { kind: 'export', writable: false, defaults: { x1: 6, y1: 4, x2: 28, y2: 12 } },
-  'difficulty-row-bang': { kind: 'export', writable: false, defaults: { x1: 59, y1: 68, x2: 88, y2: 80 } },
-  'difficulty-row-pjsk': { kind: 'export', writable: false, defaults: { x1: 60, y1: 60, x2: 90, y2: 76 } },
-  'kettei-bang': { kind: 'export', writable: false, defaults: { x1: 76, y1: 83, x2: 92, y2: 92 } },
-  'kettei-pjsk': { kind: 'export', writable: false, defaults: { x1: 68, y1: 76, x2: 80, y2: 87 } },
-  'live-start-bang': { kind: 'export', writable: false, defaults: { x1: 72, y1: 72, x2: 89, y2: 94 } },
-  'live-start-pjsk': { kind: 'export', writable: false, defaults: { x1: 72, y1: 71, x2: 76, y2: 81 } },
-  'dialog-title-bang': { kind: 'export', writable: false, defaults: { x1: 33, y1: 12, x2: 47, y2: 20 } },
-  'dialog-title-pjsk': { kind: 'export', writable: false, defaults: { x1: 26, y1: 22, x2: 43, y2: 32 } },
-  'dialog-ok-bang': { kind: 'export', writable: false, defaults: { x1: 50, y1: 76, x2: 66, y2: 87 } },
-  'dialog-ok-pjsk': { kind: 'export', writable: false, defaults: { x1: 50, y1: 69, x2: 66, y2: 81 } },
-  'band-song-info-bang': { kind: 'export', writable: false, defaults: { x1: 24, y1: 60, x2: 80, y2: 88 } },
-  'band-song-info-pjsk': { kind: 'export', writable: false, defaults: { x1: 24, y1: 60, x2: 80, y2: 88 } },
-  'album-cover-pjsk': { kind: 'export', writable: false, defaults: { x1: 5, y1: 43, x2: 53, y2: 96 } },
 };
 
 var ROI_EDITOR_LABELS = {
   'auto-bang': 'Auto Trigger ROI (Bang)',
   'auto-pjsk': 'Auto Trigger ROI (PJSK)',
-  'nav-song-bang': 'Nav Song ROI (Bang)',
-  'nav-song-pjsk': 'Nav Song ROI (PJSK)',
-  'screen-title-bang': 'SCREEN_CHECK Title ROI (Bang/export)',
-  'screen-title-pjsk': 'SCREEN_CHECK Title ROI (PJSK/export)',
-  'difficulty-row-bang': 'SONG_DETECT Difficulty ROI (Bang/export)',
-  'difficulty-row-pjsk': 'SONG_DETECT Difficulty ROI (PJSK/export)',
-  'kettei-bang': 'CLICK_KETTEI ROI (Bang/export)',
-  'kettei-pjsk': 'CLICK_KETTEI ROI (PJSK/export)',
-  'live-start-bang': 'BAND_CONFIRM ROI (Bang/export)',
-  'live-start-pjsk': 'BAND_CONFIRM ROI (PJSK/export)',
-  'dialog-title-bang': 'LIVE_SETTING Title ROI (Bang/export)',
-  'dialog-title-pjsk': 'LIVE_SETTING Title ROI (PJSK/export)',
-  'dialog-ok-bang': 'LIVE_SETTING OK ROI (Bang/export)',
-  'dialog-ok-pjsk': 'LIVE_SETTING OK ROI (PJSK/export)',
-  'band-song-info-bang': 'BAND_CONFIRM SongInfo ROI (Bang/export)',
-  'band-song-info-pjsk': 'BAND_CONFIRM SongInfo ROI (PJSK/export)',
-  'album-cover-pjsk': 'WAIT_ALBUM Cover ROI (PJSK/export)'
 };
 
 function normalizeROIInt(roi) {
@@ -313,11 +260,7 @@ function applyROIToTargetKey(key, roi) {
     onAutoTriggerVisionChanged();
     return true;
   }
-  if (cfg.kind === 'nav') {
-    S._lastNavRoiFrameAt = 0;
-    onNavOCRChanged();
-    return true;
-  }
+
   renderROIEditorAllValues();
   return false;
 }
@@ -667,7 +610,7 @@ function onJitter(key) { renderJitter(key); }
 function onGreatCountInput() { renderJitter('grCount'); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0, _lastNavRoiFrameAt: 0, _lastRoiEditorFrameAt: 0, _lastNavLogSig: '', autoMode: false, _roiValues: null, _roiEditorReady: false };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', gameServer: 'jp', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0, _lastNavRoiFrameAt: 0, _lastRoiEditorFrameAt: 0, _lastNavLogSig: '', autoMode: false, _roiValues: null, _roiEditorReady: false };
 var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
@@ -810,6 +753,13 @@ function setOrient(o) {
   S.orient = o;
   document.getElementById('ol').classList.toggle('active', o === 'left');
   document.getElementById('or').classList.toggle('active', o === 'right');
+}
+function setGameServer(s) {
+  S.gameServer = s;
+  var sel = document.getElementById('server-select');
+  if (sel && sel.value !== s) sel.value = s;
+  var badge = document.getElementById('server-badge');
+  if (badge) badge.textContent = s.toUpperCase();
 }
 function setDiff(i) {
   var btns = document.querySelectorAll('.db');
@@ -1147,13 +1097,20 @@ function updateUI(d) {
   document.getElementById('pn-state-label').textContent = txt;
   document.getElementById('ov').textContent = d.offset || 0;
   var btn = document.getElementById('btn-start');
-  if (st === 1) { btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('play.start.btn'); }
+  if (st === 1 && !S.autoMode) { btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('play.start.btn'); }
   else { btn.disabled = true; btn.classList.remove('rdy'); btn.innerHTML = t('play.start.btn'); }
   if (d.nowPlaying && (d.nowPlaying.songId > 0 || d.nowPlaying.title)) {
     hydrateNowPlaying(d.nowPlaying, function (npResolved) {
       showNP(npResolved);
       updatePlayCard(npResolved);
     });
+    // Auto-navigate to Play pane when a song is detected via pipeline
+    if (S.autoMode && st === 0) {
+      var playPane = document.getElementById('pane-play');
+      if (playPane && !playPane.classList.contains('active')) {
+        nav('play');
+      }
+    }
   }
   if (st !== S._lastLogState) {
     S._lastLogState = st;
@@ -1287,18 +1244,6 @@ function updateUI(d) {
     }
     if (!dbg.enabled) {
       roiImg.removeAttribute('src');
-    }
-  }
-
-  var navImg = document.getElementById('nav-roi-img');
-  if (navImg) {
-    var nowNavTs = Date.now();
-    if (S.backend === 'adb' && (st === 1 || st === 2) && nowNavTs - S._lastNavRoiFrameAt > 250) {
-      S._lastNavRoiFrameAt = nowNavTs;
-      navImg.src = '/api/nav-roi.png?t=' + nowNavTs;
-    }
-    if (S.backend !== 'adb' || !(st === 1 || st === 2)) {
-      navImg.removeAttribute('src');
     }
   }
 
@@ -1552,9 +1497,8 @@ function submitRun() {
   var grCountRaw = getGreatCountRaw();
   var autoTrigger = getAutoTriggerVisionConfig();
   var autoTriggerEnabled = S.autoMode ? true : autoTrigger.enabled;
-  var navOCR = getNavOCRConfig();
   var adv = getAdvancedValues();
-  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTriggerEnabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, navSongRoiBang: navOCR.songBang, navSongRoiPjsk: navOCR.songPjsk, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTriggerEnabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, gameServer: S.gameServer, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
@@ -1674,7 +1618,6 @@ updateDiffLabels();
 resetAdvanced();
 loadDevices();
 onAutoTriggerVisionChanged();
-onNavOCRChanged();
 onAutoModeChanged();
 initROIEditor();
 
@@ -1692,6 +1635,7 @@ Object.assign(window, {
   setMode,
   setBackend,
   setOrient,
+  setGameServer,
   setDiff,
   clearSong,
   onQInput,
@@ -1709,7 +1653,6 @@ Object.assign(window, {
   onJitter,
   onGreatCountInput,
   onAutoTriggerVisionChanged,
-  onNavOCRChanged,
   onAutoModeChanged,
   onROIEditorTargetChanged,
   onROIEditorMouseDown,
