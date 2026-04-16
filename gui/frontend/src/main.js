@@ -690,6 +690,7 @@ function updateDynamicTexts() {
   var btn = document.getElementById('btn-start');
   if (btn) btn.innerHTML = t('play.start.btn');
   if (document.getElementById('pane-settings').classList.contains('active')) loadDevices();
+  updateBuyMusicUI();
 }
 
 function nav(id) {
@@ -1632,6 +1633,59 @@ function getAdvancedValues() {
     flickPow: (parseInt(document.getElementById('sld-flickPow').value) || 10) / 10,
   };
 }
+// ══ buy music ══════════════════════════════════════════════
+var buyMusicRunning = false;
+
+function toggleBuyMusic() {
+  if (buyMusicRunning) {
+    stopBuyMusic();
+  } else {
+    startBuyMusic();
+  }
+}
+
+function startBuyMusic() {
+  var serial = (document.getElementById('dev-serial') || {}).value || '';
+  fetch('/api/buy-music', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'start', serial: serial.trim() })
+  })
+    .then(function (r) {
+      if (r.ok) {
+        buyMusicRunning = true;
+        updateBuyMusicUI();
+        log('buy-music-log', t('extra.buymusic.running'), 'ok');
+      } else {
+        r.text().then(function (tx) { log('buy-music-log', tx, 'err'); });
+      }
+    })
+    .catch(function (e) { log('buy-music-log', t('log.conn.fail') + e, 'err'); });
+}
+
+function stopBuyMusic() {
+  fetch('/api/buy-music', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'stop' })
+  })
+    .then(function () {
+      buyMusicRunning = false;
+      updateBuyMusicUI();
+      log('buy-music-log', t('extra.buymusic.stopped'), 'info');
+    })
+    .catch(function (e) { log('buy-music-log', t('log.conn.fail') + e, 'err'); });
+}
+
+function updateBuyMusicUI() {
+  var lbl = document.getElementById('buy-music-btn-label');
+  var status = document.getElementById('buy-music-status');
+  var btn = document.getElementById('btn-buy-music');
+  if (lbl) lbl.textContent = buyMusicRunning ? t('extra.buymusic.pause') : t('extra.buymusic.start');
+  if (status) status.textContent = buyMusicRunning ? t('extra.buymusic.running') : t('extra.buymusic.stopped');
+  if (btn) btn.classList.toggle('danger', buyMusicRunning);
+}
+
 // ══ extraction ═════════════════════════════════════════════
 function doExtract() {
   var p = document.getElementById('ex-path').value.trim();
@@ -1700,7 +1754,8 @@ Object.assign(window, {
   toggleDevDrop,
   loadDevices,
   selectDevSerial,
-  selSong
+  selSong,
+  toggleBuyMusic,
 });
 
 

@@ -25,6 +25,7 @@ import (
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
+	"github.com/kvarenzn/ssm/maacontrol"
 )
 
 //go:embed frontend/dist
@@ -113,6 +114,10 @@ type Server struct {
 	port int
 	conf *config.Config
 
+	// MaaLibDir is forwarded to maacontrol functions that need the MAA native
+	// library directory (same value used by the Navigator).
+	MaaLibDir string
+
 	mu         sync.Mutex
 	state      PlayState
 	offset     int
@@ -132,6 +137,9 @@ type Server struct {
 
 	clientsMu sync.Mutex
 	clients   map[chan string]struct{}
+
+	buyMusicMu   sync.Mutex
+	buyMusicStop chan struct{}
 
 	OnRunRequest     func(req RunRequest)
 	OnExtractRequest func(path string) error
@@ -682,6 +690,67 @@ func (s *Server) handleKillAdb(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) handleBuyMusic(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Action string `json:"action"`
+		Serial string `json:"serial"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	s.buyMusicMu.Lock()
+	defer s.buyMusicMu.Unlock()
+
+	switch body.Action {
+	case "stop":
+		if s.buyMusicStop != nil {
+			select {
+			case <-s.buyMusicStop:
+			default:
+				close(s.buyMusicStop)
+			}
+			s.buyMusicStop = nil
+		}
+		w.WriteHeader(http.StatusOK)
+
+	case "start":
+		if s.buyMusicStop != nil {
+			// already running
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		stopCh := make(chan struct{})
+		s.buyMusicStop = stopCh
+		serial := strings.TrimSpace(body.Serial)
+		maaLibDir := s.MaaLibDir
+		go func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			go func() {
+				<-stopCh
+				cancel()
+			}()
+			cfg := maacontrol.BuyMusicConfig{
+				AdbSerial:   serial,
+				MaaLibDir:   maaLibDir,
+				ResourceDir: "./maacontrol/resource",
+			}
+			if err := maacontrol.RunBuyMusicLoop(ctx, cfg); err != nil {
+				fmt.Printf("[BuyMusic] error: %v\n", err)
+			}
+		}()
+		w.WriteHeader(http.StatusOK)
+
+	default:
+		http.Error(w, "unknown action", http.StatusBadRequest)
+	}
+}
+
 func (s *Server) handleDetectAdb(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -968,6 +1037,7 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/songdb", s.handleSongDB)
 	mux.HandleFunc("/api/kill-adb", s.handleKillAdb)
 	mux.HandleFunc("/api/detect-adb", s.handleDetectAdb)
+	mux.HandleFunc("/api/buy-music", s.handleBuyMusic)
 	mux.HandleFunc("/api/vision-roi.png", s.handleVisionROI)
 	mux.HandleFunc("/api/ocr-probe", s.handleOCRProbe)
 	mux.HandleFunc("/api/frame.png", s.handleFrame)

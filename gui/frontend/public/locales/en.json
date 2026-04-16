@@ -123,5 +123,13 @@
   "dc.hint.saved":   "✓ Saved",
   "dc.hint.fail":    "Save failed",
   "drop.none":       "No results found",
-  "manual.title":    "Manual input"
+  "manual.title":    "Manual input",
+
+  "nav.extra":              "Other Functions",
+  "extra.buymusic.title":   "Music Purchase Auto-Clicker",
+  "extra.buymusic.desc":    "Automatically taps through the music purchase flow. Make sure the game is on the correct screen before starting.",
+  "extra.buymusic.start":   "▶ Start",
+  "extra.buymusic.pause":   "⏸ Pause",
+  "extra.buymusic.running": "Running…",
+  "extra.buymusic.stopped": "Stopped"
 }

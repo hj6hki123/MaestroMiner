@@ -123,5 +123,13 @@
   "dc.hint.saved":   "✓ 已儲存",
   "dc.hint.fail":    "儲存失敗",
   "drop.none":       "找不到符合的歌曲",
-  "manual.title":    "手動輸入"
+  "manual.title":    "手動輸入",
+
+  "nav.extra":              "其他功能",
+  "extra.buymusic.title":   "樂曲購買自動點擊器",
+  "extra.buymusic.desc":    "自動點擊樂曲購買流程。啟動前請確認遊戲已停留在正確畫面。",
+  "extra.buymusic.start":   "▶ 開始",
+  "extra.buymusic.pause":   "⏸ 暫停",
+  "extra.buymusic.running": "執行中…",
+  "extra.buymusic.stopped": "已停止"
 }

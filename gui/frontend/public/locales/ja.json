@@ -123,5 +123,13 @@
   "dc.hint.saved":   "✓ 保存しました",
   "dc.hint.fail":    "保存に失敗しました",
   "drop.none":       "該当する楽曲が見つかりません",
-  "manual.title":    "手動入力"
+  "manual.title":    "手動入力",
+
+  "nav.extra":              "その他機能",
+  "extra.buymusic.title":   "楽曲購入自動タッパー",
+  "extra.buymusic.desc":    "楽曲購入フローを自動タップします。開始前にゲームが正しい画面にあることを確認してください。",
+  "extra.buymusic.start":   "▶ 開始",
+  "extra.buymusic.pause":   "⏸ 一時停止",
+  "extra.buymusic.running": "実行中…",
+  "extra.buymusic.stopped": "停止"
 }

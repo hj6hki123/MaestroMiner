@@ -43,6 +43,9 @@
       <button class="nav-btn" id="nav-extract" onclick="nav('extract')">
         <span class="ico">📦</span><span data-i18n="nav.extract">Extract Assets</span>
       </button>
+      <button class="nav-btn" id="nav-extra" onclick="nav('extra')">
+        <span class="ico">🛠</span><span data-i18n="nav.extra">Other Functions</span>
+      </button>
 
       <div
         class="np-card mt-auto bg-[#18181b] p-3 rounded-xl border border-ssm-border flex flex-col shadow-lg relative overflow-hidden"
@@ -533,6 +536,25 @@
           </div>
           <button class="btn pri" onclick="doExtract()" data-i18n="extract.btn">Extract</button>
           <div class="log" id="ex-log"></div>
+        </div>
+
+      </div>
+
+      <div class="pane" id="pane-extra">
+        <div class="pg-title" data-i18n="nav.extra">Other Functions</div>
+
+        <div class="card">
+          <div class="ct" data-i18n="extra.buymusic.title">Music Purchase Auto-Clicker</div>
+          <p class="text-sm text-ssm-muted mb-4" data-i18n="extra.buymusic.desc">
+            Automatically taps through the music purchase flow.
+          </p>
+          <div class="flex items-center gap-3">
+            <button class="btn pri" id="btn-buy-music" onclick="toggleBuyMusic()">
+              <span id="buy-music-btn-label" data-i18n="extra.buymusic.start">▶ Start</span>
+            </button>
+            <span id="buy-music-status" class="text-sm text-ssm-muted" data-i18n="extra.buymusic.stopped">Stopped</span>
+          </div>
+          <div class="log" id="buy-music-log"></div>
         </div>
 
       </div>

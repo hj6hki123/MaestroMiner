@@ -120,5 +120,13 @@
   "dc.hint.saved":   "✓ 已保存",
   "dc.hint.fail":    "保存失败",
   "drop.none":       "未找到匹配的歌曲",
-  "manual.title":    "手动输入"
+  "manual.title":    "手动输入",
+
+  "nav.extra":              "其他功能",
+  "extra.buymusic.title":   "乐曲购买自动点击器",
+  "extra.buymusic.desc":    "自动点击乐曲购买流程。启动前请确认游戏已停留在正确界面。",
+  "extra.buymusic.start":   "▶ 开始",
+  "extra.buymusic.pause":   "⏸ 暂停",
+  "extra.buymusic.running": "运行中…",
+  "extra.buymusic.stopped": "已停止"
 }
