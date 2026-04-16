@@ -87,8 +87,7 @@ func buildMergedBundle(resourceDir, gameServer string) (tmpDir string, cleanup f
 	if absErr == nil {
 		if _, statErr := os.Stat(srcImage); statErr == nil {
 			dstImage := filepath.Join(tmp, "image")
-			if linkErr := os.Symlink(srcImage, dstImage); linkErr != nil {
-				log.Warnf("[buildMergedBundle] symlink image failed (%v) – copying", linkErr)
+			if linkErr := tryLinkDir(srcImage, dstImage); linkErr != nil {
 				if copyErr := copyDir(srcImage, dstImage); copyErr != nil {
 					done()
 					return "", nil, fmt.Errorf("copy image dir: %w", copyErr)
@@ -102,8 +101,7 @@ func buildMergedBundle(resourceDir, gameServer string) (tmpDir string, cleanup f
 	if absErr2 == nil {
 		if _, statErr := os.Stat(srcModel); statErr == nil {
 			dstModel := filepath.Join(tmp, "model")
-			if linkErr := os.Symlink(srcModel, dstModel); linkErr != nil {
-				log.Warnf("[buildMergedBundle] symlink model failed (%v) – copying", linkErr)
+			if linkErr := tryLinkDir(srcModel, dstModel); linkErr != nil {
 				if copyErr := copyDir(srcModel, dstModel); copyErr != nil {
 					done()
 					return "", nil, fmt.Errorf("copy model dir: %w", copyErr)

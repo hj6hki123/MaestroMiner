@@ -90,7 +90,7 @@ func runGUI(conf *config.Config) {
 	srv := gui.NewServer(guiPort, conf)
 	prepareGUIPrerequisites()
 
-	normalizeROI := func(mode string, bang gui.ROI, pjsk gui.ROI) gui.ROI {
+	normalizeROI := func(mode string, bang gui.ROI, pjsk gui.ROI, y1Offset int) gui.ROI {
 		roi := bang
 		if mode == "pjsk" {
 			roi = pjsk
@@ -98,10 +98,14 @@ func runGUI(conf *config.Config) {
 
 		if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
 			if mode == "pjsk" {
-				return gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
+				roi = gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
+			} else {
+				roi = gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
 			}
-			return gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
 		}
+
+		// Apply Y1 offset before clamping.
+		roi.Y1 += y1Offset
 
 		clamp := func(v int) int {
 			if v < 0 {
@@ -932,7 +936,7 @@ func runGUI(conf *config.Config) {
 
 					// 5. Vision trigger (AutoNavigation already saw the dark loading screen)
 					if req.AutoTriggerVision {
-						roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)
+						roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk, req.VisionY1Offset)
 						sc, ok := ctrl.(*controllers.ScrcpyController)
 						if !ok {
 							return fmt.Errorf("AutoTriggerVision requires scrcpy backend")
@@ -1011,7 +1015,7 @@ func runGUI(conf *config.Config) {
 			const navHasSeenDark = false
 
 			if req.AutoTriggerVision {
-				roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)
+				roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk, req.VisionY1Offset)
 				sc, ok := ctrl.(*controllers.ScrcpyController)
 				if !ok {
 					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, PollMs: req.AutoTriggerPollMs, ROI: roi, Message: "backend not scrcpy"})

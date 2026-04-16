@@ -70,6 +70,7 @@ type RunRequest struct {
 	AutoTriggerPollMs  int64   `json:"autoTriggerPollMs"`  // Frame polling interval in ms for visual trigger
 	AutoTriggerROIBang ROI     `json:"autoTriggerRoiBang"` // ROI (% space) for Bang mode
 	AutoTriggerROIPjsk ROI     `json:"autoTriggerRoiPjsk"` // ROI (% space) for PJSK mode
+	VisionY1Offset     int     `json:"visionY1Offset"`     // Y1 offset applied on top of default/custom ROI
 	AutoNavigation     bool    `json:"autoNavigation"`     // Auto navigate through pre-game screens (ADB only)
 	AutoDetectSong     bool    `json:"autoDetectSong"`     // Auto detect current selected song via OCR on 楽曲選択 screen
 	GameServer         string  `json:"gameServer"`         // "jp", "tw", "en", "cn", "kr"

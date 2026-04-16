@@ -219,6 +219,12 @@ type Navigator struct {
 	lastLiveBoost  int
 	lastPlayResult PlayResult
 	lastPlayFields map[string]int
+
+	// callbackWg tracks in-flight MAA custom-action/recognition callbacks.
+	// Destroy() waits on this before tearing down the tasker so we never
+	// call Tasker.Destroy() while a callback is still executing inside the
+	// MAA thread – which would cause a use-after-free crash.
+	callbackWg sync.WaitGroup
 }
 
 // NewNavigator creates a Navigator, connects the MAA ADB controller and loads
@@ -291,7 +297,6 @@ func NewNavigator(cfg NavConfig) (*Navigator, error) {
 	for name, rec := range map[string]maa.CustomRecognitionRunner{
 		"DifficultyRec":              &difficultyRec{nav: n},
 		"SongRecognition":            &songNameRec{nav: n},
-		"LivePlayOnRec":              &livePlayOnRec{nav: n},
 		"LiveBoostEnoughRecognition": &liveBoostEnoughRec{nav: n},
 		"PlayResultRecognition":      &playResultRec{nav: n},
 	} {
@@ -387,6 +392,7 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 	select {
 	case <-ctx.Done():
 		n.tasker.PostStop()
+		<-done // wait for job.Wait() to return before Destroy() is called
 		n.emit("Nav", "", "已取消", true)
 		return false
 	case ok := <-done:
@@ -401,6 +407,12 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 
 // Destroy releases all MAA resources and removes the temporary bundle dir.
 func (n *Navigator) Destroy() {
+	// Wait for any in-flight MAA callbacks to return before tearing down the
+	// tasker.  PostStop() (called by Run on context cancellation) causes MAA
+	// to abort pending sub-tasks so callbacks unblock quickly; without this
+	// wait Tasker.Destroy() races with a still-executing callback and causes
+	// a use-after-free crash (0xc0000005).
+	n.callbackWg.Wait()
 	if n.tasker != nil {
 		n.tasker.Destroy()
 		n.tasker = nil
@@ -646,26 +658,6 @@ func ocrImageTexts(img image.Image, roi ROI) ([]string, error) {
 	return texts, nil
 }
 
-func templateMatchBest(ctx *maa.Context, template string) (score float64, box maa.Rect, ok bool) {
-	img, err := ctx.GetTasker().GetController().CacheImage()
-	if err != nil || img == nil {
-		return 0, maa.Rect{}, false
-	}
-	detail, err := ctx.RunRecognition("random_choice_song", img, map[string]any{
-		"random_choice_song": map[string]any{
-			"template":  []string{template},
-			"threshold": []float64{0.0},
-		},
-	})
-	if err != nil || detail == nil || detail.Results == nil || detail.Results.Best == nil {
-		return 0, maa.Rect{}, false
-	}
-	tmr, ok := detail.Results.Best.AsTemplateMatch()
-	if !ok {
-		return 0, maa.Rect{}, false
-	}
-	return tmr.Score, tmr.Box, true
-}
 
 var liveBoostRE = regexp.MustCompile(`(\d+)\s*[\/／]\s*\d+`)
 
@@ -756,12 +748,13 @@ func clampI(v, lo, hi int) int {
 // difficultyRec wraps TemplateMatch so the best match score is logged.
 // This is a diagnostic aid: adjust the threshold constant below if needed.
 const difficultyMatchThreshold = 0.80
-const livePlayOffMatchThreshold = 0.80
 
 type difficultyRec struct{ nav *Navigator }
 
 func (r *difficultyRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
 	n := r.nav
+	n.callbackWg.Add(1)
+	defer n.callbackWg.Done()
 	_, diff := n.getModeDiff()
 	log.Infof("[DifficultyRec] ── entered diff=%q arg.Img=%dx%d", diff, arg.Img.Bounds().Dx(), arg.Img.Bounds().Dy())
 	if diff == "" {
@@ -851,6 +844,8 @@ type songNameRec struct{ nav *Navigator }
 
 func (r *songNameRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
 	n := r.nav
+	n.callbackWg.Add(1)
+	defer n.callbackWg.Done()
 	mode, _ := n.getModeDiff()
 	if mode == "" {
 		mode = n.cfg.Mode
@@ -902,39 +897,6 @@ func (r *songNameRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa
 	}, true
 }
 
-// ─────────────────────────────────────────────
-// Custom recognition: LivePlayOnRec
-// ─────────────────────────────────────────────
-
-// livePlayOnRec detects liveplay_3d.png or liveplay_mv.png (MV/3D is currently ON).
-// Returns the button box so the pipeline can Click it to toggle OFF.
-type livePlayOnRec struct{ nav *Navigator }
-
-func (r *livePlayOnRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
-	for _, tmpl := range []string{"live/button/liveplay_3d.png", "live/button/liveplay_mv.png"} {
-		score, _, ok := templateMatchBest(ctx, tmpl)
-		if !ok {
-			continue
-		}
-		if score < livePlayOffMatchThreshold {
-			continue
-		}
-		log.Infof("[MAA_NAV] LivePlayOnRec matched %s score=%.3f", tmpl, score)
-
-		ctrl := ctx.GetTasker().GetController()
-		w, h, err := screencapDims(ctrl)
-		if err != nil {
-			return nil, false
-		}
-		cx, cy := roiCenterPx(livePlayToggleROI, w, h)
-		log.Infof("[MAA_NAV] LivePlayOnRec tap=(%d,%d)", cx, cy)
-		return &maa.CustomRecognitionResult{
-			Box:    maa.Rect{cx, cy, 1, 1},
-			Detail: fmt.Sprintf("on_tmpl=%s score=%.3f tap=(%d,%d)", tmpl, score, cx, cy),
-		}, true
-	}
-	return nil, false
-}
 
 // ─────────────────────────────────────────────
 // Custom recognition: LiveBoostEnoughRecognition
@@ -946,6 +908,8 @@ type liveBoostEnoughRec struct{ nav *Navigator }
 
 func (r *liveBoostEnoughRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
 	n := r.nav
+	n.callbackWg.Add(1)
+	defer n.callbackWg.Done()
 	w := arg.Img.Bounds().Dx()
 	h := arg.Img.Bounds().Dy()
 	if w <= 0 || h <= 0 {
@@ -980,6 +944,8 @@ func (r *liveBoostEnoughRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg
 type playResultRec struct{ nav *Navigator }
 
 func (r *playResultRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa.CustomRecognitionResult, bool) {
+	r.nav.callbackWg.Add(1)
+	defer r.nav.callbackWg.Done()
 	imgW := arg.Img.Bounds().Dx()
 	imgH := arg.Img.Bounds().Dy()
 	if imgW <= 0 || imgH <= 0 {
@@ -1023,6 +989,8 @@ type savePlayResultAction struct{ nav *Navigator }
 
 func (a *savePlayResultAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	n := a.nav
+	n.callbackWg.Add(1)
+	defer n.callbackWg.Done()
 
 	var param struct {
 		Succeed bool `json:"succeed"`
@@ -1070,6 +1038,8 @@ type playAction struct{ nav *Navigator }
 
 func (a *playAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	n := a.nav
+	n.callbackWg.Add(1)
+	defer n.callbackWg.Done()
 	fn := n.cfg.PlaySong
 	if fn == nil {
 		// PlaySong not configured – passthrough so non-auto pipelines still work.
@@ -1146,6 +1116,8 @@ type handleLiveBoostAction struct{ nav *Navigator }
 
 func (a *handleLiveBoostAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	n := a.nav
+	n.callbackWg.Add(1)
+	defer n.callbackWg.Done()
 	minBoost := n.cfg.MinLiveBoost
 	if minBoost <= 0 {
 		minBoost = 1
@@ -1169,6 +1141,8 @@ type saveSongAction struct{ nav *Navigator }
 
 func (a *saveSongAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	n := a.nav
+	n.callbackWg.Add(1)
+	defer n.callbackWg.Done()
 	res := n.getLastSongDetect()
 	if len(res.SongTexts) == 0 {
 		n.emit("SONG_DETECT", "song-name", "→ 歌名 OCR 為空", false)

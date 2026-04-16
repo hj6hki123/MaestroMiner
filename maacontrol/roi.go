@@ -35,6 +35,4 @@ var (
 	SongNameROIBang = ROI{0.23, 0.46, 0.47, 0.51}
 	SongNameROIPjsk = ROI{0.59, 0.46, 0.85, 0.52}
 
-	// livePlayToggleROI is the liveplay-mode toggle button area (~309,630 on 1544×720).
-	livePlayToggleROI = ROI{0.160, 0.840, 0.250, 0.910}
 )

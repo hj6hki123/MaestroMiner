@@ -184,18 +184,30 @@
             </div>
             <div class="amb-sep"></div>
             <div class="amb-col">
-              <label class="amb-toggle-wrap" for="chk-autoFirstTap">
-                <div class="amb-toggle-track">
-                  <input type="checkbox" id="chk-autoFirstTap" class="amb-toggle-input" onchange="onAutoTriggerVisionChanged()">
-                  <span class="amb-toggle-thumb"></span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label class="amb-toggle-wrap" for="chk-autoFirstTap">
+                  <div class="amb-toggle-track">
+                    <input type="checkbox" id="chk-autoFirstTap" class="amb-toggle-input" onchange="onAutoTriggerVisionChanged()">
+                    <span class="amb-toggle-thumb"></span>
+                  </div>
+                </label>
+                <div class="amb-text">
+                  <div class="amb-label" data-i18n="jitter.autoFirstTap">Auto Trigger (Vision)</div>
+                  <div class="amb-sub-row">
+                    <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="50" oninput="onAutoTriggerVisionChanged()" class="amb-num-input">
+                    <span class="text-ssm-hint font-mono text-xs" id="val-autoFirstLead">50 ms</span>
+                  </div>
                 </div>
-              </label>
-              <div class="amb-text">
-                <div class="amb-label" data-i18n="jitter.autoFirstTap">Auto Trigger (Vision)</div>
-                <div class="amb-sub-row">
-                  <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="50" oninput="onAutoTriggerVisionChanged()" class="amb-num-input">
-                  <span class="text-ssm-hint font-mono text-xs" id="val-autoFirstLead">50 ms</span>
-                </div>
+              </div>
+              <div class="y1-offset-col">
+                <span class="y1-offset-label" data-i18n="jitter.visionY1Offset">Y 軸偏移</span>
+                <span class="y1-stepper" id="y1-stepper">
+                  <button type="button" onclick="adjustVisionY1Offset(-1)">−</button>
+                  <span class="y1-stepper-val" id="val-vision-y1-offset">0</span>
+                  <button type="button" onclick="adjustVisionY1Offset(1)">+</button>
+                </span>
+                <span class="y1-offset-hint" data-i18n="jitter.visionY1Offset.hint">打太早＋ 打太晚－</span>
+                <input type="hidden" id="inp-vision-y1-offset" value="0">
               </div>
             </div>
           </div>

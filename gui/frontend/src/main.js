@@ -190,7 +190,28 @@ function getAutoTriggerVisionConfig() {
   if (!isFinite(lead) || lead <= 0) lead = 50;
   var roiBang = getROIForTargetKey('auto-bang');
   var roiPjsk = getROIForTargetKey('auto-pjsk');
-  return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk };
+  var offsetInp = document.getElementById('inp-vision-y1-offset');
+  var y1Offset = parseInt(offsetInp ? offsetInp.value : 0);
+  if (!isFinite(y1Offset)) y1Offset = 0;
+  return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk, y1Offset: y1Offset };
+}
+
+function adjustVisionY1Offset(delta) {
+  var inp = document.getElementById('inp-vision-y1-offset');
+  if (!inp) return;
+  var v = Math.max(-50, Math.min(50, (parseInt(inp.value) || 0) + delta));
+  inp.value = v;
+  var lbl = document.getElementById('val-vision-y1-offset');
+  if (lbl) {
+    lbl.textContent = (v >= 0 ? '+' : '') + v;
+    lbl.classList.toggle('nonzero', v !== 0);
+    lbl.classList.remove('flash');
+    void lbl.offsetWidth; // reflow to restart animation
+    lbl.classList.add('flash');
+  }
+  var stepper = document.getElementById('y1-stepper');
+  if (stepper) stepper.disabled = false;
+  onAutoTriggerVisionChanged();
 }
 
 
@@ -576,6 +597,17 @@ function onAutoTriggerVisionChanged() {
   }
   if (roiBangVal) roiBangVal.textContent = [cfg.roiBang.x1, cfg.roiBang.y1, cfg.roiBang.x2, cfg.roiBang.y2].join(',');
   if (roiPjskVal) roiPjskVal.textContent = [cfg.roiPjsk.x1, cfg.roiPjsk.y1, cfg.roiPjsk.x2, cfg.roiPjsk.y2].join(',');
+  var offsetInp = document.getElementById('inp-vision-y1-offset');
+  var offsetLbl = document.getElementById('val-vision-y1-offset');
+  var stepper = document.getElementById('y1-stepper');
+  var stepperBtns = stepper ? stepper.querySelectorAll('button') : [];
+  stepperBtns.forEach(function(b) { b.disabled = !cfg.enabled; });
+  if (offsetLbl) {
+    var ov = cfg.y1Offset;
+    offsetLbl.textContent = (ov >= 0 ? '+' : '') + ov;
+    offsetLbl.classList.toggle('nonzero', ov !== 0);
+    offsetLbl.title = '打太早 +　打太晚 −';
+  }
   renderROIEditorAllValues();
   if (S && S._roiEditor && (S._roiEditor.targetKey === 'auto-bang' || S._roiEditor.targetKey === 'auto-pjsk')) {
     onROIEditorTargetChanged();
@@ -1498,7 +1530,7 @@ function submitRun() {
   var autoTrigger = getAutoTriggerVisionConfig();
   var autoTriggerEnabled = S.autoMode ? true : autoTrigger.enabled;
   var adv = getAdvancedValues();
-  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTriggerEnabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, gameServer: S.gameServer, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTriggerEnabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, visionY1Offset: autoTrigger.y1Offset, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, gameServer: S.gameServer, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
@@ -1652,6 +1684,7 @@ Object.assign(window, {
   deleteDevice,
   onJitter,
   onGreatCountInput,
+  adjustVisionY1Offset,
   onAutoTriggerVisionChanged,
   onAutoModeChanged,
   onROIEditorTargetChanged,
