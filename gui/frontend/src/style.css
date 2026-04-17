@@ -2720,8 +2720,8 @@ kbd {
   line-height: 1.45;
   color: var(--color-ssm-text);
 }
-/* ── Vision7 ─────────────────────────────────────── */
-.vision7-preview-wrap {
+/* ── AutoTrigger ─────────────────────────────────────── */
+.autotrigger-preview-wrap {
   position: relative;
   width: 100%;
   margin-top: 8px;
@@ -2730,7 +2730,7 @@ kbd {
   background: #0a0a0a;
 }
 
-.vision7-badge {
+.autotrigger-badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
@@ -2741,19 +2741,19 @@ kbd {
   border: 1px solid rgba(255,255,255,0.10);
 }
 
-.vision7-badge-active {
+.autotrigger-badge-active {
   background: rgba(59,130,246,0.20);
   color: #60a5fa;
   border-color: rgba(59,130,246,0.35);
-  animation: vision7pulse 1.2s ease-in-out infinite;
+  animation: autotriggerpulse 1.2s ease-in-out infinite;
 }
 
-@keyframes vision7pulse {
+@keyframes autotriggerpulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
 }
 
-.vision7-refresh-btn {
+.autotrigger-refresh-btn {
   font-size: 11px;
   padding: 3px 10px;
   border-radius: 6px;
@@ -2763,16 +2763,16 @@ kbd {
   cursor: pointer;
   transition: background 0.15s;
 }
-.vision7-refresh-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.autotrigger-refresh-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
-.vision7-sliders {
+.autotrigger-sliders {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.vision7-row {
+.autotrigger-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2780,17 +2780,17 @@ kbd {
   color: var(--color-ssm-muted);
 }
 
-.vision7-row span:first-child {
+.autotrigger-row span:first-child {
   min-width: 80px;
   flex-shrink: 0;
 }
 
-.vision7-row input[type=range] {
+.autotrigger-row input[type=range] {
   flex: 1;
 }
 
-.vision7-btn-start,
-.vision7-btn-stop {
+.autotrigger-btn-start,
+.autotrigger-btn-stop {
   flex: 1;
   padding: 7px 0;
   border-radius: 8px;
@@ -2801,17 +2801,17 @@ kbd {
   transition: opacity 0.15s, background 0.15s;
 }
 
-.vision7-btn-start {
+.autotrigger-btn-start {
   background: #3b82f6;
   color: #fff;
 }
-.vision7-btn-start:hover:not(:disabled) { background: #2563eb; }
-.vision7-btn-start:disabled { opacity: 0.4; cursor: default; }
+.autotrigger-btn-start:hover:not(:disabled) { background: #2563eb; }
+.autotrigger-btn-start:disabled { opacity: 0.4; cursor: default; }
 
-.vision7-btn-stop {
+.autotrigger-btn-stop {
   background: rgba(239,68,68,0.15);
   color: #f87171;
   border: 1px solid rgba(239,68,68,0.25);
 }
-.vision7-btn-stop:hover:not(:disabled) { background: rgba(239,68,68,0.28); }
-.vision7-btn-stop:disabled { opacity: 0.4; cursor: default; }
+.autotrigger-btn-stop:hover:not(:disabled) { background: rgba(239,68,68,0.28); }
+.autotrigger-btn-stop:disabled { opacity: 0.4; cursor: default; }

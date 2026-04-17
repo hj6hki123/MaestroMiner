@@ -73,13 +73,13 @@ type RunRequest struct {
 	AutoDetectSong bool    `json:"autoDetectSong"` // Auto detect current selected song via OCR on 楽曲選択 screen
 	GameServer     string  `json:"gameServer"`     // "jp", "tw", "en", "cn", "kr"
 
-	// Auto Trigger (vision7): wait for note pattern detection before starting
+	// Auto Trigger (autoTrigger): wait for note pattern detection before starting
 	AutoTrigger  bool    `json:"autoTrigger"`
-	Vision7Y     float64 `json:"vision7Y"`
-	Vision7X     float64 `json:"vision7X"`
-	Vision7Gap   float64 `json:"vision7Gap"`
-	Vision7Sens  float64 `json:"vision7Sens"`
-	Vision7Delay int     `json:"vision7Delay"`
+	AutoTriggerY     float64 `json:"autoTriggerY"`
+	AutoTriggerX     float64 `json:"autoTriggerX"`
+	AutoTriggerGap   float64 `json:"autoTriggerGap"`
+	AutoTriggerSens  float64 `json:"autoTriggerSens"`
+	AutoTriggerDelay int     `json:"autoTriggerDelay"`
 
 	// Advanced VTE parameters (0 = use mode default)
 	TapDuration         int64   `json:"tapDuration"`
@@ -128,10 +128,10 @@ type Server struct {
 	buyMusicMu   sync.Mutex
 	buyMusicStop chan struct{}
 
-	vision7Mu      sync.Mutex
-	vision7Running bool
-	vision7Cancel  context.CancelFunc
-	vision7Levels  [7]float64
+	atMu      sync.Mutex
+	atRunning bool
+	atCancel  context.CancelFunc
+	atLevels  [7]float64
 
 	OnRunRequest     func(req RunRequest)
 	OnExtractRequest func(path string) error
@@ -194,13 +194,13 @@ func (s *Server) broadcastState() {
 		"greatApply":       s.greatApply,
 	}
 	s.mu.Unlock()
-	s.vision7Mu.Lock()
-	data["vision7Running"] = s.vision7Running
-	lvl := s.vision7Levels
-	s.vision7Mu.Unlock()
+	s.atMu.Lock()
+	data["atRunning"] = s.atRunning
+	lvl := s.atLevels
+	s.atMu.Unlock()
 	levels := make([]float64, 7)
 	copy(levels, lvl[:])
-	data["vision7Levels"] = levels
+	data["atLevels"] = levels
 	b, _ := json.Marshal(data)
 	s.broadcast("data: " + string(b) + "\n\n")
 }
@@ -971,28 +971,28 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 
 // ─── 7-Lane Vision Detection ─────────────────────
 
-// StartVision7 starts the vision7 detection goroutine with the given parameters.
+// StartAutoTrigger starts the autoTrigger detection goroutine with the given parameters.
 // Safe to call when already running; it will restart with new params.
-func (s *Server) StartVision7(y, x, gap, sens float64, delay int) {
-	s.vision7Mu.Lock()
-	if s.vision7Cancel != nil {
-		s.vision7Cancel()
+func (s *Server) StartAutoTrigger(y, x, gap, sens float64, delay int) {
+	s.atMu.Lock()
+	if s.atCancel != nil {
+		s.atCancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s.vision7Cancel = cancel
-	s.vision7Running = true
-	s.vision7Mu.Unlock()
+	s.atCancel = cancel
+	s.atRunning = true
+	s.atMu.Unlock()
 	s.broadcastState()
 
-	type v7params struct{ Y, X, Gap, Sens float64; Delay int }
-	params := v7params{Y: y, X: x, Gap: gap, Sens: sens, Delay: delay}
+	type atParams struct{ Y, X, Gap, Sens float64; Delay int }
+	params := atParams{Y: y, X: x, Gap: gap, Sens: sens, Delay: delay}
 	go func() {
 		defer func() {
-			s.vision7Mu.Lock()
-			s.vision7Running = false
+			s.atMu.Lock()
+			s.atRunning = false
 			var zero [7]float64
-			s.vision7Levels = zero
-			s.vision7Mu.Unlock()
+			s.atLevels = zero
+			s.atMu.Unlock()
 			s.broadcastState()
 		}()
 
@@ -1055,9 +1055,9 @@ func (s *Server) StartVision7(y, x, gap, sens float64, delay int) {
 				}
 			}
 
-			s.vision7Mu.Lock()
-			s.vision7Levels = levels
-			s.vision7Mu.Unlock()
+			s.atMu.Lock()
+			s.atLevels = levels
+			s.atMu.Unlock()
 			if time.Since(lastBroadcast) >= 100*time.Millisecond {
 				lastBroadcast = time.Now()
 				s.broadcastState()
@@ -1072,9 +1072,9 @@ func (s *Server) StartVision7(y, x, gap, sens float64, delay int) {
 					case <-time.After(time.Duration(delayMs) * time.Millisecond):
 					}
 				}
-				log.Debugf("[vision7] triggered! calling TriggerStart()")
+				log.Debugf("[autoTrigger] triggered! calling TriggerStart()")
 				ok := s.TriggerStart()
-				log.Debugf("[vision7] TriggerStart() returned %v", ok)
+				log.Debugf("[autoTrigger] TriggerStart() returned %v", ok)
 				if ok {
 					return
 				}
@@ -1088,19 +1088,19 @@ func (s *Server) StartVision7(y, x, gap, sens float64, delay int) {
 	}()
 }
 
-// StopVision7 stops the vision7 detection goroutine if running.
-func (s *Server) StopVision7() {
-	s.vision7Mu.Lock()
-	if s.vision7Cancel != nil {
-		s.vision7Cancel()
-		s.vision7Cancel = nil
+// StopAutoTrigger stops the autoTrigger detection goroutine if running.
+func (s *Server) StopAutoTrigger() {
+	s.atMu.Lock()
+	if s.atCancel != nil {
+		s.atCancel()
+		s.atCancel = nil
 	}
-	s.vision7Running = false
-	s.vision7Mu.Unlock()
+	s.atRunning = false
+	s.atMu.Unlock()
 	s.broadcastState()
 }
 
-func (s *Server) handleVision7Start(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAutoTriggerStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -1116,17 +1116,17 @@ func (s *Server) handleVision7Start(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.StartVision7(params.Y, params.X, params.Gap, params.Sens, params.Delay)
+	s.StartAutoTrigger(params.Y, params.X, params.Gap, params.Sens, params.Delay)
 	w.WriteHeader(http.StatusOK)
 }
 
 
-func (s *Server) handleVision7Stop(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAutoTriggerStop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.StopVision7()
+	s.StopAutoTrigger()
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -1164,8 +1164,8 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/ocr-probe", s.handleOCRProbe)
 	mux.HandleFunc("/api/frame.png", s.handleFrame)
 	mux.HandleFunc("/api/screen", s.handleScreen)
-	mux.HandleFunc("/api/vision7/start", s.handleVision7Start)
-	mux.HandleFunc("/api/vision7/stop", s.handleVision7Stop)
+	mux.HandleFunc("/api/autoTrigger/start", s.handleAutoTriggerStart)
+	mux.HandleFunc("/api/autoTrigger/stop", s.handleAutoTriggerStop)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.port))
 	if err != nil {

@@ -432,45 +432,45 @@
               </div>
             </div>
 
-            <div id="vision7-section" style="display:none">
+            <div id="autotrigger-section" style="display:none">
               <div class="pd-offset-sec">
                 <div class="pd-offset-container">
                   <div class="pd-offset-header">
                     <div class="flex items-center gap-2">
-                      <span data-i18n="vision7.title">7-Lane Vision</span>
-                      <span class="vision7-badge" id="vision7-badge" data-i18n="vision7.idle">Idle</span>
+                      <span data-i18n="autoTrigger.title">7-Lane Vision</span>
+                      <span class="autotrigger-badge" id="autotrigger-badge" data-i18n="autoTrigger.idle">Idle</span>
                     </div>
-                    <button class="vision7-refresh-btn" onclick="vision7RefreshFrame()" data-i18n="vision7.refresh">↻ Refresh</button>
+                    <button class="autotrigger-refresh-btn" onclick="autoTriggerRefreshFrame()" data-i18n="autoTrigger.refresh">↻ Refresh</button>
                   </div>
-                  <div class="vision7-preview-wrap" style="position:relative;width:100%;background:#0a0a0a;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.10);">
-                    <img id="vision7-img" alt="screen" style="display:block;width:100%;min-height:120px;" />
-                    <canvas id="vision7-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+                  <div class="autotrigger-preview-wrap" style="position:relative;width:100%;background:#0a0a0a;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.10);">
+                    <img id="autotrigger-img" alt="screen" style="display:block;width:100%;min-height:120px;" />
+                    <canvas id="autotrigger-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
                   </div>
-                  <div class="vision7-sliders">
-                    <div class="vision7-row">
-                      <span data-i18n="vision7.y">Detect Y</span>
-                      <input type="range" id="v7-y" min="0" max="100" step="0.5" value="77.5" oninput="onVision7Change()">
-                      <span class="jitter-val" id="v7-y-val">77.5%</span>
+                  <div class="autotrigger-sliders">
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.y">Detect Y</span>
+                      <input type="range" id="at-y" min="0" max="100" step="0.5" value="77.5" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-y-val">77.5%</span>
                     </div>
-                    <div class="vision7-row">
-                      <span data-i18n="vision7.x">Center X</span>
-                      <input type="range" id="v7-x" min="0" max="100" step="0.5" value="50" oninput="onVision7Change()">
-                      <span class="jitter-val" id="v7-x-val">50%</span>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.x">Center X</span>
+                      <input type="range" id="at-x" min="0" max="100" step="0.5" value="50" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-x-val">50%</span>
                     </div>
-                    <div class="vision7-row">
-                      <span data-i18n="vision7.gap">Spacing</span>
-                      <input type="range" id="v7-gap" min="1" max="25" step="0.1" value="9.5" oninput="onVision7Change()">
-                      <span class="jitter-val" id="v7-gap-val">9.5%</span>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.gap">Spacing</span>
+                      <input type="range" id="at-gap" min="1" max="25" step="0.1" value="9.5" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-gap-val">9.5%</span>
                     </div>
-                    <div class="vision7-row">
-                      <span data-i18n="vision7.sens">Sensitivity</span>
-                      <input type="range" id="v7-sens" min="0.05" max="1" step="0.05" value="0.20" oninput="onVision7Change()">
-                      <span class="jitter-val" id="v7-sens-val">20%</span>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.sens">Sensitivity</span>
+                      <input type="range" id="at-sens" min="0.05" max="1" step="0.05" value="0.20" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-sens-val">20%</span>
                     </div>
-                    <div class="vision7-row">
-                      <span data-i18n="vision7.delay">Delay Start</span>
-                      <input type="range" id="v7-delay" min="0" max="500" step="10" value="0" oninput="onVision7Change()">
-                      <span class="jitter-val" id="v7-delay-val">0 ms</span>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.delay">Delay Start</span>
+                      <input type="range" id="at-delay" min="0" max="500" step="10" value="0" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-delay-val">0 ms</span>
                     </div>
                   </div>
                 </div>

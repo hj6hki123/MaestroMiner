@@ -468,10 +468,10 @@ func runGUI(conf *config.Config) {
 						return buildErr
 					}
 
-					// 3. If auto trigger, start vision7 now that we're confirmed on the
+					// 3. If auto trigger, start autoTrigger now that we're confirmed on the
 					// live screen (wait_live_start fired). Otherwise trigger immediately.
 					if req.AutoTrigger {
-						srv.StartVision7(req.Vision7Y, req.Vision7X, req.Vision7Gap, req.Vision7Sens, req.Vision7Delay)
+						srv.StartAutoTrigger(req.AutoTriggerY, req.AutoTriggerX, req.AutoTriggerGap, req.AutoTriggerSens, req.AutoTriggerDelay)
 					}
 					srv.SetReady(ctrl, evts, np)
 					if !req.AutoTrigger {
@@ -481,7 +481,7 @@ func runGUI(conf *config.Config) {
 					// 4. Wait for start acknowledgement
 					if !srv.WaitForStart(playCtx) {
 						if req.AutoTrigger {
-							srv.StopVision7()
+							srv.StopAutoTrigger()
 						}
 						return nil // ctx cancelled externally
 					}
@@ -490,7 +490,7 @@ func runGUI(conf *config.Config) {
 					start := time.Now().Add(-time.Duration(evts[0].Timestamp) * time.Millisecond)
 					srv.Autoplay(playCtx, start)
 					if req.AutoTrigger {
-						srv.StopVision7()
+						srv.StopAutoTrigger()
 					}
 					return nil
 				}
@@ -551,7 +551,7 @@ func runGUI(conf *config.Config) {
 			}
 			srv.SetReady(ctrl, events, np)
 
-			// Non-auto path: wait for user to press Start in the UI (or vision7 detection).
+			// Non-auto path: wait for user to press Start in the UI (or autoTrigger detection).
 			if !srv.WaitForStart(ctx) {
 				return
 			}

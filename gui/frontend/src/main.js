@@ -188,14 +188,14 @@ function onAutoTriggerChanged() {
   var on = !!(chk && chk.checked);
   S.autoTrigger = on;
 
-  var v7sec = document.getElementById('vision7-section');
-  if (v7sec) v7sec.style.display = on ? '' : 'none';
+  var atSec = document.getElementById('autotrigger-section');
+  if (atSec) atSec.style.display = on ? '' : 'none';
 
   if (on) {
-    vision7StartStream();
+    autoTriggerStartStream();
   } else {
-    stopVision7(); // ensure detection stops if trigger is disabled
-    vision7StopStream();
+    stopAutoTrigger(); // ensure detection stops if trigger is disabled
+    autoTriggerStopStream();
   }
 }
 
@@ -256,7 +256,7 @@ function onJitter(key) { renderJitter(key); }
 function onGreatCountInput() { renderJitter('grCount'); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', gameServer: 'jp', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', autoMode: false, autoTrigger: false, _v7CanvasTimer: null };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', gameServer: 'jp', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', autoMode: false, autoTrigger: false, _atCanvasTimer: null };
 var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
@@ -692,7 +692,7 @@ function log(boxId, msg, type) {
 
 // ══ SSE ════════════════════════════════════════════════════
 var es = new EventSource('/api/events');
-es.onmessage = function (e) { var d = JSON.parse(e.data); S.state = d.state; S.offset = d.offset || 0; if (d.vision7Levels) S.vision7Levels = d.vision7Levels; updateUI(d); };
+es.onmessage = function (e) { var d = JSON.parse(e.data); S.state = d.state; S.offset = d.offset || 0; if (d.atLevels) S.atLevels = d.atLevels; updateUI(d); };
 
 function updateUI(d) {
   var st = d.state, dotCls = DOT_CLS[st] || '';
@@ -731,12 +731,12 @@ function updateUI(d) {
   if (S.autoMode) {
     // Auto Mode: MAA controls everything, start button is always disabled
     btn.disabled = true; btn.classList.remove('rdy'); btn.innerHTML = t('play.start.btn');
-  } else if (st === 1 && S.autoTrigger && !S.vision7Running) {
+  } else if (st === 1 && S.autoTrigger && !S.atRunning) {
     // Ready + auto trigger on + detection not yet started → click to start detection
-    btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('vision7.start');
-  } else if (st === 1 && S.autoTrigger && S.vision7Running) {
+    btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('autoTrigger.start');
+  } else if (st === 1 && S.autoTrigger && S.atRunning) {
     // Ready + auto trigger on + detection active → waiting for notes
-    btn.disabled = true; btn.classList.add('rdy'); btn.innerHTML = t('vision7.detecting');
+    btn.disabled = true; btn.classList.add('rdy'); btn.innerHTML = t('autoTrigger.detecting');
   } else if (st === 1) {
     // Ready + manual mode → immediate start
     btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('play.start.btn');
@@ -772,17 +772,17 @@ function updateUI(d) {
 		}
 	}
 
-  // vision7 running state
-  var v7running = !!(d && d.vision7Running);
-  S.vision7Running = v7running;
-  var v7badge = document.getElementById('vision7-badge');
-  if (v7badge) {
-    if (v7running) {
-      v7badge.textContent = t('vision7.detecting');
-      v7badge.classList.add('vision7-badge-active');
+  // autoTrigger running state
+  var atRunning = !!(d && d.atRunning);
+  S.atRunning = atRunning;
+  var atBadge = document.getElementById('autotrigger-badge');
+  if (atBadge) {
+    if (atRunning) {
+      atBadge.textContent = t('autoTrigger.detecting');
+      atBadge.classList.add('autotrigger-badge-active');
     } else {
-      v7badge.textContent = t('vision7.idle');
-      v7badge.classList.remove('vision7-badge-active');
+      atBadge.textContent = t('autoTrigger.idle');
+      atBadge.classList.remove('autotrigger-badge-active');
     }
   }
 
@@ -1035,8 +1035,8 @@ function submitRun() {
   var grOffsetRaw = parseInt(document.getElementById('sld-grOffset').value) || 10;
   var grCountRaw = getGreatCountRaw();
   var adv = getAdvancedValues();
-  var v7p = vision7GetParams();
-  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, gameServer: S.gameServer, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow, autoTrigger: S.autoTrigger, vision7Y: v7p.y, vision7X: v7p.x, vision7Gap: v7p.gap, vision7Sens: v7p.sens, vision7Delay: v7p.delay };
+  var atp = autoTriggerGetParams();
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, gameServer: S.gameServer, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow, autoTrigger: S.autoTrigger, autoTriggerY: atp.y, autoTriggerX: atp.x, autoTriggerGap: atp.gap, autoTriggerSens: atp.sens, autoTriggerDelay: atp.delay };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
@@ -1046,13 +1046,13 @@ function submitRun() {
 function apiStart() {
   if (S.state !== 1) return;
   if (S.autoTrigger) {
-    startVision7(); // ▶ START acts as "start detection" when auto trigger is on
+    startAutoTrigger(); // ▶ START acts as "start detection" when auto trigger is on
   } else {
     fetch('/api/start', { method: 'POST' }).catch(function (e) { log('play-log', t('log.conn.fail') + e, 'err'); });
   }
 }
 function apiStop() {
-  if (S.autoTrigger) stopVision7(); // stop detection together with stop
+  if (S.autoTrigger) stopAutoTrigger(); // stop detection together with stop
   fetch('/api/stop', { method: 'POST' });
 }
 
@@ -1211,9 +1211,9 @@ function doExtract() {
     .catch(function (e) { log('ex-log', t('log.conn.fail') + e, 'err'); });
 }
 // ══ 7-Lane Vision Detection ════════════════════════════════
-var VISION7_STORE_KEY = 'ssm-vision7';
+var AUTOTRIGGER_STORE_KEY = 'ssm-autotrigger';
 
-function vision7GetParams() {
+function autoTriggerGetParams() {
   return {
     y:     parseFloat(document.getElementById('v7-y').value)     || 77.5,
     x:     parseFloat(document.getElementById('v7-x').value)     || 50,
@@ -1223,20 +1223,20 @@ function vision7GetParams() {
   };
 }
 
-function onVision7Change() {
-  var p = vision7GetParams();
+function onAutoTriggerChange() {
+  var p = autoTriggerGetParams();
   var yv = document.getElementById('v7-y-val');     if (yv) yv.textContent = p.y.toFixed(1) + '%';
   var xv = document.getElementById('v7-x-val');     if (xv) xv.textContent = p.x.toFixed(1) + '%';
   var gv = document.getElementById('v7-gap-val');   if (gv) gv.textContent = p.gap.toFixed(1) + '%';
   var sv = document.getElementById('v7-sens-val');  if (sv) sv.textContent = (p.sens * 100).toFixed(0) + '%';
   var dv = document.getElementById('v7-delay-val'); if (dv) dv.textContent = p.delay + ' ms';
-  vision7DrawCanvas();
-  vision7SaveSettings();
+  autoTriggerDrawCanvas();
+  autoTriggerSaveSettings();
 }
 
-function vision7DrawCanvas() {
-  var img = document.getElementById('vision7-img');
-  var canvas = document.getElementById('vision7-canvas');
+function autoTriggerDrawCanvas() {
+  var img = document.getElementById('autotrigger-img');
+  var canvas = document.getElementById('autotrigger-canvas');
   if (!canvas || !img) return;
   var w = canvas.clientWidth, h = canvas.clientHeight;
   if (w <= 0 || h <= 0) return;
@@ -1245,7 +1245,7 @@ function vision7DrawCanvas() {
   if (canvas.height !== h) canvas.height = h;
   var ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, w, h);
-  var p = vision7GetParams();
+  var p = autoTriggerGetParams();
   var cy = p.y / 100 * h;
   var cx = p.x / 100 * w;
   var gap = p.gap / 100 * w;
@@ -1258,8 +1258,8 @@ function vision7DrawCanvas() {
   ctx.stroke();
   ctx.setLineDash([]);
   // 7 lane boxes — juluobaka style
-  var levels = S.vision7Levels || [];
-  var active = !!(S.vision7Running);
+  var levels = S.atLevels || [];
+  var active = !!(S.atRunning);
   var sens = p.sens || 0.15;
   for (var i = 0; i < 7; i++) {
     var lx = cx + (i - 3) * gap;
@@ -1293,75 +1293,75 @@ function vision7DrawCanvas() {
 }
 
 // Start MJPEG stream + canvas redraw loop
-function vision7StartStream() {
-  var img = document.getElementById('vision7-img');
+function autoTriggerStartStream() {
+  var img = document.getElementById('autotrigger-img');
   if (!img) return;
   // set to MJPEG endpoint — browser streams continuously
   if (!img.src || img.src.indexOf('/api/screen') < 0) {
     img.src = '/api/screen';
   }
-  if (!S._v7CanvasTimer) {
-    S._v7CanvasTimer = setInterval(vision7DrawCanvas, 100);
+  if (!S._atCanvasTimer) {
+    S._atCanvasTimer = setInterval(autoTriggerDrawCanvas, 100);
   }
 }
 
 // Stop stream + canvas loop
-function vision7StopStream() {
-  var img = document.getElementById('vision7-img');
+function autoTriggerStopStream() {
+  var img = document.getElementById('autotrigger-img');
   if (img) img.removeAttribute('src');
-  if (S._v7CanvasTimer) {
-    clearInterval(S._v7CanvasTimer);
-    S._v7CanvasTimer = null;
+  if (S._atCanvasTimer) {
+    clearInterval(S._atCanvasTimer);
+    S._atCanvasTimer = null;
   }
 }
 
-function vision7RefreshFrame() {
+function autoTriggerRefreshFrame() {
   // Restart the MJPEG stream (e.g. if it stalled)
-  var img = document.getElementById('vision7-img');
+  var img = document.getElementById('autotrigger-img');
   if (!img) return;
   img.removeAttribute('src');
   setTimeout(function() { img.src = '/api/screen'; }, 50);
 }
 
-function vision7SaveSettings() {
+function autoTriggerSaveSettings() {
   try {
-    var p = vision7GetParams();
-    localStorage.setItem(VISION7_STORE_KEY, JSON.stringify(p));
+    var p = autoTriggerGetParams();
+    localStorage.setItem(AUTOTRIGGER_STORE_KEY, JSON.stringify(p));
   } catch (e) {}
 }
 
-function vision7LoadSettings() {
+function autoTriggerLoadSettings() {
   try {
-    var raw = localStorage.getItem(VISION7_STORE_KEY);
-    if (!raw) { onVision7Change(); return; }
+    var raw = localStorage.getItem(AUTOTRIGGER_STORE_KEY);
+    if (!raw) { onAutoTriggerChange(); return; }
     var p = JSON.parse(raw);
     // Use stored value only if it looks like it was intentionally set
     // (skip if it matches old bad defaults: y=50/85, gap=8/14.3, sens=0.3/0.15)
     var badDefaults = (p.y === 50 && p.gap === 8 && p.sens === 0.3)
       || (p.y === 85 && p.gap === 14.3 && p.sens === 0.15);
-    if (badDefaults) { localStorage.removeItem(VISION7_STORE_KEY); onVision7Change(); return; }
-    if (p.y !== undefined)     { var el = document.getElementById('v7-y');     if (el) el.value = p.y; }
-    if (p.x !== undefined)     { var el = document.getElementById('v7-x');     if (el) el.value = p.x; }
-    if (p.gap !== undefined)   { var el = document.getElementById('v7-gap');   if (el) el.value = p.gap; }
-    if (p.sens !== undefined)  { var el = document.getElementById('v7-sens');  if (el) el.value = p.sens; }
-    if (p.delay !== undefined) { var el = document.getElementById('v7-delay'); if (el) el.value = p.delay; }
-    onVision7Change();
+    if (badDefaults) { localStorage.removeItem(AUTOTRIGGER_STORE_KEY); onAutoTriggerChange(); return; }
+    if (p.y !== undefined)     { var el = document.getElementById('at-y');     if (el) el.value = p.y; }
+    if (p.x !== undefined)     { var el = document.getElementById('at-x');     if (el) el.value = p.x; }
+    if (p.gap !== undefined)   { var el = document.getElementById('at-gap');   if (el) el.value = p.gap; }
+    if (p.sens !== undefined)  { var el = document.getElementById('at-sens');  if (el) el.value = p.sens; }
+    if (p.delay !== undefined) { var el = document.getElementById('at-delay'); if (el) el.value = p.delay; }
+    onAutoTriggerChange();
   } catch (e) {}
 }
 
-function startVision7() {
-  var p = vision7GetParams();
-  fetch('/api/vision7/start', {
+function startAutoTrigger() {
+  var p = autoTriggerGetParams();
+  fetch('/api/autoTrigger/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(p)
   })
-    .then(function(r) { if (!r.ok) r.text().then(function(tx) { log('play-log', 'Vision7 start failed: ' + tx, 'err'); }); })
+    .then(function(r) { if (!r.ok) r.text().then(function(tx) { log('play-log', 'AutoTrigger start failed: ' + tx, 'err'); }); })
     .catch(function(e) { log('play-log', t('log.conn.fail') + e, 'err'); });
 }
 
-function stopVision7() {
-  fetch('/api/vision7/stop', { method: 'POST' })
+function stopAutoTrigger() {
+  fetch('/api/autoTrigger/stop', { method: 'POST' })
     .catch(function(e) { log('play-log', t('log.conn.fail') + e, 'err'); });
 }
 
@@ -1375,7 +1375,7 @@ resetAdvanced();
 loadDevices();
 onAutoModeChanged();
 onAutoTriggerChanged();
-vision7LoadSettings();
+autoTriggerLoadSettings();
 
 // ==========================================
 // expose functions to global scope for HTML onclick handlers
@@ -1418,12 +1418,12 @@ Object.assign(window, {
   selectDevSerial,
   selSong,
   toggleBuyMusic,
-  onVision7Change,
-  vision7RefreshFrame,
-  vision7StartStream,
-  vision7StopStream,
-  startVision7,
-  stopVision7,
+  onAutoTriggerChange,
+  autoTriggerRefreshFrame,
+  autoTriggerStartStream,
+  autoTriggerStopStream,
+  startAutoTrigger,
+  stopAutoTrigger,
 });
 
 

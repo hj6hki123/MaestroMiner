@@ -1,96 +1,141 @@
-> [!IMPORTANT]
-> **As the core features are now complete, the main branch of this project will only receive minor bug fixes and no major functional changes.**
-> 
-> **For new feature development, please head over to the [test/automation](https://github.com/hj6hki123/ssm-gui/tree/test/automation) branch.**
-> 
-> **This branch is under active development, focusing on a fully autonomous 'unattended mode' to achieve a completely hands-off user experience.**
 <p align="center">
-    <a href="https://github.com/hj6hki123/ssm-gui">
-        <img src="imgs/page.png" alt="ssm-gui-banner"/>
-    </a>
-    <br>
     <strong>A Web-based GUI for automated mobile rhythm game playback and chart parsing.</strong>
 </p>
 
-##  Auto-Mining Branch 
+# SSM Web GUI — MAA Branch
 
-This branch is all about turning you into a proper **lazy legend** — full automation so you can just sit back and let the game play itself.
+This is a personal fork of [hj6hki123/ssm-gui](https://github.com/hj6hki123/ssm-gui) (itself a fork of [kvarenzn/ssm](https://github.com/kvarenzn/ssm)).
 
-Planned features:
+The upstream main branch is now feature-frozen. This branch adds a **fully unattended / hands-off play mode** by integrating [MaaFramework](https://github.com/MaaXYZ/MaaFramework) for in-game navigation and [juluobaka/ssm_GUI_plus](https://github.com/juluobaka/ssm_GUI_plus)'s calibrated touch method.
 
-- [x] **Auto first tap** (for us butterfingers out there)
-- [ ] Delay compensation
-- [ ] Auto song title detection
-- [ ] Auto single-player song cycling / grinding
-- [ ] Ensemble / co-op support
----
-此分支致力于塑造一个解放双手的懒人，预计开发功能如下：
-
-- [x] 自动打击第一下音符（手残党用）
-- [ ] 延迟补偿
-- [ ] 自动辨识歌名
-- [ ] 自动单人轮巡打歌
-- [ ] 支持协奏
-
-虽然本人开始的初衷只是为了自己做一个简单易用的GUI，却抵不住码农的血液在流淌...
-
-### Vision Auto Trigger Technical Specification
-
-To enhance the stability of first-note auto-triggering on low-end devices, this version upgrades the trigger logic to a hybrid model of **"Adaptive Noise Threshold + Multi-region Temporal Flow"**. The system enters the `armed` state upon pressing Start and exits immediately upon pressing Stop or task cancellation to prevent background false triggers.
-
-Engineering changes:
-
-- Added sub-mode ROI (BanG Dream / PJSK) and polling cycle (poll ms) configurations.
-- Upgraded low-end device adaptation from fixed thresholds to adaptive thresholds, reducing the impact of video decoding jitter.
-
-The detection model (simplified) is as follows:
-
-#### 1. Luma and Difference Definition
-The single ROI is vertically divided into three segments to calculate the average luma:
-* **Global Average Luma:** $L_t$
-* **Segmented Luma:** $L_{t(top)}, L_{t(mid)}, L_{t(bottom)}$
-* **Instantaneous Difference:**
-
-$$\Delta L_t = L_t - L_{t-1}$$
-
-$$\Delta d_{top} = L_{t(top)} - L_{t-1(top)}$$
-
-$$\Delta d_{mid} = L_{t(mid)} - L_{t-1(mid)}$$
-
-$$\Delta d_{bottom} = L_{t(bottom)} - L_{t-1(bottom)}$$
-
-#### 2. Adaptive Noise Estimation
-Exponential smoothing is used to dynamically track environmental and device thermal noise:
-
-$$Noise_t = (1 - \alpha) \cdot Noise_{t-1} + \alpha \cdot \max\left(|\Delta L_t|, \frac{|\Delta d_{top}| + |\Delta d_{mid}| + |\Delta d_{bottom}|}{3}\right)$$
-
-> $\alpha$ is the smoothing coefficient (typically $0.05 \sim 0.1$).
-
-#### 3. Dynamic Threshold Calculation
-Thresholds scale in real-time based on $Noise_t$ to ensure stability under high noise conditions on low-end devices:
-
-$$Thr_{stable} = \max(Base_{stable}, 1.8 \cdot Noise_t)$$
-
-$$Thr_{trigger} = \max(Base_{trigger}, 3.2 \cdot Noise_t)$$
-
-$$Thr_{rise} = \max(0.9, 2.2 \cdot Noise_t)$$
+**Support: BanG Dream! Girls Band Party · Project Sekai: Colorful Stage**
 
 ---
 
-### Detection Logic
+## What's new compared to upstream
 
-The system utilizes a dual-track decision-making process; the trigger fires if either condition is met:
+### 🤖 MAA Full-Auto Navigation
 
-#### A. Flow Trigger — Optimized for Low-end Devices
-Within a defined time window $W$, luma rise peaks must be observed sequentially, simulating the physical falling process:
-1. **Step 1:** $\Delta d_{top} \ge Thr_{rise}$
-2. **Step 2:** $\Delta d_{mid} \ge Thr_{rise}$
-3. **Step 3:** $\Delta d_{bottom} \ge Thr_{rise}$
-> **Advantage:** Filters out random noise effectively by leveraging spatial-temporal correlation.
+Integrates [MaaFramework](https://github.com/MaaXYZ/MaaFramework) (v5.10.0) to drive the **entire pre-game flow** over ADB without any human input:
 
-#### B. Luma Backup — Fail-safe Mechanism
-Activated when an object moves extremely fast (large frame skips), causing the flow to become discontinuous:
-* **Trigger Condition:** Once the stable count reaches its requirement, if $\Delta L_t \ge Thr_{trigger}$, the trigger fires immediately.
+- Launches the game and waits through the start screen
+- Navigates to the song-select screen automatically
+- Selects difficulty
+- Detects the currently highlighted song via **OCR** (`SongRecognition` pipeline task)
+- Enters the live screen and hands off to the playback engine once the pause button is visible
+- **Loops continuously** — after one song ends it returns to song-select and plays the next
+
+Enable via the **Auto Navigation** toggle in the Play Control panel (ADB backend required).
+
+---
+
+### 🎯 Auto-Trigger
+
+Integrates the scrcpy touch-coordinate method contributed by [juluobaka/ssm_GUI_plus](https://github.com/juluobaka/ssm_GUI_plus).
+
+All touch packets are addressed in the scrcpy **stream coordinate space**, with correct width/height swap for landscape orientation. This produces significantly more stable and visually accurate hit positions compared to the previous approach.
+
+Instead of manually pressing **Start** when the first note approaches, **Auto-Trigger** watches the live scrcpy MJPEG stream and fires the trigger automatically.
+
+Enable via the **Auto Trigger** toggle; the configuration panel expands/collapses accordingly.
+
+---
+
+###  AP-Avoidance (Great Offset)
+
+Forces a specific number of tap notes to land as **Great** (slightly early/late) rather than Perfect, so the score does not register as an All-Perfect.
+
+| Setting | Description |
+|---------|-------------|
+| **Great Offset (ms)** | Absolute timing shift applied to chosen taps (default 10 ms) |
+| **Great Count** | Exact number of taps to shift; `0` = probability mode |
+
+The first tap note is always left as Perfect. Remaining targets are chosen randomly from eligible taps so the selection is unpredictable each run.
+
+---
+
+### 🎲 Humanisation Jitter
+
+Three independent noise axes applied during touch-event generation to make playback less detectable:
+
+| Slider | Effect |
+|--------|--------|
+| **Timing Jitter** | Uniform random ±N ms shift per note |
+| **Position Jitter** | Random lateral drift within the lane (±% of lane width) |
+| **Tap Duration Jitter** | Random variation of the hold time for each tap |
+
+All three default to **0** (disabled). Adjust via sliders in the Play Control panel.
+
+---
+
+
+
+**Fix:** The stop job is now explicitly waited on (`stopJob.Wait()`) before `Destroy()` is called.
+
+---
+
+## What's inherited from upstream
+
+All features from [hj6hki123/ssm-gui](https://github.com/hj6hki123/ssm-gui) main are included:
+
+- **Web GUI** — playback control panel, now-playing card, jacket art, one-click difficulty selection
+- **Smart song search** — real-time search across the full Bestdori library, keyword or song ID
+- **Offset adjustment** — keyboard shortcut fine-tuning on the fly
+- **BanG Dream + Project Sekai** chart support (BMS / SUS)
+- **HID and ADB** controller backends
+- **Legacy CLI** — all original `kvarenzn/ssm` command-line parameters still work
+
+---
+
+## Quick Start
+
+### English
+
+1. **Download** — get the latest package from [Releases](../../releases) and extract it.
+2. **Start** — double-click `ssm-gui.exe`; the UI opens at `http://127.0.0.1:8765`.
+3. **Connect phone** — USB cable, USB debugging enabled.
+4. **Copy game resources** to your PC:
+   ```bash
+   adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/
+   ```
+5. **Settings** — add device (serial auto-detected), choose HID or ADB.
+6. **Manual mode** — Song Setup → Play Control → Start. Press **Start** (or Enter / Space) when the first note approaches.
+7. **Full-auto mode** — enable **Auto Navigation**, select the game server region, press Start. Enable **Auto Trigger** for completely hands-free operation.
+
+### 中文
+
+1. **下载** — 从 [Releases](../../releases) 下载最新版本并解压。
+2. **启动** — 双击 `ssm-gui.exe`，浏览器自动打开 `http://127.0.0.1:8765`。
+3. **连接手机** — USB 数据线，开启 USB 调试。
+4. **复制游戏资源**到电脑：
+   ```bash
+   adb pull /sdcard/Android/data/jp.co.craftegg.band/files/data/
+   ```
+5. **Settings** — 添加设备（序列号可自动检测），选择 HID 或 ADB 连接方式。
+6. **手动模式** — Song Setup → Play Control → Start。第一个音符接近判定线时按 **Start**（或 Enter / Space）。
+7. **全自动模式** — 开启 **Auto Navigation** 并选择游戏服务器区域，按 Start。同时开启 **Auto Trigger** 可实现完全无人值守。
+
+---
+
+## Credits
+
+- **Core play logic & chart parsing** — [kvarenzn/ssm](https://github.com/kvarenzn/ssm)
+- **Web GUI shell** — [hj6hki123/ssm-gui](https://github.com/hj6hki123/ssm-gui)
+- **Touch calibration method** — [juluobaka/ssm_GUI_plus](https://github.com/juluobaka/ssm_GUI_plus)
+- **Automation framework** — [MaaXYZ/MaaFramework](https://github.com/MaaXYZ/MaaFramework)
+- Licensed under **GPL-3.0-or-later**
+
+---
+
+## Disclaimer
+
+> [!IMPORTANT]
+> **This project is developed for personal learning and research purposes only.**
+>
+> - **Non-Affiliation**: Independent third-party tool, not affiliated with any game developer or publisher.
+> - **Risk of Use**: Use may violate game service terms, potentially leading to account suspension or bans.
+> - **Limitation of Liability**: The author assumes no responsibility for any consequences resulting from use.
+
 
 ### Demonstration
 https://github.com/user-attachments/assets/09c6585a-64fb-44ad-af82-6239ee994b1b
