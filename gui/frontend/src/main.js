@@ -256,7 +256,7 @@ function onJitter(key) { renderJitter(key); }
 function onGreatCountInput() { renderJitter('grCount'); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', gameServer: 'jp', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0, _lastNavRoiFrameAt: 0, _lastNavLogSig: '', autoMode: false, autoTrigger: false, _v7CanvasTimer: null };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', gameServer: 'jp', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', autoMode: false, autoTrigger: false, _v7CanvasTimer: null };
 var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];

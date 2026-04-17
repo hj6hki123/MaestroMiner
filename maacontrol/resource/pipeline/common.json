@@ -1,0 +1,147 @@
+{
+    "close_app": {
+        "action": "StopApp",
+        "package": "com.sega.pjsekai",
+        "next": ["stop"]
+    },
+
+    "close_button": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/close/white.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "confirm_button": {
+        "recognition": "TemplateMatch",
+        "template": ["common/button/confirm/pink.png", "common/button/confirm/white.png"],
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "reader_menu": {
+        "recognition": "TemplateMatch",
+        "template": "common/reader/menu.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click",
+        "next": ["reader_skip"]
+    },
+
+    "reader_skip": {
+        "recognition": "TemplateMatch",
+        "template": "common/reader/skip.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click",
+        "next": ["skip_button"],
+        "postDelay": 1500
+    },
+
+    "read_after": {
+        "recognition": "TemplateMatch",
+        "template": "common/reader/readafter.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "skip_button": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/skip/pink.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "next_button": {
+        "recognition": "OCR",
+        "expected": "次へ",
+        "action": "Click",
+        "timeout": 6000
+    },
+
+    "ok_button": {
+        "recognition": "TemplateMatch",
+        "template": ["common/button/ok/white.png", "common/button/ok/pink.png"],
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "exit_button": {
+        "recognition": "TemplateMatch",
+        "template": ["common/button/exit/pink.png", "common/button/exit/white.png"],
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "donot_usenow_button": {
+        "recognition": "OCR",
+        "expected": "今は使わない",
+        "action": "Click"
+    },
+
+    "tap_to_next": {
+        "recognition": "OCR",
+        "expected": ["TAPTONEXT", "taptonext", ".*NEXT.*", ".*next.*"],
+        "action": "Click",
+        "timeout": 6000,
+        "postDelay": 500
+    },
+
+    "to_home": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/menu/main.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click",
+        "postDelay": 1000,
+        "next": ["menu_home"]
+    },
+
+    "menu_home": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/menu/home.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click",
+        "postDelay": 1500
+    },
+
+    "backtitle_button": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/backtitle/white.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "retry_button": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/retry/pink.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "login_expired": {
+        "recognition": "OCR",
+        "expected": "ログインの有効期限が切れました",
+        "action": "StopTask",
+        "next": ["backtitle_button"]
+    },
+
+    "connect_failed": {
+        "recognition": "OCR",
+        "expected": "接続失敗",
+        "next": ["retry_button"]
+    },
+
+    "stop": {
+        "action": "StopTask"
+    }
+}

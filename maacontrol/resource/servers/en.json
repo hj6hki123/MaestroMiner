@@ -1,0 +1,14 @@
+{
+    "package": "com.sega.pjsekai",
+    "patches": {
+        "select_song.expected":         ["Song Select", "Select Song"],
+        "check_band_config.expected":   ["Band Settings", "Final Confirmation"],
+        "ensure_live_mode.expected":    ["Free Live", "Challenge Live"],
+        "live_failed.expected":         "Live Failed",
+        "_live_failed_poll.expected":   "Live Failed",
+        "next_button.expected":         "Next",
+        "donot_usenow_button.expected": "Not Now",
+        "login_expired.expected":       "Login has expired",
+        "connect_failed.expected":      "Connection Failed"
+    }
+}

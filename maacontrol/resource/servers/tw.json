@@ -1,0 +1,14 @@
+{
+    "package": "com.sega.pjsekai",
+    "patches": {
+        "select_song.expected":         ["選擇樂曲"],
+        "check_band_config.expected":   ["確定樂團", "最終確認"],
+        "ensure_live_mode.expected":    ["Free LIVE", "挑戰LIVE"],
+        "live_failed.expected":         "LIVE失敗",
+        "_live_failed_poll.expected":   "LIVE失敗",
+        "next_button.expected":         "下一步",
+        "donot_usenow_button.expected": "暫時不使用",
+        "login_expired.expected":       "登入時效已過期",
+        "connect_failed.expected":      "連接失敗"
+    }
+}

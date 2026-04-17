@@ -361,9 +361,9 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 	n.lastPlayFields = nil
 	n.mu.Unlock()
 
-	n.emit("Nav", "楽曲選択", "MAA 導航開始", true)
-	n.emit("Start", "start-layer", "→ 進入 Start 層", true)
-	n.emit("Main", "main-layer", "→ 進入 Main 層", true)
+	n.emit("Nav", "song-select", "MAA navigation started", true)
+	n.emit("Start", "start-layer", "→ entering Start layer", true)
+	n.emit("Main", "main-layer", "→ entering Main layer", true)
 
 	// Build pipeline override to inject resolution-correct absolute ROIs.
 	roiOverride := "{}"
@@ -391,15 +391,16 @@ func (n *Navigator) Run(ctx context.Context, mode, diff string) bool {
 
 	select {
 	case <-ctx.Done():
-		n.tasker.PostStop()
-		<-done // wait for job.Wait() to return before Destroy() is called
-		n.emit("Nav", "", "已取消", true)
+		stopJob := n.tasker.PostStop()
+		<-done         // wait for job.Wait() to return before Destroy() is called
+		stopJob.Wait() // wait for MAA to fully process the stop before Destroy()
+		n.emit("Nav", "", "cancelled", true)
 		return false
 	case ok := <-done:
 		if ok {
-			n.emit("NavSuccess", "done", "MAA 導航完成", true)
+			n.emit("NavSuccess", "done", "MAA navigation completed", true)
 		} else {
-			n.emit("Nav", "", "MAA 導航失敗", true)
+			n.emit("Nav", "", "MAA navigation failed", true)
 		}
 		return ok
 	}
@@ -658,7 +659,6 @@ func ocrImageTexts(img image.Image, roi ROI) ([]string, error) {
 	return texts, nil
 }
 
-
 var liveBoostRE = regexp.MustCompile(`(\d+)\s*[\/／]\s*\d+`)
 
 func parseLiveBoostValue(texts []string) (int, bool) {
@@ -897,7 +897,6 @@ func (r *songNameRec) Run(ctx *maa.Context, arg *maa.CustomRecognitionArg) (*maa
 	}, true
 }
 
-
 // ─────────────────────────────────────────────
 // Custom recognition: LiveBoostEnoughRecognition
 // ─────────────────────────────────────────────
@@ -1046,7 +1045,7 @@ func (a *playAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 		return true
 	}
 	goCtx := n.getGoCtx()
-	n.emit("Play", "playsong", "→ PlaySong 開始", true)
+	n.emit("Play", "playsong", "→ PlaySong started", true)
 
 	// Run PlaySong in a goroutine so this goroutine can poll for live_failed
 	// using ctx.RunTask(), which is safe inside a custom action callback.
@@ -1067,7 +1066,7 @@ func (a *playAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 				log.Warnf("[Play] PlaySong: %v", err)
 				return false
 			}
-			n.emit("Play", "playsong", "→ PlaySong 完成", true)
+			n.emit("Play", "playsong", "→ PlaySong completed", true)
 			return true
 		case <-ticker.C:
 			if a.pollLiveFailed(ctx) {
@@ -1124,7 +1123,7 @@ func (a *handleLiveBoostAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) 
 	}
 	boost := n.getLastLiveBoost()
 	if boost >= 0 && boost < minBoost {
-		n.emit("ensure_liveboost", "liveboost", fmt.Sprintf("→ LiveBoost %d < %d，停止導航", boost, minBoost), true)
+		n.emit("ensure_liveboost", "liveboost", fmt.Sprintf("→ LiveBoost %d < %d, stopping navigation", boost, minBoost), true)
 		ctx.GetTasker().PostStop()
 		return true
 	}
@@ -1145,17 +1144,17 @@ func (a *saveSongAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	defer n.callbackWg.Done()
 	res := n.getLastSongDetect()
 	if len(res.SongTexts) == 0 {
-		n.emit("SONG_DETECT", "song-name", "→ 歌名 OCR 為空", false)
+		n.emit("SONG_DETECT", "song-name", "→ song OCR result is empty", false)
 		return true
 	}
 	preview := res.SongTextsPreview(5)
 	topSummary := res.TopSummary(3)
 	msg := fmt.Sprintf("→ 歌名 OCR: %v", preview)
 	if !res.OnSongSelectScreen {
-		msg = fmt.Sprintf("%s\n  → SCREEN_CHECK score=%.2f (未確認在楽曲選択)", msg, res.TitleScore)
+		msg = fmt.Sprintf("%s\n  → SCREEN_CHECK score=%.2f (song-select screen not confirmed)", msg, res.TitleScore)
 	}
 	if res.SongID > 0 {
-		msg = fmt.Sprintf("%s\n  → 命中: #%d %s (score=%d)", msg, res.SongID, res.SongTitle, res.SongScore)
+		msg = fmt.Sprintf("%s\n  → matched: #%d %s (score=%d)", msg, res.SongID, res.SongTitle, res.SongScore)
 		if res.SourceText != "" {
 			msg = fmt.Sprintf("%s\n  → source: %q", msg, res.SourceText)
 		}
@@ -1163,7 +1162,7 @@ func (a *saveSongAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 			n.cfg.OnSongDetected(res.SongID, res.SongTitle)
 		}
 	} else {
-		msg = fmt.Sprintf("%s\n  → 尚未命中曲名 (best=%d)", msg, res.SongScore)
+		msg = fmt.Sprintf("%s\n  → no match yet (best=%d)", msg, res.SongScore)
 	}
 	if topSummary != "" {
 		msg = fmt.Sprintf("%s\n  → top: %s", msg, topSummary)

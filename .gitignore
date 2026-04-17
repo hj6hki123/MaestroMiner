@@ -2,6 +2,8 @@
 !gui/frontend/public/locales/*.json
 !gui/frontend/package.json
 !gui/frontend/package-lock.json
+!maacontrol/resource/pipeline/*.json
+!maacontrol/resource/servers/*.json
 gui/frontend/node_modules/
 gui/frontend/dist/
 
@@ -17,3 +19,13 @@ gui/frontend/dist/
 /*.txt
 /scrcpy-server-*
 /*.dll
+
+# binary template images (distributed via release, not tracked in git)
+*.png
+maacontrol/resource/image/
+
+# personal notes / diagrams
+*.mmd
+ARCHITECTURE_MAP.md
+.claude/
+imgs/

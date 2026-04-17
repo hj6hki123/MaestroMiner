@@ -1,0 +1,335 @@
+{
+    "live_home_button": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/live_home.png",
+        "action": "Click",
+        "next": [
+            "select_live_mode",
+            "live_home_button",
+            "[JumpBack]next_button",
+            "[JumpBack]close_button"
+        ],
+        "post_delay": 2000,
+        "on_error": [
+            "to_home"
+        ]
+    },
+    "select_live_mode": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/freelive.png",
+        "action": "Click",
+        "next": [
+            "select_song"
+        ]
+    },
+    "select_song": {
+        "recognition": "OCR",
+        "roi": [
+            140,
+            13,
+            360,
+            83
+        ],
+        "expected": [
+            "楽曲選択"
+        ],
+        "next": [
+            "random_choice_song",
+            "select_song",
+            "select_live_mode",
+            "live_home_button"
+        ],
+        "post_delay": 1000
+    },
+    "random_choice_song": {
+        "recognition": "TemplateMatch",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "template": "live/button/random_choice_song.png",
+        "action": "Click",
+        "post_delay": 2500,
+        "next": [
+            "get_song_name",
+            "random_choice_song",
+            "select_song",
+            "select_live_mode",
+            "live_home_button"
+        ]
+        
+    },
+    "get_song_name": {
+        "recognition": "Custom",
+        "custom_recognition": "SongRecognition",
+        "action": "Custom",
+        "custom_action": "SaveSongAction",
+        "timeout": 5000,
+        "on_error": ["live_home_button"],
+        "next": [
+            "set_difficulty",
+            "[JumpBack]confirm_button"
+        ]
+    },
+    "set_difficulty": {
+        "recognition": "Custom",
+        "custom_recognition": "DifficultyRec",
+        "action": "Click",
+        "next": [
+            "confirm"
+        ]
+    },
+    "confirm": {
+        "recognition": "TemplateMatch",
+        "roi": [1153, 571, 391, 149],
+        "threshold": 0.8,
+        "order_by": "Score",
+        "template": "live/button/confirm.png",
+        "action": "Click",
+        "next": [
+            "check_band_config"
+        ]
+    },
+    "check_band_config": {
+        "recognition": "OCR",
+        "roi": [
+            140,
+            13,
+            360,
+            83
+        ],
+        "expected": [
+            "バンド確認",
+            "最終確認"
+        ],
+        "timeout": 3000,
+        "on_error": [
+            "live_home_button"
+        ],
+        "next": [
+            "ensure_liveboost"
+        ]
+    },
+    "ensure_live_mode": {
+        "recognition": "OCR",
+        "expected": [
+            "フリーライブ",
+            "チャレンジライブ"
+        ],
+        "roi": [
+            140,
+            13,
+            360,
+            83
+        ],
+        "on_error": ["live_home_button"],
+        "next": [
+            "switch_to_live_mode_button",
+            "disable_liveplay",
+            "click_liveplay_toggle",
+            "startlive"
+        ]
+    },
+    "ensure_liveboost": {
+        "recognition": "Custom",
+        "custom_recognition": "LiveBoostEnoughRecognition",
+        "action": "Custom",
+        "custom_action": "HandleLiveBoost",
+        "next": [
+            "ensure_live_mode",
+            "[JumpBack]exit_rehearsal_mode"
+        ]
+    },
+    "exit_rehearsal_mode": {
+        "recognition": "TemplateMatch",
+        "template": [
+            "common/button/exit/pink.png",
+            "common/button/exit/white.png"
+        ],
+        "action": "Click"
+    },
+    "disable_liveplay": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/liveplay_off.png",
+        "on_error": ["live_home_button"],
+        "next": [
+            "startlive"
+        ],
+        "roi": [
+            182,
+            585,
+            300,
+            126
+        ]
+    },
+    "switch_to_live_mode_button": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/switch_to_live_mode.png",
+        "threshold": 0.90,
+        "action": "Click",
+        "post_delay": 2000,
+        "on_error": ["live_home_button"],
+        "next": [
+            "disable_liveplay",
+            "click_liveplay_toggle"
+        ]
+    },
+    "click_liveplay_toggle": {
+        "recognition": "TemplateMatch",
+        "template": [
+            "live/button/liveplay_3d.png",
+            "live/button/liveplay_mv.png"
+        ],
+        "roi": [182, 585, 300, 126],
+        "timeout": 8000,
+        "action": "Click",
+        "target": [300, 620, 1, 1],
+        "post_delay": 600,
+        "on_error": ["live_home_button"],
+        "next": [
+            "disable_liveplay",
+            "click_liveplay_toggle"
+        ]
+    },
+    "startlive": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/startlive.png",
+        "action": "Click",
+        "post_delay": 1000,
+        "on_error": ["live_home_button"],
+        "next": [
+            "wait_live_start",
+            "[JumpBack]confirm_button",
+            "[JumpBack]ok_button",
+            "[JumpBack]login_expired",
+            "[JumpBack]connect_failed"
+        ]
+    },
+    "wait_live_start": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/pause.png",
+        "on_error": ["live_home_button"],
+        "next": [
+            "playsong"
+        ]
+    },
+    "playsong": {
+        "action": "Custom",
+        "custom_action": "Play",
+        "on_error": ["live_home_button"],
+        "next": [
+            "wait_playresult",
+            "live_failed",
+            "[JumpBack]next_button",
+            "[JumpBack]close_button",
+            "[JumpBack]ok_button",
+            "[JumpBack]confirm_button",
+            "[JumpBack]login_expired",
+            "[JumpBack]connect_failed"
+        ],
+        "timeout": 50000
+    },
+    "wait_playresult": {
+        "recognition": "TemplateMatch",
+        "template": [
+            "live/scored.png",
+            "live/activity_scored.png"
+        ],
+        "on_error": ["live_home_button"],
+        "next": [
+            "wait_playresult1",
+            "[JumpBack]next_button",
+            "[JumpBack]close_button",
+            "[JumpBack]ok_button",
+            "[JumpBack]confirm_button"
+        ],
+        "pre_wait_freezes": {
+            "threshold": 0.65,
+            "time": 5000
+        },
+        "post_delay": 3000
+    },
+    "wait_playresult1": {
+        "recognition": "TemplateMatch",
+        "template": [
+            "live/scored.png",
+            "live/activity_scored.png"
+        ],
+        "pre_wait_freezes": 2000,
+        "next": [
+            "save_succeed_playresult"
+        ]
+    },
+    "save_succeed_playresult": {
+        "recognition": "Custom",
+        "custom_recognition": "PlayResultRecognition",
+        "action": "Custom",
+        "custom_action": "SavePlayResult",
+        "custom_action_param": {
+            "succeed": true
+        },
+        "timeout": 20000,
+        "on_error": ["live_home_button"],
+        "next": [
+            "liveagain",
+            "live_home_button",
+            "[JumpBack]ok_button",
+            "[JumpBack]next_button",
+            "[JumpBack]close_button",
+            "[JumpBack]confirm_button",
+            "[JumpBack]reader_menu",
+            "[JumpBack]read_after"
+        ]
+    },
+    "liveagain": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/liveagain.png",
+        "action": "Click",
+        "next": [
+            "select_song"
+        ]
+    },
+    "_live_failed_poll": {
+        "recognition": "OCR",
+        "expected": "ライブ失敗",
+        "roi": [406, 220, 160, 62],
+        "action": "DoNothing",
+        "timeout": 2000
+    },
+    "live_failed": {
+        "recognition": "OCR",
+        "expected": "ライブ失敗",
+        "roi": [406, 220, 160, 62],
+        "next": [
+            "save_failed_playresult",
+            "[JumpBack]login_expired",
+            "[JumpBack]connect_failed"
+        ]
+    },
+    "live_failed_exit_white": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/exit/white.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click",
+        "post_delay": 500,
+        "next": ["live_failed_exit_pink"]
+    },
+    "live_failed_exit_pink": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/exit/pink.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click",
+        "next": ["live_home_button"]
+    },
+    "save_failed_playresult": {
+        "action": "Custom",
+        "custom_action": "SavePlayResult",
+        "custom_action_param": {
+            "succeed": false
+        },
+        "next": [
+            "live_failed_exit_white",
+            "[JumpBack]exit_button"
+        ]
+    }
+}

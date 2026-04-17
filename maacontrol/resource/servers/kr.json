@@ -1,0 +1,14 @@
+{
+    "package": "com.sega.pjsekai",
+    "patches": {
+        "select_song.expected":         ["악곡 선택"],
+        "check_band_config.expected":   ["밴드 확인", "최종 확인"],
+        "ensure_live_mode.expected":    ["프리 라이브", "챌린지 라이브"],
+        "live_failed.expected":         "라이브 실패",
+        "_live_failed_poll.expected":   "라이브 실패",
+        "next_button.expected":         "다음",
+        "donot_usenow_button.expected": "지금은 사용 안 함",
+        "login_expired.expected":       "로그인 유효기간이 만료되었습니다",
+        "connect_failed.expected":      "접속 실패"
+    }
+}

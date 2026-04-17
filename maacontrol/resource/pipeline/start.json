@@ -1,0 +1,64 @@
+{
+    "start_app": {
+        "action": "StartApp",
+        "package": "com.sega.pjsekai",
+        "next": ["[JumpBack]ok_button", "[JumpBack]confirm_button", "find_startpage_menu", "live_home_button"]
+    },
+
+    "find_startpage_menu": {
+        "recognition": "TemplateMatch",
+        "template": "startpage/menu.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "next": ["find_startpage_age_tag"],
+        "roi": [1004, 495, 276, 225],
+        "timeout": 40000
+    },
+
+    "find_startpage_age_tag": {
+        "recognition": "TemplateMatch",
+        "template": "startpage/age_tag.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "next": ["find_startpage_criware"],
+        "roi": [936, 0, 344, 256]
+    },
+
+    "find_startpage_criware": {
+        "recognition": "TemplateMatch",
+        "template": "startpage/criware.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "next": ["tap_start"],
+        "roi": [936, 0, 344, 256]
+    },
+
+    "tap_start": {
+        "action": "Click",
+        "target": [457, 368, 388, 284],
+        "next": ["[JumpBack]next_button", "[JumpBack]tap_to_next", "[JumpBack]close_button", "[JumpBack]reader_menu", "[JumpBack]download", "[JumpBack]connect_failed", "[JumpBack]safe_random_click", "start_task_stop"],
+        "timeout": 300000
+    },
+
+    "download": {
+        "recognition": "TemplateMatch",
+        "template": "common/button/download.png",
+        "threshold": 0.8,
+        "order_by": "Score",
+        "action": "Click"
+    },
+
+    "safe_random_click": {
+        "action": "Click",
+        "target": [451, 576, 164, 129],
+        "postDelay": 500
+    },
+
+    "start_task_stop": {
+        "recognition": "TemplateMatch",
+        "template": "live/button/live_home.png",
+        "order_by": "Score",
+        "roi": [1042, 543, 238, 177],
+        "threshold": 0.95
+    }
+}

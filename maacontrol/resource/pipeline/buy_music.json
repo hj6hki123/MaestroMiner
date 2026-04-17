@@ -1,0 +1,23 @@
+{
+    "buy_music_loop": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [419, 402, 18, 13],
+        "post_delay": 500,
+        "next": ["buy_music_step2"]
+    },
+    "buy_music_step2": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [879, 584, 19, 12],
+        "post_delay": 500,
+        "next": ["buy_music_step3"]
+    },
+    "buy_music_step3": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [761, 522, 14, 15],
+        "post_delay": 500,
+        "next": ["buy_music_loop"]
+    }
+}

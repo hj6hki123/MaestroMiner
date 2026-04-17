@@ -553,13 +553,9 @@ func runGUI(conf *config.Config) {
 
 			// Non-auto path: wait for user to press Start in the UI (or vision7 detection).
 			if !srv.WaitForStart(ctx) {
-				log.Debugf("[runOnce] WaitForStart returned false (ctx=%v)", ctx.Err())
 				return
 			}
-
-			log.Debugf("[runOnce] WaitForStart returned true, events=%d events[0].Timestamp=%d", len(events), events[0].Timestamp)
 			start := time.Now().Add(-time.Duration(events[0].Timestamp) * time.Millisecond)
-			log.Debugf("[runOnce] calling Autoplay, start=%v", start)
 			srv.Autoplay(ctx, start)
 
 			time.Sleep(300 * time.Millisecond)

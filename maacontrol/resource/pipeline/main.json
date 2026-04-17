@@ -1,0 +1,13 @@
+{
+    "Nav": {
+        "recognition": "DirectHit",
+        "action": "DoNothing",
+        "next": ["main"]
+    },
+
+    "main": {
+        "recognition": "DirectHit",
+        "action": "DoNothing",
+        "next": ["select_song", "select_live_mode", "live_home_button"]
+    }
+}

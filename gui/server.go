@@ -185,7 +185,7 @@ func (s *Server) broadcast(msg string) {
 
 func (s *Server) broadcastState() {
 	s.mu.Lock()
-	data := map[string]interface{}{
+	data := map[string]any{
 		"state":            int(s.state),
 		"offset":           s.offset,
 		"error":            s.errMsg,
@@ -199,9 +199,7 @@ func (s *Server) broadcastState() {
 	lvl := s.vision7Levels
 	s.vision7Mu.Unlock()
 	levels := make([]float64, 7)
-	for i, v := range lvl {
-		levels[i] = v
-	}
+	copy(levels, lvl[:])
 	data["vision7Levels"] = levels
 	b, _ := json.Marshal(data)
 	s.broadcast("data: " + string(b) + "\n\n")
@@ -235,7 +233,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	data := map[string]interface{}{
+	data := map[string]any{
 		"state":            int(s.state),
 		"offset":           s.offset,
 		"error":            s.errMsg,
@@ -561,11 +559,6 @@ func (s *Server) SetGreatStats(requested, applied int64) {
 	s.broadcastState()
 }
 
-func (s *Server) IsVision7Running() bool {
-	s.vision7Mu.Lock()
-	defer s.vision7Mu.Unlock()
-	return s.vision7Running
-}
 
 func (s *Server) WaitForStart(ctx context.Context) bool {
 	s.mu.Lock()
@@ -626,13 +619,6 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 		remaining := event.Timestamp - now
 
 		if remaining <= 0 {
-			if current < 3 && len(event.Data) >= 22 {
-				x := int32(event.Data[10])<<24 | int32(event.Data[11])<<16 | int32(event.Data[12])<<8 | int32(event.Data[13])
-				y := int32(event.Data[14])<<24 | int32(event.Data[15])<<16 | int32(event.Data[16])<<8 | int32(event.Data[17])
-				sw := uint16(event.Data[18])<<8 | uint16(event.Data[19])
-				sh := uint16(event.Data[20])<<8 | uint16(event.Data[21])
-				log.Debugf("[Autoplay] event[%d] action=%d x=%d y=%d sw=%d sh=%d ts=%d", current, event.Data[1], x, y, sw, sh, event.Timestamp)
-			}
 			s.controller.Send(event.Data)
 			current++
 			continue
@@ -1042,14 +1028,11 @@ func (s *Server) StartVision7(y, x, gap, sens float64, delay int) {
 
 			cy := int(params.Y * float64(frame.Height) / 100.0)
 			cx := int(params.X * float64(frame.Width) / 100.0)
-			gap := int(params.Gap * float64(frame.Width) / 100.0)
-			if gap < 1 {
-				gap = 1
-			}
+			gap := max(1, int(params.Gap*float64(frame.Width)/100.0))
 
 			var levels [7]float64
 			triggered := false
-			for lane := 0; lane < 7; lane++ {
+			for lane := range 7 {
 				lx := cx + (lane-3)*gap
 				bright, total := 0, 0
 				for dy := -7; dy < 7; dy++ {
@@ -1081,10 +1064,7 @@ func (s *Server) StartVision7(y, x, gap, sens float64, delay int) {
 			}
 
 			if triggered {
-				delayMs := params.Delay
-				if delayMs < 0 {
-					delayMs = 0
-				}
+				delayMs := max(0, params.Delay)
 				if delayMs > 0 {
 					select {
 					case <-ctx.Done():

@@ -1,0 +1,14 @@
+{
+    "package": "com.bilibili.star.bili",
+    "patches": {
+        "select_song.expected":         ["选择乐曲"],
+        "check_band_config.expected":   ["选择乐队", "最终确认"],
+        "ensure_live_mode.expected":    ["自由LIVE", "挑战LIVE"],
+        "live_failed.expected":         "LIVE失败",
+        "_live_failed_poll.expected":   "LIVE失败",
+        "next_button.expected":         "下一步",
+        "donot_usenow_button.expected": "暂时不用",
+        "login_expired.expected":       "登录已过期",
+        "connect_failed.expected":      "连接失败"
+    }
+}
