@@ -27,7 +27,6 @@ type ScrcpyController struct {
 	device    *adb.Device
 	sessionID string
 
-	listener      net.Listener
 	videoSocket   net.Conn
 	controlSocket net.Conn
 
@@ -37,6 +36,9 @@ type ScrcpyController struct {
 	decoder  *av.AVDecoder
 	cRunning bool
 	vRunning bool
+
+	deviceWidth  int
+	deviceHeight int
 
 	frameMu     sync.RWMutex
 	latestFrame *ScrcpyFrame
@@ -94,16 +96,16 @@ func readFull(conn net.Conn, buf []byte) error {
 const testFromPort = 27188
 
 func (c *ScrcpyController) Open(filepath string, version string) error {
-	listener, port := tryListen("localhost", testFromPort)
-	c.listener = listener
-	log.Debugf("Listening at localhost:%d", port)
+	// Find a free local port (forward mode: PC dials out to device)
+	ln, localPort := tryListen("localhost", testFromPort)
+	ln.Close()
+	log.Debugf("Using local port %d for ADB forward", localPort)
 
 	localName := fmt.Sprintf("localabstract:scrcpy_%s", c.sessionID)
-	err := c.device.Forward(localName, fmt.Sprintf("tcp:%d", port), true, false)
-	if err != nil {
+	if err := c.device.Forward(fmt.Sprintf("tcp:%d", localPort), localName, false, false); err != nil {
 		return err
 	}
-	log.Debugf("ADB reverse socket `%s` created.", localName)
+	log.Debugf("ADB forward tcp:%d -> %s created.", localPort, localName)
 
 	f, err := os.Open(filepath)
 	if err != nil {
@@ -129,7 +131,10 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 			"log_level=warn",                    // log level
 			"audio=false",                       // disable audio sync
 			"clipboard_autosync=false",          // disable clipboard
-			"video_bit_rate=100000",             // Use a very low bitrate to reduce video bandwidth usage
+			"tunnel_forward=true",               // forward mode: server listens on abstract socket
+			"send_device_meta=false",            // skip 64-byte device name prefix
+			"max_size=720",                      // downscale for lower bandwidth
+			"video_bit_rate=2000000",            // 2 Mbps for smooth preview
 		)
 		if err != nil {
 			log.Warnf("failed to start `scrcpy-server`: %v", err)
@@ -139,46 +144,50 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		log.Debugln(result)
 	}()
 
-	videoSocket, err := listener.Accept()
+	// Wait for scrcpy-server to start listening on the abstract socket
+	time.Sleep(5 * time.Second)
+
+	videoSocket, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", localPort), 3*time.Second)
 	if err != nil {
-		return err
+		return fmt.Errorf("video socket dial: %w", err)
 	}
 	c.videoSocket = videoSocket
 
-	log.Debugln("Video socket accepted.")
+	log.Debugln("Video socket connected.")
 
-	controlSocket, err := listener.Accept()
+	controlSocket, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", localPort), 3*time.Second)
 	if err != nil {
-		return err
+		return fmt.Errorf("control socket dial: %w", err)
 	}
 	c.controlSocket = controlSocket
 
-	log.Debugln("Control socket accepted.")
+	log.Debugln("Control socket connected.")
 
-	// Wait for scrcpy-server to finish initialization on the device
+	// With send_device_meta=false, scrcpy skips the 64-byte device name prefix.
+	// Header format: [dummy:0-1][codec:4][width:4][height:4] = 13 bytes total.
+	// The leading 0x00 dummy byte is present in some scrcpy 3.x builds; skip it if found.
 	time.Sleep(500 * time.Millisecond)
-
-	err = c.device.KillReverseForward(localName)
-	if err != nil {
-		return err
+	videoSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
+	dimBuf := make([]byte, 13)
+	if err := readFull(videoSocket, dimBuf); err != nil {
+		return fmt.Errorf("read stream header: %w", err)
 	}
+	videoSocket.SetReadDeadline(time.Time{})
 
-	log.Debugf("ADB reverse socket `%s` removed.", localName)
-
-	deviceName := make([]byte, 64)
-	if err := readFull(videoSocket, deviceName); err != nil {
-		return err
+	offset := 0
+	if dimBuf[0] == 0x00 {
+		offset = 1
 	}
+	c.codecID = string(dimBuf[offset : offset+4])
+	c.width = int(binary.BigEndian.Uint32(dimBuf[offset+4 : offset+8]))
+	c.height = int(binary.BigEndian.Uint32(dimBuf[offset+8 : offset+12]))
+	log.Debugf("Scrcpy stream: codec=%s width=%d height=%d", c.codecID, c.width, c.height)
 
-	buf := make([]byte, 4)
-	if err := readFull(videoSocket, buf); err != nil {
-		return err
-	}
-	c.codecID = string(buf)
+	var decErr error
 	if isVideoDecodeEnabled() {
-		c.decoder, err = av.NewAVDecoder(c.codecID)
-		if err != nil {
-			return err
+		c.decoder, decErr = av.NewAVDecoder(c.codecID)
+		if decErr != nil {
+			return decErr
 		}
 		c.decoder.SetFrameHandler(func(f av.DecodedFrame) {
 			frame := ScrcpyFrame{
@@ -202,16 +211,6 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	} else {
 		log.Debugln("Video decode is disabled (set SSM_ENABLE_VIDEO_DECODE=0 to disable; default is enabled).")
 	}
-
-	if err := readFull(videoSocket, buf); err != nil {
-		return err
-	}
-	c.width = int(binary.BigEndian.Uint32(buf))
-
-	if err := readFull(videoSocket, buf); err != nil {
-		return err
-	}
-	c.height = int(binary.BigEndian.Uint32(buf))
 
 	c.cRunning = true
 	c.vRunning = true
@@ -318,7 +317,15 @@ func (c *ScrcpyController) Close() error {
 		c.decoder = nil
 	}
 
-	return c.listener.Close()
+	return nil
+}
+
+// SetDeviceSize stores the physical device dimensions (portrait: width × height).
+// Must be called after Open() so that Encode() uses the correct screen dimensions
+// for the scrcpy touch protocol, regardless of stream downscaling (max_size).
+func (c *ScrcpyController) SetDeviceSize(w, h int) {
+	c.deviceWidth = w
+	c.deviceHeight = h
 }
 
 func (c *ScrcpyController) SetFrameHandler(fn func(ScrcpyFrame)) {
@@ -396,22 +403,42 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 }
 
 func (c *ScrcpyController) Send(data []byte) {
-	// for i := 0; i < len(data); i += 32 {
-	// 	chunk := data[i : i+32]
-	// 	action := chunk[1]
-	// 	x := int(binary.BigEndian.Uint32(chunk[10:]))
-	// 	y := int(binary.BigEndian.Uint32(chunk[14:]))
-	// 	pid := binary.BigEndian.Uint64(chunk[2:])
-	// 	log.Debugf("[TOUCH] action=%d ptr=%d x=%d y=%d", action, pid, x, y)
-	// }
-	n, err := c.controlSocket.Write(data)
+	out := data
+	if c.deviceWidth > 0 && c.deviceHeight > 0 && c.width > 0 && c.height > 0 && len(data)%32 == 0 {
+		buf := make([]byte, len(data))
+		copy(buf, data)
+		for i := 0; i+32 <= len(buf); i += 32 {
+			if buf[i] != 2 {
+				continue
+			}
+			x := int64(binary.BigEndian.Uint32(buf[i+10 : i+14]))
+			y := int64(binary.BigEndian.Uint32(buf[i+14 : i+18]))
+			sx := x * int64(c.width) / int64(c.deviceWidth)
+			sy := y * int64(c.height) / int64(c.deviceHeight)
+			if sx < 0 {
+				sx = 0
+			} else if sx >= int64(c.width) {
+				sx = int64(c.width - 1)
+			}
+			if sy < 0 {
+				sy = 0
+			} else if sy >= int64(c.height) {
+				sy = int64(c.height - 1)
+			}
+			binary.BigEndian.PutUint32(buf[i+10:i+14], uint32(sx))
+			binary.BigEndian.PutUint32(buf[i+14:i+18], uint32(sy))
+			binary.BigEndian.PutUint16(buf[i+18:i+20], uint16(c.width))
+			binary.BigEndian.PutUint16(buf[i+20:i+22], uint16(c.height))
+		}
+		out = buf
+	}
+	n, err := c.controlSocket.Write(out)
 	if err != nil {
 		log.Warnf("failed to send control data through control socket: %v", err)
 		return
 	}
-
-	if n != len(data) {
-		log.Warnf("partial control data sent: expect %d bytes, sent %d bytes", len(data), n)
+	if n != len(out) {
+		log.Warnf("partial control data sent: expect %d bytes, sent %d bytes", len(out), n)
 		return
 	}
 }

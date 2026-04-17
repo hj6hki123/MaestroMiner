@@ -187,30 +187,15 @@
             </div>
             <div class="amb-sep"></div>
             <div class="amb-col">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <label class="amb-toggle-wrap" for="chk-autoFirstTap">
-                  <div class="amb-toggle-track">
-                    <input type="checkbox" id="chk-autoFirstTap" class="amb-toggle-input" onchange="onAutoTriggerVisionChanged()">
-                    <span class="amb-toggle-thumb"></span>
-                  </div>
-                </label>
-                <div class="amb-text">
-                  <div class="amb-label" data-i18n="jitter.autoFirstTap">Auto Trigger (Vision)</div>
-                  <div class="amb-sub-row">
-                    <input type="number" id="inp-autoFirstLead" min="50" max="1000" step="10" value="50" oninput="onAutoTriggerVisionChanged()" class="amb-num-input">
-                    <span class="text-ssm-hint font-mono text-xs" id="val-autoFirstLead">50 ms</span>
-                  </div>
+              <label class="amb-toggle-wrap" for="chk-auto-trigger">
+                <div class="amb-toggle-track">
+                  <input type="checkbox" id="chk-auto-trigger" class="amb-toggle-input" onchange="onAutoTriggerChanged()">
+                  <span class="amb-toggle-thumb"></span>
                 </div>
-              </div>
-              <div class="y1-offset-col">
-                <span class="y1-offset-label" data-i18n="jitter.visionY1Offset">Y 軸偏移</span>
-                <span class="y1-stepper" id="y1-stepper">
-                  <button type="button" onclick="adjustVisionY1Offset(-1)">−</button>
-                  <span class="y1-stepper-val" id="val-vision-y1-offset">0</span>
-                  <button type="button" onclick="adjustVisionY1Offset(1)">+</button>
-                </span>
-                <span class="y1-offset-hint" data-i18n="jitter.visionY1Offset.hint">打太早＋ 打太晚－</span>
-                <input type="hidden" id="inp-vision-y1-offset" value="0">
+              </label>
+              <div class="amb-text">
+                <div class="amb-label" data-i18n="song.autotrigger">Auto Trigger</div>
+                <div class="amb-desc" data-i18n="song.autotrigger.hint">Vision detects note pattern &amp; auto-starts</div>
               </div>
             </div>
           </div>
@@ -319,46 +304,6 @@
             <span class="jitter-label" data-i18n="jitter.grCount">Great Count</span>
             <input type="number" id="inp-grCount" min="0" max="300" step="1" value="0" oninput="onGreatCountInput()" style="width:96px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.2);color:var(--txt)">
             <span class="jitter-val text-ssm-hint" id="val-grCount">OFF</span>
-          </div>
-          <div class="roi-editor-wrap">
-            <div class="roi-editor-top">
-              <span class="jitter-label">ROI Box Tool</span>
-              <div class="roi-editor-controls">
-                <select id="roi-target" onchange="onROIEditorTargetChanged()">
-                  <option value="auto-bang">Auto Trigger ROI (Bang)</option>
-                  <option value="auto-pjsk">Auto Trigger ROI (PJSK)</option>
-
-                </select>
-                <button class="btn" type="button" onclick="refreshROIEditorFrame()">Refresh Frame</button>
-                <button class="btn" type="button" onclick="applyROIEditorToInputs()">Apply ROI</button>
-                <button class="btn" type="button" onclick="copyROIEditorValue()">Copy ROI</button>
-              </div>
-            </div>
-            <div class="roi-editor-stage" id="roi-editor-stage">
-              <img id="roi-editor-frame" alt="roi-editor-frame" onload="onROIEditorImageLoaded()" onerror="onROIEditorImageError()" />
-              <div id="roi-editor-overlay" onmousedown="onROIEditorMouseDown(event)"></div>
-              <div id="roi-editor-box"></div>
-            </div>
-            <div class="roi-editor-meta">
-              <span id="roi-editor-value-percent">x1,y1,x2,y2 = -</span>
-              <span id="roi-editor-value-pixel">px = -</span>
-              <span id="roi-editor-hint">Tip: drag on frame to draw ROI. ROI Box Tool values are the active source of truth.</span>
-            </div>
-            <div class="roi-editor-all">
-              <div class="roi-editor-all-title">Current ROI Values</div>
-              <pre id="roi-editor-all-values">-</pre>
-            </div>
-          </div>
-          <div class="jitter-row" style="align-items:flex-start;">
-            <span class="jitter-label" data-i18n="jitter.debug">Vision Debug</span>
-            <div style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--hint);line-height:1.35;min-width:240px;">
-              <div><span data-i18n="jitter.debug.state">state</span>: <span id="dbg-at-state">-</span> | <span data-i18n="jitter.debug.mode">mode</span>: <span id="dbg-at-mode">-</span></div>
-              <div>Luma: <span id="dbg-at-luma">-</span> | Delta: <span id="dbg-at-delta">-</span> | Stable: <span id="dbg-at-stable">-</span></div>
-              <div>Stripe: <span id="dbg-at-stripe">-</span> | InGame: <span id="dbg-at-ingame">-</span> | ScreenLuma: <span id="dbg-at-sluma">-</span> | Dark: <span id="dbg-at-dark">-</span></div>
-              <div>NavScene: <span id="dbg-at-navscene">-</span> | ROI: <span id="dbg-at-roi">-</span> | Poll: <span id="dbg-at-poll">-</span></div>
-              <div><span data-i18n="jitter.debug.msg">msg</span>: <span id="dbg-at-msg">-</span></div>
-            </div>
-            <span class="jitter-val text-ssm-hint" id="dbg-at-fired">-</span>
           </div>
           <div class="jitter-hint text-xs text-ssm-hint mt-2" data-i18n="jitter.hint"></div>
         </div>
@@ -487,21 +432,46 @@
               </div>
             </div>
 
-            <div class="pd-offset-sec">
-              <div class="pd-offset-container">
-                <div class="pd-offset-header">
-                  <div class="flex items-center gap-2">
-                    <span>Vision ROI Debug</span>
+            <div id="vision7-section" style="display:none">
+              <div class="pd-offset-sec">
+                <div class="pd-offset-container">
+                  <div class="pd-offset-header">
+                    <div class="flex items-center gap-2">
+                      <span data-i18n="vision7.title">7-Lane Vision</span>
+                      <span class="vision7-badge" id="vision7-badge" data-i18n="vision7.idle">Idle</span>
+                    </div>
+                    <button class="vision7-refresh-btn" onclick="vision7RefreshFrame()" data-i18n="vision7.refresh">↻ Refresh</button>
                   </div>
-                </div>
-                <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
-                  <img id="vision-roi-img" alt="vision-roi" style="width:260px;max-width:100%;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:#0a0a0a;image-rendering:pixelated;" />
-                  <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--hint);line-height:1.35;min-width:220px;">
-                    <div>state: <span id="play-dbg-at-state">-</span> | mode: <span id="play-dbg-at-mode">-</span></div>
-                    <div>Luma: <span id="play-dbg-at-luma">-</span> | Delta: <span id="play-dbg-at-delta">-</span> | Stable: <span id="play-dbg-at-stable">-</span></div>
-                    <div>Stripe: <span id="play-dbg-at-stripe">-</span> | InGame: <span id="play-dbg-at-ingame">-</span> | ScreenLuma: <span id="play-dbg-at-sluma">-</span> | Dark: <span id="play-dbg-at-dark">-</span></div>
-                    <div>NavScene: <span id="play-dbg-at-navscene">-</span> | ROI: <span id="play-dbg-at-roi">-</span> | Poll: <span id="play-dbg-at-poll">-</span></div>
-                    <div>msg: <span id="play-dbg-at-msg">-</span> | <span id="play-dbg-at-fired">-</span></div>
+                  <div class="vision7-preview-wrap" style="position:relative;width:100%;background:#0a0a0a;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.10);">
+                    <img id="vision7-img" alt="screen" style="display:block;width:100%;min-height:120px;" />
+                    <canvas id="vision7-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+                  </div>
+                  <div class="vision7-sliders">
+                    <div class="vision7-row">
+                      <span data-i18n="vision7.y">Detect Y</span>
+                      <input type="range" id="v7-y" min="0" max="100" step="0.5" value="77.5" oninput="onVision7Change()">
+                      <span class="jitter-val" id="v7-y-val">77.5%</span>
+                    </div>
+                    <div class="vision7-row">
+                      <span data-i18n="vision7.x">Center X</span>
+                      <input type="range" id="v7-x" min="0" max="100" step="0.5" value="50" oninput="onVision7Change()">
+                      <span class="jitter-val" id="v7-x-val">50%</span>
+                    </div>
+                    <div class="vision7-row">
+                      <span data-i18n="vision7.gap">Spacing</span>
+                      <input type="range" id="v7-gap" min="1" max="25" step="0.1" value="9.5" oninput="onVision7Change()">
+                      <span class="jitter-val" id="v7-gap-val">9.5%</span>
+                    </div>
+                    <div class="vision7-row">
+                      <span data-i18n="vision7.sens">Sensitivity</span>
+                      <input type="range" id="v7-sens" min="0.05" max="1" step="0.05" value="0.20" oninput="onVision7Change()">
+                      <span class="jitter-val" id="v7-sens-val">20%</span>
+                    </div>
+                    <div class="vision7-row">
+                      <span data-i18n="vision7.delay">Delay Start</span>
+                      <input type="range" id="v7-delay" min="0" max="500" step="10" value="0" oninput="onVision7Change()">
+                      <span class="jitter-val" id="v7-delay-val">0 ms</span>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -182,371 +182,21 @@ function getGreatCountRaw() {
   return raw;
 }
 
-function getAutoTriggerVisionConfig() {
-  var chk = document.getElementById('chk-autoFirstTap');
-  var inp = document.getElementById('inp-autoFirstLead');
-  var enabled = !!(chk && chk.checked);
-  var lead = parseInt(inp ? inp.value : 50);
-  if (!isFinite(lead) || lead <= 0) lead = 50;
-  var roiBang = getROIForTargetKey('auto-bang');
-  var roiPjsk = getROIForTargetKey('auto-pjsk');
-  var offsetInp = document.getElementById('inp-vision-y1-offset');
-  var y1Offset = parseInt(offsetInp ? offsetInp.value : 0);
-  if (!isFinite(y1Offset)) y1Offset = 0;
-  return { enabled: enabled, lead: lead, roiBang: roiBang, roiPjsk: roiPjsk, y1Offset: y1Offset };
-}
 
-function adjustVisionY1Offset(delta) {
-  var inp = document.getElementById('inp-vision-y1-offset');
-  if (!inp) return;
-  var v = Math.max(-50, Math.min(50, (parseInt(inp.value) || 0) + delta));
-  inp.value = v;
-  var lbl = document.getElementById('val-vision-y1-offset');
-  if (lbl) {
-    lbl.textContent = (v >= 0 ? '+' : '') + v;
-    lbl.classList.toggle('nonzero', v !== 0);
-    lbl.classList.remove('flash');
-    void lbl.offsetWidth; // reflow to restart animation
-    lbl.classList.add('flash');
-  }
-  var stepper = document.getElementById('y1-stepper');
-  if (stepper) stepper.disabled = false;
-  onAutoTriggerVisionChanged();
-}
+function onAutoTriggerChanged() {
+  var chk = document.getElementById('chk-auto-trigger');
+  var on = !!(chk && chk.checked);
+  S.autoTrigger = on;
 
+  var v7sec = document.getElementById('vision7-section');
+  if (v7sec) v7sec.style.display = on ? '' : 'none';
 
-var ROI_EDITOR_TARGETS = {
-  'auto-bang': { kind: 'auto', mode: 'bang', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
-  'auto-pjsk': { kind: 'auto', mode: 'pjsk', writable: true, defaults: { x1: 14, y1: 73, x2: 87, y2: 80 } },
-};
-
-var ROI_EDITOR_LABELS = {
-  'auto-bang': 'Auto Trigger ROI (Bang)',
-  'auto-pjsk': 'Auto Trigger ROI (PJSK)',
-};
-
-function normalizeROIInt(roi) {
-  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-  var x1 = clamp(parseInt(roi && roi.x1), 0, 99);
-  var y1 = clamp(parseInt(roi && roi.y1), 0, 99);
-  var x2 = clamp(parseInt(roi && roi.x2), 1, 100);
-  var y2 = clamp(parseInt(roi && roi.y2), 1, 100);
-  if (!isFinite(x1)) x1 = 0;
-  if (!isFinite(y1)) y1 = 0;
-  if (!isFinite(x2)) x2 = 1;
-  if (!isFinite(y2)) y2 = 1;
-  if (x2 <= x1) x2 = Math.min(100, x1 + 1);
-  if (y2 <= y1) y2 = Math.min(100, y1 + 1);
-  return { x1: x1, y1: y1, x2: x2, y2: y2 };
-}
-
-function ensureROIState() {
-  if (!S._roiValues) S._roiValues = {};
-  Object.keys(ROI_EDITOR_TARGETS).forEach(function (key) {
-    var cfg = ROI_EDITOR_TARGETS[key];
-    S._roiValues[key] = normalizeROIInt(S._roiValues[key] || cfg.defaults);
-  });
-  return S._roiValues;
-}
-
-function getStoredROI(key, defaults) {
-  var store = ensureROIState();
-  var roi = store[key] || defaults || { x1: 0, y1: 0, x2: 1, y2: 1 };
-  roi = normalizeROIInt(roi);
-  store[key] = roi;
-  return roi;
-}
-
-function setStoredROI(key, roi) {
-  var store = ensureROIState();
-  var n = normalizeROIInt(roi);
-  store[key] = n;
-  return n;
-}
-
-function getSelectedROITargetKey() {
-  var sel = document.getElementById('roi-target');
-  return sel && ROI_EDITOR_TARGETS[sel.value] ? sel.value : 'auto-bang';
-}
-
-function getROIForTargetKey(key) {
-  var cfg = ROI_EDITOR_TARGETS[key] || ROI_EDITOR_TARGETS['auto-bang'];
-  return getStoredROI(key, cfg.defaults);
-}
-
-function applyROIToTargetKey(key, roi) {
-  var cfg = ROI_EDITOR_TARGETS[key] || ROI_EDITOR_TARGETS['auto-bang'];
-  setStoredROI(key, roi);
-  if (cfg.kind === 'auto') {
-    onAutoTriggerVisionChanged();
-    return true;
-  }
-
-  renderROIEditorAllValues();
-  return false;
-}
-
-function roiEditorSetHint(msg, color) {
-  var el = document.getElementById('roi-editor-hint');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = color || 'var(--hint)';
-}
-
-function roiEditorGetImageRect() {
-  var overlay = document.getElementById('roi-editor-overlay');
-  var img = document.getElementById('roi-editor-frame');
-  if (!overlay || !img) return null;
-  var o = overlay.getBoundingClientRect();
-  var i = img.getBoundingClientRect();
-  if (!o.width || !o.height || !i.width || !i.height) return null;
-  var left = i.left - o.left;
-  var top = i.top - o.top;
-  var width = i.width;
-  var height = i.height;
-  if (width <= 0 || height <= 0) return null;
-  return { left: left, top: top, width: width, height: height };
-}
-
-function roiEditorRenderBox(roi) {
-  var box = document.getElementById('roi-editor-box');
-  if (!box) return;
-  if (!roi) {
-    box.style.display = 'none';
-    return;
-  }
-  var r = roiEditorGetImageRect();
-  if (!r) {
-    box.style.display = 'none';
-    return;
-  }
-  box.style.display = 'block';
-  box.style.left = (r.left + r.width * roi.x1 / 100) + 'px';
-  box.style.top = (r.top + r.height * roi.y1 / 100) + 'px';
-  box.style.width = (r.width * (roi.x2 - roi.x1) / 100) + 'px';
-  box.style.height = (r.height * (roi.y2 - roi.y1) / 100) + 'px';
-}
-
-function roiEditorRenderValues(roi) {
-  var p = document.getElementById('roi-editor-value-percent');
-  var px = document.getElementById('roi-editor-value-pixel');
-  if (!roi) {
-    if (p) p.textContent = 'x1,y1,x2,y2 = -';
-    if (px) px.textContent = 'px = -';
-    return;
-  }
-  if (p) p.textContent = 'x1,y1,x2,y2 = ' + [roi.x1, roi.y1, roi.x2, roi.y2].join(',');
-  var img = document.getElementById('roi-editor-frame');
-  if (px) {
-    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
-      var rx1 = Math.round(img.naturalWidth * roi.x1 / 100);
-      var ry1 = Math.round(img.naturalHeight * roi.y1 / 100);
-      var rx2 = Math.round(img.naturalWidth * roi.x2 / 100);
-      var ry2 = Math.round(img.naturalHeight * roi.y2 / 100);
-      px.textContent = 'px = ' + [rx1, ry1, rx2, ry2].join(',') + ' @ ' + img.naturalWidth + 'x' + img.naturalHeight;
-    } else {
-      px.textContent = 'px = (waiting frame)';
-    }
-  }
-}
-
-function renderROIEditorAllValues() {
-  var out = document.getElementById('roi-editor-all-values');
-  if (!out) return;
-  var lines = Object.keys(ROI_EDITOR_TARGETS).map(function (key) {
-    var roi = getROIForTargetKey(key);
-    var label = ROI_EDITOR_LABELS[key] || key;
-    return label + ': ' + [roi.x1, roi.y1, roi.x2, roi.y2].join(',');
-  });
-  out.textContent = lines.join('\n');
-}
-
-function onROIEditorTargetChanged() {
-  var key = getSelectedROITargetKey();
-  if (!S._roiEditor) S._roiEditor = {};
-  S._roiEditor.targetKey = key;
-  S._roiEditor.roi = getROIForTargetKey(key);
-  roiEditorRenderBox(S._roiEditor.roi);
-  roiEditorRenderValues(S._roiEditor.roi);
-  renderROIEditorAllValues();
-  var cfg = ROI_EDITOR_TARGETS[key];
-  if (cfg && cfg.writable) {
-    roiEditorSetHint('Drag to edit ROI. It writes directly to active ROI config.', 'var(--hint)');
+  if (on) {
+    vision7StartStream();
   } else {
-    roiEditorSetHint('Export-only ROI. Use Copy ROI to share coordinates.', '#f59e0b');
+    stopVision7(); // ensure detection stops if trigger is disabled
+    vision7StopStream();
   }
-}
-
-function roiEditorEventToPercent(e, allowOutside) {
-  var overlay = document.getElementById('roi-editor-overlay');
-  if (!overlay) return null;
-  var overlayRect = overlay.getBoundingClientRect();
-  var imageRect = roiEditorGetImageRect();
-  if (!overlayRect.width || !overlayRect.height || !imageRect) return null;
-  var xPx = e.clientX - overlayRect.left;
-  var yPx = e.clientY - overlayRect.top;
-  var inImage = xPx >= imageRect.left && xPx <= (imageRect.left + imageRect.width) && yPx >= imageRect.top && yPx <= (imageRect.top + imageRect.height);
-  if (!inImage && !allowOutside) return null;
-  xPx = Math.max(imageRect.left, Math.min(imageRect.left + imageRect.width, xPx));
-  yPx = Math.max(imageRect.top, Math.min(imageRect.top + imageRect.height, yPx));
-  var x = (xPx - imageRect.left) * 100 / imageRect.width;
-  var y = (yPx - imageRect.top) * 100 / imageRect.height;
-  x = Math.max(0, Math.min(100, x));
-  y = Math.max(0, Math.min(100, y));
-  return { x: x, y: y };
-}
-
-function onROIEditorMouseDown(e) {
-  if (S.backend !== 'adb') {
-    roiEditorSetHint('ROI box tool requires ADB backend preview.', '#f59e0b');
-    return;
-  }
-  var p = roiEditorEventToPercent(e, false);
-  if (!p) {
-    roiEditorSetHint('Please drag inside the actual image area (black bars are outside ROI space).', '#f59e0b');
-    return;
-  }
-  if (!S._roiEditor) S._roiEditor = {};
-  S._roiEditor.dragging = true;
-  S._roiEditor.start = p;
-  S._roiEditor.roi = normalizeROIInt({ x1: Math.floor(p.x), y1: Math.floor(p.y), x2: Math.ceil(p.x + 1), y2: Math.ceil(p.y + 1) });
-  roiEditorRenderBox(S._roiEditor.roi);
-  roiEditorRenderValues(S._roiEditor.roi);
-  e.preventDefault();
-}
-
-function onROIEditorMouseMove(e) {
-  if (!S._roiEditor || !S._roiEditor.dragging || !S._roiEditor.start) return;
-  var p = roiEditorEventToPercent(e, true);
-  if (!p) return;
-  var s = S._roiEditor.start;
-  var roi = normalizeROIInt({
-    x1: Math.floor(Math.min(s.x, p.x)),
-    y1: Math.floor(Math.min(s.y, p.y)),
-    x2: Math.ceil(Math.max(s.x, p.x)),
-    y2: Math.ceil(Math.max(s.y, p.y)),
-  });
-  S._roiEditor.roi = roi;
-  roiEditorRenderBox(roi);
-  roiEditorRenderValues(roi);
-}
-
-function onROIEditorMouseUp() {
-  if (!S._roiEditor || !S._roiEditor.dragging) return;
-  S._roiEditor.dragging = false;
-  var key = getSelectedROITargetKey();
-  applyROIToTargetKey(key, S._roiEditor.roi || getROIForTargetKey(key));
-  onROIEditorTargetChanged();
-}
-
-function refreshROIEditorFrame() {
-  var img = document.getElementById('roi-editor-frame');
-  if (!img) return;
-  if (S.backend !== 'adb') {
-    roiEditorSetHint('Switch backend to ADB for frame preview.', '#f59e0b');
-    return;
-  }
-  var ts = Date.now();
-  var ds = '';
-  var dsEl = document.getElementById('dev-serial');
-  if (dsEl && dsEl.value) ds = String(dsEl.value).trim();
-  S._lastRoiEditorFrameAt = ts;
-  img.src = '/api/frame.png?t=' + ts + (ds ? ('&serial=' + encodeURIComponent(ds)) : '');
-  roiEditorSetHint('Capturing frame...', 'var(--hint)');
-}
-
-function syncROIEditorStageSize() {
-  var stage = document.getElementById('roi-editor-stage');
-  var img = document.getElementById('roi-editor-frame');
-  if (!stage || !img || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
-  var parent = stage.parentElement;
-  if (!parent) return;
-
-  var ratio = img.naturalWidth / img.naturalHeight;
-  if (!isFinite(ratio) || ratio <= 0) return;
-
-  var parentWidth = parent.clientWidth || stage.clientWidth || 0;
-  if (parentWidth <= 0) return;
-  var maxHeight = Math.max(280, Math.min(900, Math.floor(window.innerHeight * 0.76)));
-
-  var drawWidth = Math.min(parentWidth, Math.floor(maxHeight * ratio));
-  var drawHeight = Math.floor(drawWidth / ratio);
-
-  if (drawHeight > maxHeight) {
-    drawHeight = maxHeight;
-    drawWidth = Math.floor(drawHeight * ratio);
-  }
-  if (drawWidth < 240) drawWidth = Math.min(parentWidth, 240);
-  if (drawHeight < 240) drawHeight = 240;
-
-  stage.style.width = drawWidth + 'px';
-  stage.style.height = drawHeight + 'px';
-  stage.style.marginLeft = 'auto';
-  stage.style.marginRight = 'auto';
-}
-
-function onROIEditorImageLoaded() {
-  syncROIEditorStageSize();
-  if (S._roiEditor && S._roiEditor.roi) {
-    roiEditorRenderBox(S._roiEditor.roi);
-    roiEditorRenderValues(S._roiEditor.roi);
-  }
-  roiEditorSetHint('Frame ready. Drag inside image to select ROI.', 'var(--hint)');
-}
-
-function onROIEditorImageError() {
-  roiEditorSetHint('No frame available. Ensure ADB device is connected, then press Refresh Frame.', '#f59e0b');
-}
-
-function applyROIEditorToInputs() {
-  var key = getSelectedROITargetKey();
-  if (!S._roiEditor || !S._roiEditor.roi) onROIEditorTargetChanged();
-  var applied = applyROIToTargetKey(key, S._roiEditor.roi);
-  var cfg = ROI_EDITOR_TARGETS[key] || {};
-  if (applied) roiEditorSetHint('Applied ROI to ' + key + '.', 'var(--blue)');
-  else roiEditorSetHint('Stored export ROI for ' + key + '. Use Copy ROI to share.', cfg.writable ? 'var(--blue)' : '#f59e0b');
-  onROIEditorTargetChanged();
-}
-
-function copyROIEditorValue() {
-  var roi = (S._roiEditor && S._roiEditor.roi) ? S._roiEditor.roi : getROIForTargetKey(getSelectedROITargetKey());
-  var txt = [roi.x1, roi.y1, roi.x2, roi.y2].join(',');
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(txt).then(function () {
-      roiEditorSetHint('Copied ROI: ' + txt, 'var(--blue)');
-    }).catch(function () {
-      roiEditorSetHint('Copy failed. ROI: ' + txt, '#f59e0b');
-    });
-    return;
-  }
-  var ta = document.createElement('textarea');
-  ta.value = txt;
-  document.body.appendChild(ta);
-  ta.select();
-  try { document.execCommand('copy'); } catch (e) { }
-  document.body.removeChild(ta);
-  roiEditorSetHint('Copied ROI: ' + txt, 'var(--blue)');
-}
-
-function initROIEditor() {
-  if (!document.getElementById('roi-target')) return;
-  ensureROIState();
-  if (!S._roiEditor) {
-    S._roiEditor = { dragging: false, start: null, targetKey: 'auto-bang', roi: { x1: 14, y1: 73, x2: 87, y2: 80 } };
-  }
-  if (!S._roiEditorReady) {
-    document.addEventListener('mousemove', onROIEditorMouseMove);
-    document.addEventListener('mouseup', onROIEditorMouseUp);
-    window.addEventListener('resize', function () {
-      syncROIEditorStageSize();
-      if (S._roiEditor && S._roiEditor.roi) {
-        roiEditorRenderBox(S._roiEditor.roi);
-        roiEditorRenderValues(S._roiEditor.roi);
-      }
-    });
-    S._roiEditorReady = true;
-  }
-  onROIEditorTargetChanged();
 }
 
 function onAutoModeChanged() {
@@ -557,13 +207,13 @@ function onAutoModeChanged() {
   var banner = document.getElementById('auto-mode-banner');
   if (banner) banner.classList.toggle('active', on);
 
-  // Auto mode owns vision trigger lifecycle: force-enable when on, force-disable when off.
-  var atChk = document.getElementById('chk-autoFirstTap');
+  // Auto mode forces Auto Trigger on; turning off releases it back to manual choice.
+  var atChk = document.getElementById('chk-auto-trigger');
   if (atChk) {
-    if (on) atChk.checked = true;
-    else atChk.checked = false;
-    atChk.disabled = on;
+    if (on) { atChk.checked = true; atChk.disabled = true; }
+    else { atChk.disabled = false; }
   }
+  onAutoTriggerChanged();
 
   var inputIds = ['q', 'song-id', 'chart-path'];
   inputIds.forEach(function (id) {
@@ -575,44 +225,8 @@ function onAutoModeChanged() {
 
   var selBar = document.getElementById('sel-bar');
   if (selBar) { selBar.style.opacity = on ? '0.35' : ''; selBar.style.pointerEvents = on ? 'none' : ''; }
-
-  onAutoTriggerVisionChanged();
 }
 
-function onAutoTriggerVisionChanged() {
-  var cfg = getAutoTriggerVisionConfig();
-  var inp = document.getElementById('inp-autoFirstLead');
-  var val = document.getElementById('val-autoFirstLead');
-  var roiBangVal = document.getElementById('val-roi-bang');
-  var roiPjskVal = document.getElementById('val-roi-pjsk');
-  if (inp) inp.disabled = !cfg.enabled;
-  if (val) {
-    if (!cfg.enabled) {
-      val.textContent = 'OFF';
-      val.style.color = 'var(--hint)';
-    } else {
-      val.textContent = cfg.lead + ' ms (poll)';
-      val.style.color = 'var(--blue)';
-    }
-  }
-  if (roiBangVal) roiBangVal.textContent = [cfg.roiBang.x1, cfg.roiBang.y1, cfg.roiBang.x2, cfg.roiBang.y2].join(',');
-  if (roiPjskVal) roiPjskVal.textContent = [cfg.roiPjsk.x1, cfg.roiPjsk.y1, cfg.roiPjsk.x2, cfg.roiPjsk.y2].join(',');
-  var offsetInp = document.getElementById('inp-vision-y1-offset');
-  var offsetLbl = document.getElementById('val-vision-y1-offset');
-  var stepper = document.getElementById('y1-stepper');
-  var stepperBtns = stepper ? stepper.querySelectorAll('button') : [];
-  stepperBtns.forEach(function(b) { b.disabled = !cfg.enabled; });
-  if (offsetLbl) {
-    var ov = cfg.y1Offset;
-    offsetLbl.textContent = (ov >= 0 ? '+' : '') + ov;
-    offsetLbl.classList.toggle('nonzero', ov !== 0);
-    offsetLbl.title = '打太早 +　打太晚 −';
-  }
-  renderROIEditorAllValues();
-  if (S && S._roiEditor && (S._roiEditor.targetKey === 'auto-bang' || S._roiEditor.targetKey === 'auto-pjsk')) {
-    onROIEditorTargetChanged();
-  }
-}
 
 function renderJitter(key) {
   var raw = key === 'grCount' ? getGreatCountRaw() : parseInt(document.getElementById('sld-' + key).value);
@@ -642,7 +256,7 @@ function onJitter(key) { renderJitter(key); }
 function onGreatCountInput() { renderJitter('grCount'); }
 
 // ══ state ══════════════════════════════════════════════════
-var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', gameServer: 'jp', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0, _lastNavRoiFrameAt: 0, _lastRoiEditorFrameAt: 0, _lastNavLogSig: '', autoMode: false, _roiValues: null, _roiEditorReady: false };
+var S = { backend: 'adb', diff: 3, orient: 'left', mode: 'bang', gameServer: 'jp', state: 0, offset: 0, songId: 0, songData: null, db: null, dropIdx: -1, _lastLogState: -1, _lastGreatSig: '', _lastVisionFrameAt: 0, _lastNavRoiFrameAt: 0, _lastNavLogSig: '', autoMode: false, autoTrigger: false, _v7CanvasTimer: null };
 var DN_BANG = ['easy', 'normal', 'hard', 'expert', 'special'];
 var DN_PJSK = ['easy', 'normal', 'hard', 'expert', 'master', 'append'];
 var DL_BANG = ['EASY', 'NORMAL', 'HARD', 'EXPERT', 'SPECIAL'];
@@ -700,7 +314,6 @@ function nav(id) {
   document.getElementById('pane-' + id).classList.add('active');
   if (id === 'settings') {
     loadDevices();
-    onROIEditorTargetChanged();
   }
 }
 function navToSearch() {
@@ -748,12 +361,8 @@ function setBackend(b) {
     }
 
   document.getElementById('orient-wrap').style.opacity = b === 'adb' ? '0.4' : '1';
-  if (b !== 'adb') {
-    var img = document.getElementById('roi-editor-frame');
-    if (img) img.removeAttribute('src');
-  }
 
-  // Lock Auto Mode and Auto Trigger when HID is selected (requires ADB/OCR).
+  // Lock Auto Mode when HID is selected (requires ADB/OCR).
   var isHid = b === 'hid';
   var banner = document.getElementById('auto-mode-banner');
   if (banner) banner.style.opacity = isHid ? '0.35' : '';
@@ -769,18 +378,7 @@ function setBackend(b) {
     }
   }
 
-  var atChk = document.getElementById('chk-autoFirstTap');
-  if (atChk) {
-    if (isHid) {
-      atChk.checked = false;
-      atChk.disabled = true;
-    } else {
-      atChk.disabled = false;
-    }
-  }
-
   if (banner) banner.classList.toggle('active', !isHid && !!(autoModeChk && autoModeChk.checked));
-  onAutoTriggerVisionChanged();
 }
 function setOrient(o) {
   S.orient = o;
@@ -1094,7 +692,7 @@ function log(boxId, msg, type) {
 
 // ══ SSE ════════════════════════════════════════════════════
 var es = new EventSource('/api/events');
-es.onmessage = function (e) { var d = JSON.parse(e.data); S.state = d.state; S.offset = d.offset || 0; updateUI(d); };
+es.onmessage = function (e) { var d = JSON.parse(e.data); S.state = d.state; S.offset = d.offset || 0; if (d.vision7Levels) S.vision7Levels = d.vision7Levels; updateUI(d); };
 
 function updateUI(d) {
   var st = d.state, dotCls = DOT_CLS[st] || '';
@@ -1130,8 +728,21 @@ function updateUI(d) {
   document.getElementById('pn-state-label').textContent = txt;
   document.getElementById('ov').textContent = d.offset || 0;
   var btn = document.getElementById('btn-start');
-  if (st === 1 && !S.autoMode) { btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('play.start.btn'); }
-  else { btn.disabled = true; btn.classList.remove('rdy'); btn.innerHTML = t('play.start.btn'); }
+  if (S.autoMode) {
+    // Auto Mode: MAA controls everything, start button is always disabled
+    btn.disabled = true; btn.classList.remove('rdy'); btn.innerHTML = t('play.start.btn');
+  } else if (st === 1 && S.autoTrigger && !S.vision7Running) {
+    // Ready + auto trigger on + detection not yet started → click to start detection
+    btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('vision7.start');
+  } else if (st === 1 && S.autoTrigger && S.vision7Running) {
+    // Ready + auto trigger on + detection active → waiting for notes
+    btn.disabled = true; btn.classList.add('rdy'); btn.innerHTML = t('vision7.detecting');
+  } else if (st === 1) {
+    // Ready + manual mode → immediate start
+    btn.disabled = false; btn.classList.add('rdy'); btn.innerHTML = t('play.start.btn');
+  } else {
+    btn.disabled = true; btn.classList.remove('rdy'); btn.innerHTML = t('play.start.btn');
+  }
   if (d.nowPlaying && (d.nowPlaying.songId > 0 || d.nowPlaying.title)) {
     hydrateNowPlaying(d.nowPlaying, function (npResolved) {
       showNP(npResolved);
@@ -1161,122 +772,17 @@ function updateUI(d) {
 		}
 	}
 
-  var dbg = d.autoTriggerDebug || {};
-  var dbgState = document.getElementById('dbg-at-state');
-  var dbgMode = document.getElementById('dbg-at-mode');
-  var dbgLuma = document.getElementById('dbg-at-luma');
-  var dbgDelta = document.getElementById('dbg-at-delta');
-  var dbgStable = document.getElementById('dbg-at-stable');
-  var dbgStripe = document.getElementById('dbg-at-stripe');
-  var dbgIngame = document.getElementById('dbg-at-ingame');
-  var dbgRoi = document.getElementById('dbg-at-roi');
-  var dbgPoll = document.getElementById('dbg-at-poll');
-  var dbgMsg = document.getElementById('dbg-at-msg');
-  var dbgFired = document.getElementById('dbg-at-fired');
-  if (dbgState) dbgState.textContent = dbg.enabled ? (dbg.armed ? 'armed' : 'watching') : 'disabled';
-  if (dbgMode) dbgMode.textContent = dbg.mode || S.mode || '-';
-  if (dbgLuma) dbgLuma.textContent = typeof dbg.luma === 'number' ? dbg.luma.toFixed(2) : '-';
-  if (dbgDelta) dbgDelta.textContent = typeof dbg.delta === 'number' ? dbg.delta.toFixed(2) : '-';
-  if (dbgStable) dbgStable.textContent = typeof dbg.stableCount === 'number' ? String(dbg.stableCount) : '-';
-  if (dbgStripe) dbgStripe.textContent = typeof dbg.stripeVar === 'number' ? dbg.stripeVar.toFixed(2) : '-';
-  if (dbgIngame) { dbgIngame.textContent = dbg.inGame ? 'yes' : 'no'; dbgIngame.style.color = dbg.inGame ? 'var(--green, #4ade80)' : 'var(--hint)'; }
-  var dbgSluma = document.getElementById('dbg-at-sluma');
-  var dbgDark = document.getElementById('dbg-at-dark');
-  var dbgNavScene = document.getElementById('dbg-at-navscene');
-  if (dbgSluma) dbgSluma.textContent = typeof dbg.screenLuma === 'number' ? dbg.screenLuma.toFixed(1) : '-';
-  if (dbgDark) { dbgDark.textContent = dbg.hasSeenDark ? 'yes' : 'no'; dbgDark.style.color = dbg.hasSeenDark ? 'var(--green, #4ade80)' : 'var(--hint)'; }
-  if (dbgNavScene) {
-    var navStageText = dbg.navStage || '';
-    var navSceneText = dbg.navScene || '';
-    dbgNavScene.textContent = navStageText && navSceneText ? (navStageText + ' / ' + navSceneText) : (navStageText || navSceneText || '-');
-  }
-  if (dbgPoll) dbgPoll.textContent = typeof dbg.pollMs === 'number' && dbg.pollMs > 0 ? (String(dbg.pollMs) + ' ms') : '-';
-  if (dbgMsg) dbgMsg.textContent = dbg.message || '-';
-  if (dbgRoi) {
-    if (dbg.roi && typeof dbg.roi.x1 === 'number') dbgRoi.textContent = [dbg.roi.x1, dbg.roi.y1, dbg.roi.x2, dbg.roi.y2].join(',');
-    else dbgRoi.textContent = '-';
-  }
-
-  // Bridge backend stage telemetry into the visible play log.
-  if (dbg && dbg.navStage) {
-    var navStage = String(dbg.navStage || '');
-    var navScene = String(dbg.navScene || '');
-    var rawMsg = String(dbg.message || '').trim();
-    var actionText = rawMsg;
-    if (rawMsg.indexOf('\n') >= 0) {
-      var lines = rawMsg.split('\n').map(function (x) { return String(x || '').trim(); }).filter(Boolean);
-      if (lines.length >= 2) actionText = lines[1];
-      else if (lines.length === 1) actionText = lines[0];
-    }
-    var stageIsHighFreq = navStage === 'VISION_TRIGGER' || navStage === 'WAIT_STAGE' || navStage === 'WAIT_ALBUM_DARK';
-    var navSig = navStage + '|' + navScene;
-    if (!stageIsHighFreq) navSig += '|' + actionText;
-    if (navSig !== S._lastNavLogSig) {
-      var line = '[NAV] ' + navStage;
-      if (navScene) line += ' / ' + navScene;
-      if (actionText) line += ' ' + actionText;
-      var lower = actionText.toLowerCase();
-      var logType = 'info';
-      if (dbg.fired || lower.indexOf('triggered') >= 0 || lower.indexOf('detected') >= 0 || lower.indexOf('命中') >= 0 || lower.indexOf('確認') >= 0) logType = 'ok';
-      if (lower.indexOf('timeout') >= 0 || lower.indexOf('failed') >= 0 || lower.indexOf('失敗') >= 0 || lower.indexOf('error') >= 0) logType = 'err';
-      log('play-log', line, logType);
-      S._lastNavLogSig = navSig;
-    }
-  }
-
-  if (dbgFired) {
-    dbgFired.textContent = dbg.fired ? 'TRIGGERED' : '-';
-    dbgFired.style.color = dbg.fired ? 'var(--blue)' : 'var(--hint)';
-  }
-
-  var pDbgState = document.getElementById('play-dbg-at-state');
-  var pDbgMode = document.getElementById('play-dbg-at-mode');
-  var pDbgLuma = document.getElementById('play-dbg-at-luma');
-  var pDbgDelta = document.getElementById('play-dbg-at-delta');
-  var pDbgStable = document.getElementById('play-dbg-at-stable');
-  var pDbgStripe = document.getElementById('play-dbg-at-stripe');
-  var pDbgIngame = document.getElementById('play-dbg-at-ingame');
-  var pDbgRoi = document.getElementById('play-dbg-at-roi');
-  var pDbgPoll = document.getElementById('play-dbg-at-poll');
-  var pDbgMsg = document.getElementById('play-dbg-at-msg');
-  var pDbgFired = document.getElementById('play-dbg-at-fired');
-  if (pDbgState) pDbgState.textContent = dbg.enabled ? (dbg.armed ? 'armed' : 'watching') : 'disabled';
-  if (pDbgMode) pDbgMode.textContent = dbg.mode || S.mode || '-';
-  if (pDbgLuma) pDbgLuma.textContent = typeof dbg.luma === 'number' ? dbg.luma.toFixed(2) : '-';
-  if (pDbgDelta) pDbgDelta.textContent = typeof dbg.delta === 'number' ? dbg.delta.toFixed(2) : '-';
-  if (pDbgStable) pDbgStable.textContent = typeof dbg.stableCount === 'number' ? String(dbg.stableCount) : '-';
-  if (pDbgStripe) pDbgStripe.textContent = typeof dbg.stripeVar === 'number' ? dbg.stripeVar.toFixed(2) : '-';
-  if (pDbgIngame) { pDbgIngame.textContent = dbg.inGame ? 'yes' : 'no'; pDbgIngame.style.color = dbg.inGame ? 'var(--green, #4ade80)' : 'var(--hint)'; }
-  var pDbgSluma = document.getElementById('play-dbg-at-sluma');
-  var pDbgDark = document.getElementById('play-dbg-at-dark');
-  var pDbgNavScene = document.getElementById('play-dbg-at-navscene');
-  if (pDbgSluma) pDbgSluma.textContent = typeof dbg.screenLuma === 'number' ? dbg.screenLuma.toFixed(1) : '-';
-  if (pDbgDark) { pDbgDark.textContent = dbg.hasSeenDark ? 'yes' : 'no'; pDbgDark.style.color = dbg.hasSeenDark ? 'var(--green, #4ade80)' : 'var(--hint)'; }
-  if (pDbgNavScene) {
-    var pNavStageText = dbg.navStage || '';
-    var pNavSceneText = dbg.navScene || '';
-    pDbgNavScene.textContent = pNavStageText && pNavSceneText ? (pNavStageText + ' / ' + pNavSceneText) : (pNavStageText || pNavSceneText || '-');
-  }
-  if (pDbgPoll) pDbgPoll.textContent = typeof dbg.pollMs === 'number' && dbg.pollMs > 0 ? (String(dbg.pollMs) + ' ms') : '-';
-  if (pDbgMsg) pDbgMsg.textContent = dbg.message || '-';
-  if (pDbgRoi) {
-    if (dbg.roi && typeof dbg.roi.x1 === 'number') pDbgRoi.textContent = [dbg.roi.x1, dbg.roi.y1, dbg.roi.x2, dbg.roi.y2].join(',');
-    else pDbgRoi.textContent = '-';
-  }
-  if (pDbgFired) {
-    pDbgFired.textContent = dbg.fired ? 'TRIGGERED' : '-';
-    pDbgFired.style.color = dbg.fired ? 'var(--blue)' : 'var(--hint)';
-  }
-
-  var roiImg = document.getElementById('vision-roi-img');
-  if (roiImg) {
-    var nowTs = Date.now();
-    if (dbg.enabled && (st === 1 || st === 2) && nowTs - S._lastVisionFrameAt > 150) {
-      S._lastVisionFrameAt = nowTs;
-      roiImg.src = '/api/vision-roi.png?t=' + nowTs;
-    }
-    if (!dbg.enabled) {
-      roiImg.removeAttribute('src');
+  // vision7 running state
+  var v7running = !!(d && d.vision7Running);
+  S.vision7Running = v7running;
+  var v7badge = document.getElementById('vision7-badge');
+  if (v7badge) {
+    if (v7running) {
+      v7badge.textContent = t('vision7.detecting');
+      v7badge.classList.add('vision7-badge-active');
+    } else {
+      v7badge.textContent = t('vision7.idle');
+      v7badge.classList.remove('vision7-badge-active');
     }
   }
 
@@ -1528,18 +1034,27 @@ function submitRun() {
   var dRaw = parseInt(document.getElementById('sld-tapDur').value) || 0;
   var grOffsetRaw = parseInt(document.getElementById('sld-grOffset').value) || 10;
   var grCountRaw = getGreatCountRaw();
-  var autoTrigger = getAutoTriggerVisionConfig();
-  var autoTriggerEnabled = S.autoMode ? true : autoTrigger.enabled;
   var adv = getAdvancedValues();
-  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoTriggerVision: autoTriggerEnabled, autoTriggerPollMs: autoTrigger.lead, autoTriggerRoiBang: autoTrigger.roiBang, autoTriggerRoiPjsk: autoTrigger.roiPjsk, visionY1Offset: autoTrigger.y1Offset, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, gameServer: S.gameServer, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow };
+  var v7p = vision7GetParams();
+  var body = { mode: S.mode, backend: S.backend, diff: diffName(S.diff), orient: S.orient, songId: sid, chartPath: cp, deviceSerial: ds, nowPlaying: buildNowPlaying(), timingJitter: tRaw, positionJitter: jitterRealValue('position', pRaw), tapDurJitter: dRaw, greatOffsetMs: grOffsetRaw, greatCount: grCountRaw, autoNavigation: S.autoMode, autoDetectSong: S.autoMode, gameServer: S.gameServer, tapDuration: adv.tapDuration, flickDuration: adv.flickDuration, flickReportInterval: adv.flickReportInterval, slideReportInterval: adv.slideReportInterval, flickFactor: adv.flickFactor, flickPow: adv.flickPow, autoTrigger: S.autoTrigger, vision7Y: v7p.y, vision7X: v7p.x, vision7Gap: v7p.gap, vision7Sens: v7p.sens, vision7Delay: v7p.delay };
   log('song-log', t('log.loading'), 'info');
   fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function (r) { if (r.ok) { log('song-log', t('log.sent'), 'ok'); nav('play'); } else r.text().then(function (tx) { log('song-log', t('log.fail') + tx, 'err'); }); })
     .catch(function (e) { log('song-log', t('log.conn.fail') + e, 'err'); });
 }
 
-function apiStart() { if (S.state !== 1) return; fetch('/api/start', { method: 'POST' }).catch(function (e) { log('play-log', t('log.conn.fail') + e, 'err'); }); }
-function apiStop() { fetch('/api/stop', { method: 'POST' }); }
+function apiStart() {
+  if (S.state !== 1) return;
+  if (S.autoTrigger) {
+    startVision7(); // ▶ START acts as "start detection" when auto trigger is on
+  } else {
+    fetch('/api/start', { method: 'POST' }).catch(function (e) { log('play-log', t('log.conn.fail') + e, 'err'); });
+  }
+}
+function apiStop() {
+  if (S.autoTrigger) stopVision7(); // stop detection together with stop
+  fetch('/api/stop', { method: 'POST' });
+}
 
 var _adjTimer = null, _adjPending = 0;
 function adj(d) { _adjPending += d; clearTimeout(_adjTimer); _adjTimer = setTimeout(function () { if (_adjPending === 0) return; var delta = _adjPending; _adjPending = 0; fetch('/api/offset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delta: delta }) }); }, 50); }
@@ -1695,6 +1210,161 @@ function doExtract() {
     .then(function (r) { if (r.ok) log('ex-log', t('log.extract.done'), 'ok'); else r.text().then(function (tx) { log('ex-log', t('log.extract.fail') + tx, 'err'); }); })
     .catch(function (e) { log('ex-log', t('log.conn.fail') + e, 'err'); });
 }
+// ══ 7-Lane Vision Detection ════════════════════════════════
+var VISION7_STORE_KEY = 'ssm-vision7';
+
+function vision7GetParams() {
+  return {
+    y:     parseFloat(document.getElementById('v7-y').value)     || 77.5,
+    x:     parseFloat(document.getElementById('v7-x').value)     || 50,
+    gap:   parseFloat(document.getElementById('v7-gap').value)   || 9.5,
+    sens:  parseFloat(document.getElementById('v7-sens').value)  || 0.20,
+    delay: parseInt(document.getElementById('v7-delay').value)   || 0,
+  };
+}
+
+function onVision7Change() {
+  var p = vision7GetParams();
+  var yv = document.getElementById('v7-y-val');     if (yv) yv.textContent = p.y.toFixed(1) + '%';
+  var xv = document.getElementById('v7-x-val');     if (xv) xv.textContent = p.x.toFixed(1) + '%';
+  var gv = document.getElementById('v7-gap-val');   if (gv) gv.textContent = p.gap.toFixed(1) + '%';
+  var sv = document.getElementById('v7-sens-val');  if (sv) sv.textContent = (p.sens * 100).toFixed(0) + '%';
+  var dv = document.getElementById('v7-delay-val'); if (dv) dv.textContent = p.delay + ' ms';
+  vision7DrawCanvas();
+  vision7SaveSettings();
+}
+
+function vision7DrawCanvas() {
+  var img = document.getElementById('vision7-img');
+  var canvas = document.getElementById('vision7-canvas');
+  if (!canvas || !img) return;
+  var w = canvas.clientWidth, h = canvas.clientHeight;
+  if (w <= 0 || h <= 0) return;
+  // sync pixel dims to CSS layout dims
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  var p = vision7GetParams();
+  var cy = p.y / 100 * h;
+  var cx = p.x / 100 * w;
+  var gap = p.gap / 100 * w;
+  // yellow guide line
+  ctx.strokeStyle = 'rgba(250,204,21,0.7)';
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, cy); ctx.lineTo(w, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // 7 lane boxes — juluobaka style
+  var levels = S.vision7Levels || [];
+  var active = !!(S.vision7Running);
+  var sens = p.sens || 0.15;
+  for (var i = 0; i < 7; i++) {
+    var lx = cx + (i - 3) * gap;
+    var sx = lx - 9, sy = cy - 9;
+    var lv = active ? (levels[i] || 0) : 0;
+    var triggered = active && lv > sens;
+    // border shadow
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = active ? (triggered ? 3 : 2) : 3;
+    ctx.strokeRect(sx, sy, 18, 18);
+    // colored border: idle=yellow solid, detecting=white dashed, triggered=green solid
+    ctx.setLineDash(active && !triggered ? [4, 3] : []);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = triggered ? '#4ade80' : (active ? 'rgba(255,255,255,0.7)' : 'rgba(250,204,21,0.95)');
+    ctx.strokeRect(sx, sy, 18, 18);
+    ctx.setLineDash([]);
+    // center dot
+    ctx.beginPath();
+    ctx.arc(lx, cy, active ? (triggered ? 2.2 : 1.8) : 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = triggered ? '#4ade80' : (active ? 'rgba(255,255,255,0.85)' : 'rgba(250,204,21,0.95)');
+    ctx.fill();
+    // % text above box when active
+    if (active) {
+      ctx.fillStyle = triggered ? '#4ade80' : '#888888';
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(Math.round(lv * 100) + '%', lx, sy - 2);
+    }
+  }
+}
+
+// Start MJPEG stream + canvas redraw loop
+function vision7StartStream() {
+  var img = document.getElementById('vision7-img');
+  if (!img) return;
+  // set to MJPEG endpoint — browser streams continuously
+  if (!img.src || img.src.indexOf('/api/screen') < 0) {
+    img.src = '/api/screen';
+  }
+  if (!S._v7CanvasTimer) {
+    S._v7CanvasTimer = setInterval(vision7DrawCanvas, 100);
+  }
+}
+
+// Stop stream + canvas loop
+function vision7StopStream() {
+  var img = document.getElementById('vision7-img');
+  if (img) img.removeAttribute('src');
+  if (S._v7CanvasTimer) {
+    clearInterval(S._v7CanvasTimer);
+    S._v7CanvasTimer = null;
+  }
+}
+
+function vision7RefreshFrame() {
+  // Restart the MJPEG stream (e.g. if it stalled)
+  var img = document.getElementById('vision7-img');
+  if (!img) return;
+  img.removeAttribute('src');
+  setTimeout(function() { img.src = '/api/screen'; }, 50);
+}
+
+function vision7SaveSettings() {
+  try {
+    var p = vision7GetParams();
+    localStorage.setItem(VISION7_STORE_KEY, JSON.stringify(p));
+  } catch (e) {}
+}
+
+function vision7LoadSettings() {
+  try {
+    var raw = localStorage.getItem(VISION7_STORE_KEY);
+    if (!raw) { onVision7Change(); return; }
+    var p = JSON.parse(raw);
+    // Use stored value only if it looks like it was intentionally set
+    // (skip if it matches old bad defaults: y=50/85, gap=8/14.3, sens=0.3/0.15)
+    var badDefaults = (p.y === 50 && p.gap === 8 && p.sens === 0.3)
+      || (p.y === 85 && p.gap === 14.3 && p.sens === 0.15);
+    if (badDefaults) { localStorage.removeItem(VISION7_STORE_KEY); onVision7Change(); return; }
+    if (p.y !== undefined)     { var el = document.getElementById('v7-y');     if (el) el.value = p.y; }
+    if (p.x !== undefined)     { var el = document.getElementById('v7-x');     if (el) el.value = p.x; }
+    if (p.gap !== undefined)   { var el = document.getElementById('v7-gap');   if (el) el.value = p.gap; }
+    if (p.sens !== undefined)  { var el = document.getElementById('v7-sens');  if (el) el.value = p.sens; }
+    if (p.delay !== undefined) { var el = document.getElementById('v7-delay'); if (el) el.value = p.delay; }
+    onVision7Change();
+  } catch (e) {}
+}
+
+function startVision7() {
+  var p = vision7GetParams();
+  fetch('/api/vision7/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(p)
+  })
+    .then(function(r) { if (!r.ok) r.text().then(function(tx) { log('play-log', 'Vision7 start failed: ' + tx, 'err'); }); })
+    .catch(function(e) { log('play-log', t('log.conn.fail') + e, 'err'); });
+}
+
+function stopVision7() {
+  fetch('/api/vision7/stop', { method: 'POST' })
+    .catch(function(e) { log('play-log', t('log.conn.fail') + e, 'err'); });
+}
+
 // ══ initialization ═════════════════════════════════════════
 I18n.init();
 initTheme();
@@ -1703,9 +1373,9 @@ setBackend(S.backend);
 updateDiffLabels();
 resetAdvanced();
 loadDevices();
-onAutoTriggerVisionChanged();
 onAutoModeChanged();
-initROIEditor();
+onAutoTriggerChanged();
+vision7LoadSettings();
 
 // ==========================================
 // expose functions to global scope for HTML onclick handlers
@@ -1738,16 +1408,8 @@ Object.assign(window, {
   deleteDevice,
   onJitter,
   onGreatCountInput,
-  adjustVisionY1Offset,
-  onAutoTriggerVisionChanged,
   onAutoModeChanged,
-  onROIEditorTargetChanged,
-  onROIEditorMouseDown,
-  refreshROIEditorFrame,
-  applyROIEditorToInputs,
-  copyROIEditorValue,
-  onROIEditorImageLoaded,
-  onROIEditorImageError,
+  onAutoTriggerChanged,
   onAdvanced,
   resetAdvanced,
   doExtract,
@@ -1756,6 +1418,12 @@ Object.assign(window, {
   selectDevSerial,
   selSong,
   toggleBuyMusic,
+  onVision7Change,
+  vision7RefreshFrame,
+  vision7StartStream,
+  vision7StopStream,
+  startVision7,
+  stopVision7,
 });
 
 

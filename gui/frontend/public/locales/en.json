@@ -131,5 +131,21 @@
   "extra.buymusic.start":   "▶ Start",
   "extra.buymusic.pause":   "⏸ Pause",
   "extra.buymusic.running": "Running…",
-  "extra.buymusic.stopped": "Stopped"
+  "extra.buymusic.stopped": "Stopped",
+
+  "vision7.title":     "7-Lane Vision Detection",
+  "vision7.idle":      "Idle",
+  "vision7.detecting": "Detecting…",
+  "vision7.triggered": "Opening notes detected — auto-starting!",
+  "vision7.refresh":   "↻ Refresh",
+  "vision7.y":         "Detect Y",
+  "vision7.x":         "Center X",
+  "vision7.gap":       "Spacing",
+  "vision7.sens":      "Sensitivity",
+  "vision7.delay":     "Delay Start",
+  "vision7.start":     "▶ Start Detection",
+  "vision7.stop":      "■ Stop Detection",
+  "vision7.waiting":   "⏳ Waiting for notes…",
+  "song.autotrigger":      "Auto Trigger",
+  "song.autotrigger.hint": "Vision detects note pattern &amp; auto-starts"
 }

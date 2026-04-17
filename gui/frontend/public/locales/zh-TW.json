@@ -131,5 +131,21 @@
   "extra.buymusic.start":   "▶ 開始",
   "extra.buymusic.pause":   "⏸ 暫停",
   "extra.buymusic.running": "執行中…",
-  "extra.buymusic.stopped": "已停止"
+  "extra.buymusic.stopped": "已停止",
+
+  "vision7.title":     "7 軌道視覺偵測",
+  "vision7.idle":      "待機",
+  "vision7.detecting": "偵測中…",
+  "vision7.triggered": "已偵測到開局音符，自動開始！",
+  "vision7.refresh":   "↻ 重新整理",
+  "vision7.y":         "偵測 Y",
+  "vision7.x":         "中心 X",
+  "vision7.gap":       "點間距",
+  "vision7.sens":      "靈敏度",
+  "vision7.delay":     "延遲啟動",
+  "vision7.start":     "▶ 開始偵測",
+  "vision7.stop":      "■ 停止偵測",
+  "vision7.waiting":   "⏳ 等待音符偵測中…",
+  "song.autotrigger":      "自動觸發",
+  "song.autotrigger.hint": "視覺偵測音符排列後自動開始打擊"
 }

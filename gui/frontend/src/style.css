@@ -2720,3 +2720,98 @@ kbd {
   line-height: 1.45;
   color: var(--color-ssm-text);
 }
+/* ── Vision7 ─────────────────────────────────────── */
+.vision7-preview-wrap {
+  position: relative;
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0a0a0a;
+}
+
+.vision7-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.08);
+  color: var(--color-ssm-hint);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.vision7-badge-active {
+  background: rgba(59,130,246,0.20);
+  color: #60a5fa;
+  border-color: rgba(59,130,246,0.35);
+  animation: vision7pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes vision7pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.vision7-refresh-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: var(--color-ssm-muted);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.vision7-refresh-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+.vision7-sliders {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vision7-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-ssm-muted);
+}
+
+.vision7-row span:first-child {
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.vision7-row input[type=range] {
+  flex: 1;
+}
+
+.vision7-btn-start,
+.vision7-btn-stop {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 8px;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.vision7-btn-start {
+  background: #3b82f6;
+  color: #fff;
+}
+.vision7-btn-start:hover:not(:disabled) { background: #2563eb; }
+.vision7-btn-start:disabled { opacity: 0.4; cursor: default; }
+
+.vision7-btn-stop {
+  background: rgba(239,68,68,0.15);
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.25);
+}
+.vision7-btn-stop:hover:not(:disabled) { background: rgba(239,68,68,0.28); }
+.vision7-btn-stop:disabled { opacity: 0.4; cursor: default; }

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"io/fs"
@@ -25,6 +26,7 @@ import (
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
+	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/maacontrol"
 )
 
@@ -62,19 +64,23 @@ type RunRequest struct {
 	NowPlaying   NowPlaying `json:"nowPlaying"`
 
 	// Jitter settings
-	TimingJitter       int64   `json:"timingJitter"`       // Time jitter (ms), 0 = disabled
-	PositionJitter     float64 `json:"positionJitter"`     // Position jitter (track units), 0 = disabled
-	TapDurJitter       int64   `json:"tapDurJitter"`       // Tap duration jitter (ms), 0 = disabled
-	GreatOffsetMs      int64   `json:"greatOffsetMs"`      // Absolute offset in ms
-	GreatCount         int64   `json:"greatCount"`         // Exact number of tap notes to force as Great, 0 = probability mode
-	AutoTriggerVision  bool    `json:"autoTriggerVision"`  // Auto start by visual detection on decoded scrcpy frames
-	AutoTriggerPollMs  int64   `json:"autoTriggerPollMs"`  // Frame polling interval in ms for visual trigger
-	AutoTriggerROIBang ROI     `json:"autoTriggerRoiBang"` // ROI (% space) for Bang mode
-	AutoTriggerROIPjsk ROI     `json:"autoTriggerRoiPjsk"` // ROI (% space) for PJSK mode
-	VisionY1Offset     int     `json:"visionY1Offset"`     // Y1 offset applied on top of default/custom ROI
-	AutoNavigation     bool    `json:"autoNavigation"`     // Auto navigate through pre-game screens (ADB only)
-	AutoDetectSong     bool    `json:"autoDetectSong"`     // Auto detect current selected song via OCR on 楽曲選択 screen
-	GameServer         string  `json:"gameServer"`         // "jp", "tw", "en", "cn", "kr"
+	TimingJitter   int64   `json:"timingJitter"`   // Time jitter (ms), 0 = disabled
+	PositionJitter float64 `json:"positionJitter"` // Position jitter (track units), 0 = disabled
+	TapDurJitter   int64   `json:"tapDurJitter"`   // Tap duration jitter (ms), 0 = disabled
+	GreatOffsetMs  int64   `json:"greatOffsetMs"`  // Absolute offset in ms
+	GreatCount     int64   `json:"greatCount"`     // Exact number of tap notes to force as Great, 0 = probability mode
+	AutoNavigation bool    `json:"autoNavigation"` // Auto navigate through pre-game screens (ADB only)
+	AutoDetectSong bool    `json:"autoDetectSong"` // Auto detect current selected song via OCR on 楽曲選択 screen
+	GameServer     string  `json:"gameServer"`     // "jp", "tw", "en", "cn", "kr"
+
+	// Auto Trigger (vision7): wait for note pattern detection before starting
+	AutoTrigger  bool    `json:"autoTrigger"`
+	Vision7Y     float64 `json:"vision7Y"`
+	Vision7X     float64 `json:"vision7X"`
+	Vision7Gap   float64 `json:"vision7Gap"`
+	Vision7Sens  float64 `json:"vision7Sens"`
+	Vision7Delay int     `json:"vision7Delay"`
+
 	// Advanced VTE parameters (0 = use mode default)
 	TapDuration         int64   `json:"tapDuration"`
 	FlickDuration       int64   `json:"flickDuration"`
@@ -91,24 +97,6 @@ type ROI struct {
 	Y2 int `json:"y2"`
 }
 
-type AutoTriggerDebug struct {
-	Enabled     bool    `json:"enabled"`
-	Mode        string  `json:"mode"`
-	Armed       bool    `json:"armed"`
-	Fired       bool    `json:"fired"`
-	PollMs      int64   `json:"pollMs"`
-	Luma        float64 `json:"luma"`
-	Delta       float64 `json:"delta"`
-	StableCount int     `json:"stableCount"`
-	ROI         ROI     `json:"roi"`
-	Message     string  `json:"message"`
-	StripeVar   float64 `json:"stripeVar"`   // column-luma std-dev across lane area; high = track visible
-	InGame      bool    `json:"inGame"`      // true when stripe variance confirms HUD is on screen
-	ScreenLuma  float64 `json:"screenLuma"`  // whole-frame average luma; album loading screen is very dark (~40)
-	HasSeenDark bool    `json:"hasSeenDark"` // true once a dark loading screen has been observed (primary arm gate)
-	NavStage    string  `json:"navStage"`    // current pipeline stage (SCREEN_CHECK, SONG_DETECT, ...)
-	NavScene    string  `json:"navScene"`    // current scene detected by navigation pipeline
-}
 
 type Server struct {
 	port int
@@ -126,7 +114,6 @@ type Server struct {
 	lastRunReq RunRequest
 	greatReq   int64
 	greatApply int64
-	autoDebug  AutoTriggerDebug
 
 	startCh  chan struct{}
 	offsetCh chan int
@@ -140,6 +127,11 @@ type Server struct {
 
 	buyMusicMu   sync.Mutex
 	buyMusicStop chan struct{}
+
+	vision7Mu      sync.Mutex
+	vision7Running bool
+	vision7Cancel  context.CancelFunc
+	vision7Levels  [7]float64
 
 	OnRunRequest     func(req RunRequest)
 	OnExtractRequest func(path string) error
@@ -200,9 +192,17 @@ func (s *Server) broadcastState() {
 		"nowPlaying":       s.nowPlaying,
 		"greatReq":         s.greatReq,
 		"greatApply":       s.greatApply,
-		"autoTriggerDebug": s.autoDebug,
 	}
 	s.mu.Unlock()
+	s.vision7Mu.Lock()
+	data["vision7Running"] = s.vision7Running
+	lvl := s.vision7Levels
+	s.vision7Mu.Unlock()
+	levels := make([]float64, 7)
+	for i, v := range lvl {
+		levels[i] = v
+	}
+	data["vision7Levels"] = levels
 	b, _ := json.Marshal(data)
 	s.broadcast("data: " + string(b) + "\n\n")
 }
@@ -242,7 +242,6 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"nowPlaying":       s.nowPlaying,
 		"greatReq":         s.greatReq,
 		"greatApply":       s.greatApply,
-		"autoTriggerDebug": s.autoDebug,
 	}
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
@@ -359,7 +358,7 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 		s.OnStop()
 	}
 
-	if s.OnRunRequest != nil && !req.AutoNavigation && (st == StatePlaying || st == StateDone) {
+	if s.OnRunRequest != nil && !req.AutoNavigation && (st == StatePlaying || st == StateDone || st == StateReady) {
 		go s.OnRunRequest(req)
 	}
 
@@ -517,7 +516,6 @@ func (s *Server) SetReady(ctrl controllers.Controller, events []common.ViscousEv
 	s.offset = 0
 	s.errMsg = ""
 	s.nowPlaying = np
-	s.autoDebug = AutoTriggerDebug{}
 	s.startCh = make(chan struct{}, 1)
 	s.stopCh = make(chan struct{})
 	s.offsetCh = make(chan int, 32)
@@ -563,11 +561,10 @@ func (s *Server) SetGreatStats(requested, applied int64) {
 	s.broadcastState()
 }
 
-func (s *Server) SetAutoTriggerDebug(v AutoTriggerDebug) {
-	s.mu.Lock()
-	s.autoDebug = v
-	s.mu.Unlock()
-	s.broadcastState()
+func (s *Server) IsVision7Running() bool {
+	s.vision7Mu.Lock()
+	defer s.vision7Mu.Unlock()
+	return s.vision7Running
 }
 
 func (s *Server) WaitForStart(ctx context.Context) bool {
@@ -601,13 +598,19 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	s.mu.Unlock()
 
 	n := len(events)
+	log.Debugf("[Autoplay] start: n=%d start=%v ctx.Err=%v", n, start, ctx.Err())
+	if n > 0 {
+		log.Debugf("[Autoplay] events[0].Timestamp=%d events[n-1].Timestamp=%d", events[0].Timestamp, events[n-1].Timestamp)
+	}
 	current := 0
 
 	for current < n {
 		select {
 		case <-stopCh:
+			log.Debugf("[Autoplay] stopped via stopCh at event %d/%d", current, n)
 			goto done
 		case <-ctx.Done():
+			log.Debugf("[Autoplay] stopped via ctx at event %d/%d", current, n)
 			goto done
 		default:
 		}
@@ -623,6 +626,13 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 		remaining := event.Timestamp - now
 
 		if remaining <= 0 {
+			if current < 3 && len(event.Data) >= 22 {
+				x := int32(event.Data[10])<<24 | int32(event.Data[11])<<16 | int32(event.Data[12])<<8 | int32(event.Data[13])
+				y := int32(event.Data[14])<<24 | int32(event.Data[15])<<16 | int32(event.Data[16])<<8 | int32(event.Data[17])
+				sw := uint16(event.Data[18])<<8 | uint16(event.Data[19])
+				sh := uint16(event.Data[20])<<8 | uint16(event.Data[21])
+				log.Debugf("[Autoplay] event[%d] action=%d x=%d y=%d sw=%d sh=%d ts=%d", current, event.Data[1], x, y, sw, sh, event.Timestamp)
+			}
 			s.controller.Send(event.Data)
 			current++
 			continue
@@ -642,6 +652,7 @@ func (s *Server) Autoplay(ctx context.Context, start time.Time) {
 	}
 
 done:
+	log.Debugf("[Autoplay] done: sent %d/%d events", current, n)
 	s.mu.Lock()
 	doneCtrl := s.controller
 	s.mu.Unlock()
@@ -774,116 +785,6 @@ func (s *Server) handleDetectAdb(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func normalizeAutoTriggerROI(mode string, bang ROI, pjsk ROI) ROI {
-	roi := bang
-	if mode == "pjsk" {
-		roi = pjsk
-	}
-
-	if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
-		if mode == "pjsk" {
-			return ROI{X1: 0, Y1: 35, X2: 100, Y2: 60}
-		}
-		return ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
-	}
-
-	clamp := func(v int) int {
-		if v < 0 {
-			return 0
-		}
-		if v > 100 {
-			return 100
-		}
-		return v
-	}
-
-	roi.X1 = clamp(roi.X1)
-	roi.Y1 = clamp(roi.Y1)
-	roi.X2 = clamp(roi.X2)
-	roi.Y2 = clamp(roi.Y2)
-	if roi.X2 <= roi.X1 {
-		if roi.X1 >= 99 {
-			roi.X1 = 98
-		}
-		roi.X2 = roi.X1 + 1
-	}
-	if roi.Y2 <= roi.Y1 {
-		if roi.Y1 >= 99 {
-			roi.Y1 = 98
-		}
-		roi.Y2 = roi.Y1 + 1
-	}
-
-	return roi
-}
-
-func (s *Server) handleVisionROI(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	s.mu.Lock()
-	ctrl := s.controller
-	req := s.lastRunReq
-	s.mu.Unlock()
-
-	sc, ok := ctrl.(*controllers.ScrcpyController)
-	if !ok || sc == nil {
-		http.Error(w, "vision preview unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
-	frame, ok := sc.LatestFrame()
-	if !ok || frame.Width <= 0 || frame.Height <= 0 {
-		http.Error(w, "no decoded frame", http.StatusServiceUnavailable)
-		return
-	}
-
-	need := frame.Width * frame.Height
-	if len(frame.Plane0) < need {
-		http.Error(w, "invalid frame", http.StatusServiceUnavailable)
-		return
-	}
-
-	roi := normalizeAutoTriggerROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk)
-	x1 := frame.Width * roi.X1 / 100
-	x2 := frame.Width * roi.X2 / 100
-	y1 := frame.Height * roi.Y1 / 100
-	y2 := frame.Height * roi.Y2 / 100
-	if x1 < 0 {
-		x1 = 0
-	}
-	if y1 < 0 {
-		y1 = 0
-	}
-	if x2 > frame.Width {
-		x2 = frame.Width
-	}
-	if y2 > frame.Height {
-		y2 = frame.Height
-	}
-	if x2 <= x1 || y2 <= y1 {
-		http.Error(w, "invalid roi", http.StatusBadRequest)
-		return
-	}
-
-	wid := x2 - x1
-	hgt := y2 - y1
-	img := image.NewGray(image.Rect(0, 0, wid, hgt))
-	for y := 0; y < hgt; y++ {
-		srcOff := (y1+y)*frame.Width + x1
-		dstOff := y * img.Stride
-		copy(img.Pix[dstOff:dstOff+wid], frame.Plane0[srcOff:srcOff+wid])
-	}
-
-	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	if err := png.Encode(w, img); err != nil {
-		http.Error(w, "encode failed", http.StatusInternalServerError)
-		return
-	}
-}
 
 func (s *Server) handleOCRProbe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -1007,6 +908,248 @@ func (s *Server) handleFrame(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ─── Screen MJPEG stream ──────────────────────────
+// GET /api/screen          — MJPEG stream (multipart/x-mixed-replace)
+// GET /api/screen?once=1   — single JPEG frame
+func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	getFrame := func() (*image.Gray, bool) {
+		s.mu.Lock()
+		ctrl := s.controller
+		s.mu.Unlock()
+		sc, ok := ctrl.(*controllers.ScrcpyController)
+		if !ok || sc == nil {
+			return nil, false
+		}
+		frame, ok := sc.LatestFrame()
+		if !ok || frame.Width <= 0 || frame.Height <= 0 || len(frame.Plane0) < frame.Width*frame.Height {
+			return nil, false
+		}
+		img := image.NewGray(image.Rect(0, 0, frame.Width, frame.Height))
+		for y := 0; y < frame.Height; y++ {
+			srcOff := y * frame.Width
+			dstOff := y * img.Stride
+			copy(img.Pix[dstOff:dstOff+frame.Width], frame.Plane0[srcOff:srcOff+frame.Width])
+		}
+		return img, true
+	}
+
+	once := r.URL.Query().Get("once") == "1"
+	if once {
+		img, ok := getFrame()
+		if !ok {
+			http.Error(w, "no frame available", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		jpeg.Encode(w, img, &jpeg.Options{Quality: 75})
+		return
+	}
+
+	// MJPEG stream
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			img, ok := getFrame()
+			if !ok {
+				continue
+			}
+			var buf bytes.Buffer
+			if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 75}); err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", buf.Len())
+			w.Write(buf.Bytes())
+			fmt.Fprintf(w, "\r\n")
+			flusher.Flush()
+		}
+	}
+}
+
+// ─── 7-Lane Vision Detection ─────────────────────
+
+// StartVision7 starts the vision7 detection goroutine with the given parameters.
+// Safe to call when already running; it will restart with new params.
+func (s *Server) StartVision7(y, x, gap, sens float64, delay int) {
+	s.vision7Mu.Lock()
+	if s.vision7Cancel != nil {
+		s.vision7Cancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.vision7Cancel = cancel
+	s.vision7Running = true
+	s.vision7Mu.Unlock()
+	s.broadcastState()
+
+	type v7params struct{ Y, X, Gap, Sens float64; Delay int }
+	params := v7params{Y: y, X: x, Gap: gap, Sens: sens, Delay: delay}
+	go func() {
+		defer func() {
+			s.vision7Mu.Lock()
+			s.vision7Running = false
+			var zero [7]float64
+			s.vision7Levels = zero
+			s.vision7Mu.Unlock()
+			s.broadcastState()
+		}()
+
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		lastBroadcast := time.Time{}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+
+			// Only detect when in Ready state (waiting for song start).
+			s.mu.Lock()
+			curState := s.state
+			ctrl := s.controller
+			s.mu.Unlock()
+			if curState != StateReady {
+				continue
+			}
+			sc, ok := ctrl.(*controllers.ScrcpyController)
+			if !ok || sc == nil {
+				continue
+			}
+			frame, ok := sc.LatestFrame()
+			if !ok || frame.Width <= 0 || frame.Height <= 0 {
+				continue
+			}
+			if time.Since(frame.CapturedAt) > 300*time.Millisecond {
+				continue
+			}
+
+			cy := int(params.Y * float64(frame.Height) / 100.0)
+			cx := int(params.X * float64(frame.Width) / 100.0)
+			gap := int(params.Gap * float64(frame.Width) / 100.0)
+			if gap < 1 {
+				gap = 1
+			}
+
+			var levels [7]float64
+			triggered := false
+			for lane := 0; lane < 7; lane++ {
+				lx := cx + (lane-3)*gap
+				bright, total := 0, 0
+				for dy := -7; dy < 7; dy++ {
+					for dx := -7; dx < 7; dx++ {
+						px, py := lx+dx, cy+dy
+						if px < 0 || px >= frame.Width || py < 0 || py >= frame.Height {
+							continue
+						}
+						total++
+						if frame.Plane0[py*frame.Width+px] > 220 {
+							bright++
+						}
+					}
+				}
+				if total > 0 {
+					levels[lane] = float64(bright) / float64(total)
+				}
+				if levels[lane] >= params.Sens {
+					triggered = true
+				}
+			}
+
+			s.vision7Mu.Lock()
+			s.vision7Levels = levels
+			s.vision7Mu.Unlock()
+			if time.Since(lastBroadcast) >= 100*time.Millisecond {
+				lastBroadcast = time.Now()
+				s.broadcastState()
+			}
+
+			if triggered {
+				delayMs := params.Delay
+				if delayMs < 0 {
+					delayMs = 0
+				}
+				if delayMs > 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(time.Duration(delayMs) * time.Millisecond):
+					}
+				}
+				log.Debugf("[vision7] triggered! calling TriggerStart()")
+				ok := s.TriggerStart()
+				log.Debugf("[vision7] TriggerStart() returned %v", ok)
+				if ok {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(200 * time.Millisecond):
+				}
+			}
+		}
+	}()
+}
+
+// StopVision7 stops the vision7 detection goroutine if running.
+func (s *Server) StopVision7() {
+	s.vision7Mu.Lock()
+	if s.vision7Cancel != nil {
+		s.vision7Cancel()
+		s.vision7Cancel = nil
+	}
+	s.vision7Running = false
+	s.vision7Mu.Unlock()
+	s.broadcastState()
+}
+
+func (s *Server) handleVision7Start(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var params struct {
+		Y     float64 `json:"y"`
+		X     float64 `json:"x"`
+		Gap   float64 `json:"gap"`
+		Sens  float64 `json:"sens"`
+		Delay int     `json:"delay"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.StartVision7(params.Y, params.X, params.Gap, params.Sens, params.Delay)
+	w.WriteHeader(http.StatusOK)
+}
+
+
+func (s *Server) handleVision7Stop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.StopVision7()
+	w.WriteHeader(http.StatusOK)
+}
+
 // ─── Startup ──────────────────────────────────────
 
 func (s *Server) Start() (string, error) {
@@ -1038,9 +1181,11 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/kill-adb", s.handleKillAdb)
 	mux.HandleFunc("/api/detect-adb", s.handleDetectAdb)
 	mux.HandleFunc("/api/buy-music", s.handleBuyMusic)
-	mux.HandleFunc("/api/vision-roi.png", s.handleVisionROI)
 	mux.HandleFunc("/api/ocr-probe", s.handleOCRProbe)
 	mux.HandleFunc("/api/frame.png", s.handleFrame)
+	mux.HandleFunc("/api/screen", s.handleScreen)
+	mux.HandleFunc("/api/vision7/start", s.handleVision7Start)
+	mux.HandleFunc("/api/vision7/stop", s.handleVision7Stop)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.port))
 	if err != nil {

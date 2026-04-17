@@ -12,10 +12,8 @@ import (
 	"fmt"
 	"image"
 	"io"
-	"math"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -70,19 +68,6 @@ const (
 	MAA_OCR_MODEL_BASE_URL = "https://huggingface.co/getcharzp/go-ocr/resolve/main/paddle_weights"
 )
 
-func isVideoDecodeEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("SSM_ENABLE_VIDEO_DECODE")))
-	if v == "" {
-		return true
-	}
-	switch v {
-	case "0", "false", "off", "no":
-		return false
-	default:
-		return true
-	}
-}
-
 // ─────────────────────────────────────────────
 // GUI mode main flow
 // ─────────────────────────────────────────────
@@ -90,483 +75,29 @@ func runGUI(conf *config.Config) {
 	srv := gui.NewServer(guiPort, conf)
 	prepareGUIPrerequisites()
 
-	normalizeROI := func(mode string, bang gui.ROI, pjsk gui.ROI, y1Offset int) gui.ROI {
-		roi := bang
-		if mode == "pjsk" {
-			roi = pjsk
-		}
-
-		if roi.X1 == 0 && roi.Y1 == 0 && roi.X2 == 0 && roi.Y2 == 0 {
-			if mode == "pjsk" {
-				roi = gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
-			} else {
-				roi = gui.ROI{X1: 14, Y1: 73, X2: 87, Y2: 80}
-			}
-		}
-
-		// Apply Y1 offset before clamping.
-		roi.Y1 += y1Offset
-
-		clamp := func(v int) int {
-			if v < 0 {
-				return 0
-			}
-			if v > 100 {
-				return 100
-			}
-			return v
-		}
-
-		roi.X1 = clamp(roi.X1)
-		roi.Y1 = clamp(roi.Y1)
-		roi.X2 = clamp(roi.X2)
-		roi.Y2 = clamp(roi.Y2)
-
-		if roi.X2 <= roi.X1 {
-			if roi.X1 >= 99 {
-				roi.X1 = 98
-			}
-			roi.X2 = roi.X1 + 1
-		}
-		if roi.Y2 <= roi.Y1 {
-			if roi.Y1 >= 99 {
-				roi.Y1 = 98
-			}
-			roi.Y2 = roi.Y1 + 1
-		}
-
-		return roi
-	}
-
-	autoTriggerByVision := func(ctx context.Context, sc *controllers.ScrcpyController, mode string, roi gui.ROI, pollMs int64, startHasSeenDark bool) bool {
-		if pollMs < 30 {
-			pollMs = 30
-		}
-		if pollMs > 1000 {
-			pollMs = 1000
-		}
-
-		srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-			Enabled:  true,
-			Mode:     mode,
-			Armed:    true,
-			Fired:    false,
-			PollMs:   pollMs,
-			ROI:      roi,
-			NavStage: "VISION_TRIGGER",
-			Message:  "armed; waiting first-note trigger",
-		})
-
-		sampleLumaBand := func(f controllers.ScrcpyFrame) (float64, float64, float64, float64, bool) {
-			if f.Width <= 0 || f.Height <= 0 {
-				return 0, 0, 0, 0, false
-			}
-			need := f.Width * f.Height
-			if len(f.Plane0) < need {
-				return 0, 0, 0, 0, false
-			}
-
-			x1 := f.Width * roi.X1 / 100
-			x2 := f.Width * roi.X2 / 100
-			y1 := f.Height * roi.Y1 / 100
-			y2 := f.Height * roi.Y2 / 100
-			if x1 < 0 {
-				x1 = 0
-			}
-			if y1 < 0 {
-				y1 = 0
-			}
-			if x2 > f.Width {
-				x2 = f.Width
-			}
-			if y2 > f.Height {
-				y2 = f.Height
-			}
-			if x2 <= x1 || y2 <= y1 {
-				return 0, 0, 0, 0, false
-			}
-
-			xStep := max(1, (x2-x1)/96)
-			yStep := max(1, (y2-y1)/24)
-			var sum, sumTop, sumMid, sumBottom int64
-			count := 0
-			countTop, countMid, countBottom := 0, 0, 0
-			ySpan := max(1, y2-y1)
-			for y := y1; y < y2; y += yStep {
-				row := y * f.Width
-				for x := x1; x < x2; x += xStep {
-					v := int64(f.Plane0[row+x])
-					sum += v
-					py := y - y1
-					if py*3 < ySpan {
-						sumTop += v
-						countTop++
-					} else if py*3 < ySpan*2 {
-						sumMid += v
-						countMid++
-					} else {
-						sumBottom += v
-						countBottom++
-					}
-					count++
-				}
-			}
-			if count == 0 {
-				return 0, 0, 0, 0, false
-			}
-			avg := float64(sum) / float64(count)
-			avgTop := avg
-			avgMid := avg
-			avgBottom := avg
-			if countTop > 0 {
-				avgTop = float64(sumTop) / float64(countTop)
-			}
-			if countMid > 0 {
-				avgMid = float64(sumMid) / float64(countMid)
-			}
-			if countBottom > 0 {
-				avgBottom = float64(sumBottom) / float64(countBottom)
-			}
-			return avg, avgTop, avgMid, avgBottom, true
-		}
-
-		// sampleStripeVariance computes the std-dev of per-column luma averages inside the
-		// game's lane area (derived from the judge-line geometry).  A high value means
-		// the lane track structure is visible → we are inside the gameplay HUD.
-		// A low value means we are on a loading screen, album popup, or song-select screen.
-		sampleStripeVariance := func(f controllers.ScrcpyFrame) (float64, bool) {
-			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
-				return 0, false
-			}
-			var lx, rx, jy float64
-			if mode == "pjsk" {
-				lx, rx, jy = stage.PJSKJudgeLinePos(float64(f.Width), float64(f.Height))
-			} else {
-				lx, rx, jy = stage.BanGJudgeLinePos(float64(f.Width), float64(f.Height))
-			}
-			// Sample the middle portion of the track area (above the judge line).
-			x1, x2 := int(lx), int(rx)
-			y1, y2 := int(jy*0.30), int(jy*0.60)
-			if x1 < 0 {
-				x1 = 0
-			}
-			if y1 < 0 {
-				y1 = 0
-			}
-			if x2 > f.Width {
-				x2 = f.Width
-			}
-			if y2 > f.Height {
-				y2 = f.Height
-			}
-			if x2 <= x1 || y2 <= y1 {
-				return 0, false
-			}
-			const numCols = 16
-			colWidth := float64(x2-x1) / numCols
-			if colWidth < 1 {
-				return 0, false
-			}
-			yStep := max(1, (y2-y1)/32)
-			var colSum [numCols]float64
-			var colCnt [numCols]int
-			for y := y1; y < y2; y += yStep {
-				row := y * f.Width
-				for i := 0; i < numCols; i++ {
-					cx1 := x1 + int(float64(i)*colWidth)
-					cx2 := x1 + int(float64(i+1)*colWidth)
-					if cx2 > x2 {
-						cx2 = x2
-					}
-					xStep := max(1, (cx2-cx1)/4)
-					for x := cx1; x < cx2; x += xStep {
-						colSum[i] += float64(f.Plane0[row+x])
-						colCnt[i]++
-					}
-				}
-			}
-			var mean float64
-			var colAvg [numCols]float64
-			for i := range colAvg {
-				if colCnt[i] > 0 {
-					colAvg[i] = colSum[i] / float64(colCnt[i])
-				}
-				mean += colAvg[i]
-			}
-			mean /= numCols
-			var variance float64
-			for _, v := range colAvg {
-				d := v - mean
-				variance += d * d
-			}
-			return math.Sqrt(variance / numCols), true
-		}
-
-		// sampleFrameLuma samples the whole frame at low resolution for overall brightness.
-		// The album loading screen (dark background + centred album art) has very low luma (~35-55),
-		// distinctly darker than the song-select / band-confirm UI screens (~100-150).
-		sampleFrameLuma := func(f controllers.ScrcpyFrame) (float64, bool) {
-			if f.Width <= 0 || f.Height <= 0 || len(f.Plane0) < f.Width*f.Height {
-				return 0, false
-			}
-			step := max(1, f.Width*f.Height/1024)
-			var sum int64
-			count := 0
-			for i := 0; i < len(f.Plane0); i += step {
-				sum += int64(f.Plane0[i])
-				count++
-			}
-			if count == 0 {
-				return 0, false
-			}
-			return float64(sum) / float64(count), true
-		}
-
-		ticker := time.NewTicker(time.Duration(pollMs) * time.Millisecond)
-		defer ticker.Stop()
-
-		const stableNeed = 4
-		const stableDiffBase = 1.0
-		const triggerDiffBase = 1.4
-		const noiseAlpha = 0.18
-		const seqWindow = 550 * time.Millisecond
-		const stripeThreshold = 5.0
-		// Frames with whole-screen luma below this are treated as the dark album loading screen.
-		// Song-select / band-confirm UIs are typically luma 100-150; the loading screen is ~35-55.
-		const albumDarkThreshold = 60.0
-
-		var last, lastTop, lastMid, lastBottom float64
-		hasLast := false
-		stableCount := 0
-		noiseEMA := 0.6
-		var riseTopAt, riseMidAt time.Time
-		lastDebugAt := time.Time{}
-		lastVisionStage := ""
-		var stripeVar float64
-		var screenLuma float64
-		// Primary gate: only arm after the dark album-loading screen has been seen once.
-		// This prevents false triggers on any pre-game UI screen (song select, band confirm, etc.).
-		hasSeenDark := startHasSeenDark
-		inGame := startHasSeenDark // if nav pipeline already passed dark screen, start armed
-
-		publishDebug := func(v gui.AutoTriggerDebug, force bool) {
-			if !force && !lastDebugAt.IsZero() && time.Since(lastDebugAt) < 120*time.Millisecond {
-				return
-			}
-			lastDebugAt = time.Now()
-			srv.SetAutoTriggerDebug(v)
-		}
-		logVisionStage := func(stageName, action string) {
-			if stageName == "" || stageName == lastVisionStage {
-				return
-			}
-			lastVisionStage = stageName
-			switch stageName {
-			case "WAIT_ALBUM_DARK":
-				action = "→ 監控 frame luma < threshold，等待黑畫面與封面切換"
-			case "WAIT_STAGE":
-				action = "→ WAIT_STAGE (3~4 sec): stripe variance 偵測音軌出現"
-			case "VISION_TRIGGER":
-				action = "→ VISION_TRIGGER: 開始打歌偵測"
-			}
-			log.Infof("[%s] %s", stageName, action)
-		}
-
-		for {
-			select {
-			case <-ctx.Done():
-				srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: mode, Armed: false, Fired: false, PollMs: pollMs, ROI: roi, NavStage: "VISION_TRIGGER", Message: "stopped"})
-				return false
-			case <-ticker.C:
-			}
-
-			stageName := "VISION_TRIGGER"
-			switch {
-			case !hasSeenDark:
-				stageName = "WAIT_ALBUM_DARK"
-			case !inGame:
-				stageName = "WAIT_STAGE"
-			}
-			logVisionStage(stageName, "Vision loop active")
-
-			frame, ok := sc.LatestFrame()
-			if !ok {
-				publishDebug(gui.AutoTriggerDebug{
-					Enabled:  true,
-					Mode:     mode,
-					Armed:    true,
-					Fired:    false,
-					PollMs:   pollMs,
-					ROI:      roi,
-					NavStage: stageName,
-					Message:  "VISION_TRIGGER -> no decoded frame",
-				}, false)
-				continue
-			}
-
-			// Sample whole-frame luma first — updates the dark-screen gate.
-			if fl, flOk := sampleFrameLuma(frame); flOk {
-				screenLuma = fl
-				if screenLuma < albumDarkThreshold {
-					hasSeenDark = true
-				}
-			}
-
-			cur, curTop, curMid, curBottom, ok := sampleLumaBand(frame)
-			if !ok {
-				publishDebug(gui.AutoTriggerDebug{
-					Enabled:     true,
-					Mode:        mode,
-					Armed:       false,
-					Fired:       false,
-					PollMs:      pollMs,
-					ROI:         roi,
-					ScreenLuma:  screenLuma,
-					HasSeenDark: hasSeenDark,
-					NavStage:    stageName,
-					Message:     "VISION_TRIGGER -> invalid roi on frame",
-				}, false)
-				continue
-			}
-
-			// inGame = hasSeenDark (primary gate: album loading screen seen)
-			//        AND stripeVar >= threshold (secondary: lane structure visible in HUD).
-			// hasSeenDark alone prevents the song-select / band-confirm screens from arming
-			// even when the album art on those screens produces a high stripe variance.
-			if sv, svOk := sampleStripeVariance(frame); svOk {
-				stripeVar = sv
-				inGame = hasSeenDark && stripeVar >= stripeThreshold
-			}
-			stageName = "VISION_TRIGGER"
-			switch {
-			case !hasSeenDark:
-				stageName = "WAIT_ALBUM_DARK"
-			case !inGame:
-				stageName = "WAIT_STAGE"
-			}
-			logVisionStage(stageName, "Gate status updated")
-
-			delta := 0.0
-			dTop, dMid, dBottom := 0.0, 0.0, 0.0
-			if hasLast {
-				delta = cur - last
-				dTop = curTop - lastTop
-				dMid = curMid - lastMid
-				dBottom = curBottom - lastBottom
-				absDelta := math.Abs(delta)
-				stripeNoise := (math.Abs(dTop) + math.Abs(dMid) + math.Abs(dBottom)) / 3.0
-				if stripeNoise > absDelta {
-					absDelta = stripeNoise
-				}
-
-				// Adapt to device-specific decode noise: low-end phones often have unstable luma.
-				noiseEMA = (1.0-noiseAlpha)*noiseEMA + noiseAlpha*absDelta
-				stableBand := max(stableDiffBase, noiseEMA*1.8)
-				triggerDiff := max(triggerDiffBase, noiseEMA*3.2)
-				riseDiff := max(0.9, noiseEMA*2.2)
-
-				if !inGame {
-					// Gates not met: hard-reset stability counters.
-					stableCount = 0
-					riseTopAt = time.Time{}
-					riseMidAt = time.Time{}
-				} else {
-					nowT := time.Now()
-					if dTop >= riseDiff {
-						riseTopAt = nowT
-					}
-					if dMid >= riseDiff && !riseTopAt.IsZero() && nowT.Sub(riseTopAt) <= seqWindow {
-						riseMidAt = nowT
-					}
-					flowTriggered := dBottom >= riseDiff && !riseMidAt.IsZero() && nowT.Sub(riseMidAt) <= seqWindow
-
-					if absDelta <= stableBand {
-						stableCount++
-					} else {
-						if flowTriggered || (stableCount >= stableNeed && delta >= triggerDiff) {
-							reason := "luma"
-							if flowTriggered {
-								reason = "flow"
-							}
-							publishDebug(gui.AutoTriggerDebug{
-								Enabled:     true,
-								Mode:        mode,
-								Armed:       true,
-								Fired:       true,
-								PollMs:      pollMs,
-								Luma:        cur,
-								Delta:       delta,
-								StableCount: stableCount,
-								ROI:         roi,
-								StripeVar:   stripeVar,
-								InGame:      inGame,
-								ScreenLuma:  screenLuma,
-								HasSeenDark: hasSeenDark,
-								NavStage:    "VISION_TRIGGER",
-								Message:     fmt.Sprintf("VISION_TRIGGER -> triggered[%s] thr=%.2f rise=%.2f noise=%.2f stripe=%.2f luma=%.1f", reason, triggerDiff, riseDiff, noiseEMA, stripeVar, screenLuma),
-							}, true)
-							log.Debugf("Vision trigger fired: reason=%s stable=%d delta=%.2f stripe=%.2f screenLuma=%.1f dark=%v", reason, stableCount, delta, stripeVar, screenLuma, hasSeenDark)
-							return true
-						}
-						// Soften reset on noisy devices.
-						if stableCount > 0 {
-							stableCount--
-						}
-					}
-				}
-			}
-
-			armed := inGame && stableCount >= stableNeed
-			var stateMsg string
-			switch {
-			case !hasSeenDark:
-				stateMsg = fmt.Sprintf("WAIT_ALBUM_DARK -> monitor frame luma (%.1f > %.0f)", screenLuma, albumDarkThreshold)
-			case !inGame:
-				stateMsg = fmt.Sprintf("WAIT_STAGE (3~4 sec) -> waiting stripe variance (%.2f < %.2f), luma=%.1f", stripeVar, stripeThreshold, screenLuma)
-			default:
-				stateMsg = fmt.Sprintf("VISION_TRIGGER -> HUD ready stripe=%.2f noise=%.2f d=%.2f/%.2f/%.2f", stripeVar, noiseEMA, dTop, dMid, dBottom)
-			}
-			publishDebug(gui.AutoTriggerDebug{
-				Enabled:     true,
-				Mode:        mode,
-				Armed:       armed,
-				Fired:       false,
-				PollMs:      pollMs,
-				Luma:        cur,
-				Delta:       delta,
-				StableCount: stableCount,
-				ROI:         roi,
-				StripeVar:   stripeVar,
-				InGame:      inGame,
-				ScreenLuma:  screenLuma,
-				HasSeenDark: hasSeenDark,
-				NavStage:    stageName,
-				Message:     stateMsg,
-			}, false)
-
-			last = cur
-			lastTop = curTop
-			lastMid = curMid
-			lastBottom = curBottom
-			hasLast = true
-		}
-	}
-
-	// Ensure only one playback goroutine runs at a time — placeholder to satisfy linter.
-	_ = func(ctx context.Context, device *adb.Device, sc *controllers.ScrcpyController, _ /*expectedSongTitle*/, targetDiff string) bool {
-		_ = ctx
-		_ = device
-		_ = sc
-		_ = targetDiff
-		return false
-	}
-
 	// Ensure only one playback goroutine runs at a time.
 	var (
 		runMu         sync.Mutex
 		currentCancel context.CancelFunc
 		doneCh        chan struct{}
 	)
+
+	// Persistent scrcpy connection — reused across Stop/Re-run on the same device.
+	// Only closed when the device serial changes or the app shuts down.
+	var (
+		scrcpyPersist       *controllers.ScrcpyController
+		scrcpyPersistSerial string
+		scrcpyPersistMu     sync.Mutex
+	)
+	closePersistedScrcpy := func() {
+		scrcpyPersistMu.Lock()
+		defer scrcpyPersistMu.Unlock()
+		if scrcpyPersist != nil {
+			scrcpyPersist.Close()
+			scrcpyPersist = nil
+			scrcpyPersistSerial = ""
+		}
+	}
 
 	// currentAdbDevice holds the ADB device while a run is active.
 	// Used by the OCR probe API so it uses the same screencap source as MAA.
@@ -680,10 +211,6 @@ func runGUI(conf *config.Config) {
 			chartPath = req.ChartPath
 			deviceSerial = req.DeviceSerial
 			pjskMode = req.Mode == "pjsk"
-			songNameROI := maacontrol.SongNameROIBang
-			if req.Mode == "pjsk" {
-				songNameROI = maacontrol.SongNameROIPjsk
-			}
 
 			var ctrl controllers.Controller
 			var events []common.ViscousEventItem
@@ -729,17 +256,40 @@ func runGUI(conf *config.Config) {
 					return
 				}
 				currentAdbDevice.Store(adbDevice)
-				scrcpyCtrl = controllers.NewScrcpyController(adbDevice)
-				if err := scrcpyCtrl.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
-					srv.SetError("Failed to connect to device: " + err.Error())
-					return
-				}
-				defer scrcpyCtrl.Close()
 				deviceCfg = conf.Get(adbDevice.Serial())
 				if deviceCfg == nil {
 					srv.SetError(fmt.Sprintf("Device [%s] not configured. Please add it in Settings first.", adbDevice.Serial()))
 					return
 				}
+
+				// Reuse existing scrcpy connection if same device; reconnect only if device changed.
+				scrcpyPersistMu.Lock()
+				if scrcpyPersist != nil && scrcpyPersistSerial == adbDevice.Serial() {
+					scrcpyCtrl = scrcpyPersist
+					scrcpyPersistMu.Unlock()
+				} else {
+					if scrcpyPersist != nil {
+						scrcpyPersist.Close()
+						scrcpyPersist = nil
+					}
+					scrcpyPersistMu.Unlock()
+					newCtrl := controllers.NewScrcpyController(adbDevice)
+					if err := newCtrl.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
+						srv.SetError("Failed to connect to device: " + err.Error())
+						return
+					}
+					scrcpyPersistMu.Lock()
+					scrcpyPersist = newCtrl
+					scrcpyPersistSerial = adbDevice.Serial()
+					scrcpyPersistMu.Unlock()
+					scrcpyCtrl = newCtrl
+				}
+
+				w, h := deviceCfg.Width, deviceCfg.Height
+				if direction == "right" || direction == "left" {
+					w, h = deviceCfg.Height, deviceCfg.Width
+				}
+				scrcpyCtrl.SetDeviceSize(w, h)
 				ctrl = scrcpyCtrl
 
 			default: // hid
@@ -871,8 +421,8 @@ func runGUI(conf *config.Config) {
 
 			if req.AutoNavigation {
 				if adbDevice == nil {
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, Message: "auto-nav requires ADB backend"})
 					log.Warn("AutoNavigation requires ADB backend")
+					srv.SetError("AutoNavigation requires ADB backend")
 					return
 				}
 
@@ -883,13 +433,7 @@ func runGUI(conf *config.Config) {
 					GameServer: req.GameServer,
 
 					OnProgress: func(stage, scene, msg string) {
-						srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{
-							Enabled:  true,
-							Mode:     req.Mode,
-							NavStage: stage,
-							NavScene: scene,
-							Message:  fmt.Sprintf("%s\n  %s", stage, msg),
-						})
+						log.Infof("[MAA] %s / %s: %s", stage, scene, msg)
 					},
 
 					OnSongDetected: func(detectedID int, detectedTitle string) {
@@ -924,32 +468,30 @@ func runGUI(conf *config.Config) {
 						return buildErr
 					}
 
-					// 3. Set ready + auto-trigger start (AutoNavigation always triggers immediately)
+					// 3. If auto trigger, start vision7 now that we're confirmed on the
+					// live screen (wait_live_start fired). Otherwise trigger immediately.
+					if req.AutoTrigger {
+						srv.StartVision7(req.Vision7Y, req.Vision7X, req.Vision7Gap, req.Vision7Sens, req.Vision7Delay)
+					}
 					srv.SetReady(ctrl, evts, np)
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: req.AutoTriggerVision, Mode: req.Mode, Message: "idle"})
-					srv.TriggerStart()
+					if !req.AutoTrigger {
+						srv.TriggerStart()
+					}
 
 					// 4. Wait for start acknowledgement
 					if !srv.WaitForStart(playCtx) {
+						if req.AutoTrigger {
+							srv.StopVision7()
+						}
 						return nil // ctx cancelled externally
 					}
 
-					// 5. Vision trigger (AutoNavigation already saw the dark loading screen)
-					if req.AutoTriggerVision {
-						roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk, req.VisionY1Offset)
-						sc, ok := ctrl.(*controllers.ScrcpyController)
-						if !ok {
-							return fmt.Errorf("AutoTriggerVision requires scrcpy backend")
-						}
-						if !autoTriggerByVision(playCtx, sc, req.Mode, roi, req.AutoTriggerPollMs, true /*navHasSeenDark*/) {
-							return nil // ctx cancelled externally
-						}
-					}
-
-					// 6. Blocking playback. ResetTouch is handled by Autoplay's done
-					// section, so no cleanup needed here.
+					// 5. Blocking playback.
 					start := time.Now().Add(-time.Duration(evts[0].Timestamp) * time.Millisecond)
 					srv.Autoplay(playCtx, start)
+					if req.AutoTrigger {
+						srv.StopVision7()
+					}
 					return nil
 				}
 
@@ -970,6 +512,10 @@ func runGUI(conf *config.Config) {
 				if adbDevice == nil {
 					srv.SetError("Auto song detection requires ADB backend.")
 					return
+				}
+				songNameROI := maacontrol.SongNameROIBang
+				if req.Mode == "pjsk" {
+					songNameROI = maacontrol.SongNameROIPjsk
 				}
 				detectRes, detectErr := maacontrol.DetectSongForRun(
 					nav,
@@ -1004,35 +550,16 @@ func runGUI(conf *config.Config) {
 				return
 			}
 			srv.SetReady(ctrl, events, np)
-			srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: req.AutoTriggerVision, Mode: req.Mode, Message: "idle"})
 
-			// Non-auto path: wait for user to press Start in the UI.
+			// Non-auto path: wait for user to press Start in the UI (or vision7 detection).
 			if !srv.WaitForStart(ctx) {
+				log.Debugf("[runOnce] WaitForStart returned false (ctx=%v)", ctx.Err())
 				return
 			}
 
-			// navHasSeenDark is false for the non-auto path (no navigation ran).
-			const navHasSeenDark = false
-
-			if req.AutoTriggerVision {
-				roi := normalizeROI(req.Mode, req.AutoTriggerROIBang, req.AutoTriggerROIPjsk, req.VisionY1Offset)
-				sc, ok := ctrl.(*controllers.ScrcpyController)
-				if !ok {
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, PollMs: req.AutoTriggerPollMs, ROI: roi, Message: "backend not scrcpy"})
-					log.Warn("Auto Trigger (Vision) is only available on scrcpy backend")
-					return
-				}
-				if !isVideoDecodeEnabled() {
-					srv.SetAutoTriggerDebug(gui.AutoTriggerDebug{Enabled: true, Mode: req.Mode, PollMs: req.AutoTriggerPollMs, ROI: roi, Message: "video decode disabled"})
-					log.Warn("Auto Trigger (Vision) requested but video decode is disabled; set SSM_ENABLE_VIDEO_DECODE=0 to disable (default is enabled)")
-					return
-				}
-				if !autoTriggerByVision(ctx, sc, req.Mode, roi, req.AutoTriggerPollMs, navHasSeenDark) {
-					return
-				}
-			}
-
+			log.Debugf("[runOnce] WaitForStart returned true, events=%d events[0].Timestamp=%d", len(events), events[0].Timestamp)
 			start := time.Now().Add(-time.Duration(events[0].Timestamp) * time.Millisecond)
+			log.Debugf("[runOnce] calling Autoplay, start=%v", start)
 			srv.Autoplay(ctx, start)
 
 			time.Sleep(300 * time.Millisecond)
@@ -1077,6 +604,7 @@ func runGUI(conf *config.Config) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
+	closePersistedScrcpy()
 	fmt.Println("\nSSM GUI closed")
 }
 
@@ -1182,13 +710,6 @@ func promptYesNo(question string, defaultYes bool) bool {
 	default:
 		return defaultYes
 	}
-}
-
-func runCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
 func maybePrepareScrcpyServerForGUI() {
@@ -1643,6 +1164,9 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	}
 	defer controller.Close()
 	dc := conf.Get(device.Serial())
+	if dc != nil {
+		controller.SetDeviceSize(dc.Height, dc.Width)
+	}
 	events := controller.Preprocess(rawEvents, direction == "right", dc, getJudgeLineCalculator())
 	t.init(controller, events)
 	t.begin()

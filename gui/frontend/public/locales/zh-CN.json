@@ -128,5 +128,21 @@
   "extra.buymusic.start":   "▶ 开始",
   "extra.buymusic.pause":   "⏸ 暂停",
   "extra.buymusic.running": "运行中…",
-  "extra.buymusic.stopped": "已停止"
+  "extra.buymusic.stopped": "已停止",
+
+  "vision7.title":     "7 轨道视觉检测",
+  "vision7.idle":      "待机",
+  "vision7.detecting": "检测中…",
+  "vision7.triggered": "已检测到开局音符，自动开始！",
+  "vision7.refresh":   "↻ 刷新",
+  "vision7.y":         "检测 Y",
+  "vision7.x":         "中心 X",
+  "vision7.gap":       "间距",
+  "vision7.sens":      "灵敏度",
+  "vision7.delay":     "延迟启动",
+  "vision7.start":     "▶ 开始检测",
+  "vision7.stop":      "■ 停止检测",
+  "vision7.waiting":   "⏳ 等待音符检测中…",
+  "song.autotrigger":      "自动触发",
+  "song.autotrigger.hint": "视觉检测音符排列后自动开始"
 }
