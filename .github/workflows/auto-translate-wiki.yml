@@ -26,21 +26,21 @@ jobs:
           repository: ${{ github.repository }}.wiki
           path: wiki-repo
 
-      - name: Translate to English
-        uses: FidelusAleksander/ai-translate-action@v1
-        id: trans_en
-        with:
-          text-file: "main-repo/README.md"
-          target-language: "English"
-          custom-instructions: "Keep technical terms in English. Don't translate code blocks. Output ONLY the translated markdown content."
-
       - name: Translate to Traditional Chinese
         uses: FidelusAleksander/ai-translate-action@v1
-        id: trans_zh
+        id: trans_tc
         with:
           text-file: "main-repo/README.md"
           target-language: "Traditional Chinese"
-          custom-instructions: "Keep technical terms in English. Don't translate code blocks. Output ONLY the translated markdown content."
+          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the translated valid markdown content."
+
+      - name: Translate to Simplified Chinese
+        uses: FidelusAleksander/ai-translate-action@v1
+        id: trans_sc
+        with:
+          text-file: "main-repo/README.md"
+          target-language: "Simplified Chinese"
+          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the translated valid markdown content."
 
       - name: Translate to Japanese
         uses: FidelusAleksander/ai-translate-action@v1
@@ -48,17 +48,17 @@ jobs:
         with:
           text-file: "main-repo/README.md"
           target-language: "Japanese"
-          custom-instructions: "Keep technical terms in English. Don't translate code blocks. Output ONLY the translated markdown content."
+          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the translated valid markdown content."
 
       - name: Save Translations to Wiki
         env:
-          EN_TEXT: ${{ steps.trans_en.outputs.translated-text }}
-          ZH_TEXT: ${{ steps.trans_zh.outputs.translated-text }}
+          TC_TEXT: ${{ steps.trans_tc.outputs.translated-text }}
+          SC_TEXT: ${{ steps.trans_sc.outputs.translated-text }}
           JA_TEXT: ${{ steps.trans_ja.outputs.translated-text }}
         run: |
-          echo "$EN_TEXT" > wiki-repo/Home.md
-          echo "$ZH_TEXT" > wiki-repo/Home-zh-TW.md
-          echo "$JA_TEXT" > wiki-repo/Home-ja.md
+          echo "$TC_TEXT" > wiki-repo/首頁.md
+          echo "$SC_TEXT" > wiki-repo/主页.md
+          echo "$JA_TEXT" > wiki-repo/ホーム.md
 
       - name: Push to Wiki
         run: |
@@ -69,7 +69,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes in translation, skipping commit."
           else
-            git commit -m "docs: auto-translate README to multi-language"
+            git commit -m "docs: auto-translate README to SC, TC, JA"
             git pull --rebase origin master
             git push origin HEAD:master
           fi
