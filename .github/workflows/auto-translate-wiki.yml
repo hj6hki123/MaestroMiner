@@ -32,7 +32,7 @@ jobs:
         with:
           text-file: "main-repo/README.md"
           target-language: "Traditional Chinese"
-          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the translated valid markdown content."
+          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the raw translated markdown content. Do NOT wrap the output in any code block, markdown fence, or backticks."
 
       - name: Translate to Simplified Chinese
         uses: FidelusAleksander/ai-translate-action@v1
@@ -40,7 +40,7 @@ jobs:
         with:
           text-file: "main-repo/README.md"
           target-language: "Simplified Chinese"
-          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the translated valid markdown content."
+          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the raw translated markdown content. Do NOT wrap the output in any code block, markdown fence, or backticks."
 
       - name: Translate to Japanese
         uses: FidelusAleksander/ai-translate-action@v1
@@ -48,7 +48,7 @@ jobs:
         with:
           text-file: "main-repo/README.md"
           target-language: "Japanese"
-          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the translated valid markdown content."
+          custom-instructions: "STRICTLY preserve all Markdown formatting, tables, HTML tags, and code blocks. Do not translate code, variable names, or technical terms. Output ONLY the raw translated markdown content. Do NOT wrap the output in any code block, markdown fence, or backticks."
 
       - name: Save Translations to Wiki
         env:
@@ -59,6 +59,11 @@ jobs:
           echo "$TC_TEXT" > wiki-repo/首頁.md
           echo "$SC_TEXT" > wiki-repo/主页.md
           echo "$JA_TEXT" > wiki-repo/ホーム.md
+          # Strip any leading ```* fence and trailing ``` added by the model
+          for f in wiki-repo/首頁.md wiki-repo/主页.md wiki-repo/ホーム.md; do
+            sed -i '1{/^```/d}' "$f"
+            sed -i '${/^```$/d}' "$f"
+          done
 
       - name: Push to Wiki
         run: |
