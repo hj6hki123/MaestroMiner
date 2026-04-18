@@ -53,7 +53,6 @@ Forces a specific number of tap notes to land as **Great** (slightly early/late)
 | Android phone | USB debugging enabled (Developer Options → USB Debugging) |
 | USB cable | Data-capable (not charge-only) |
 | ADB | Included in the package — no separate install needed |
-| Windows 10/11 | 64-bit |
 
 > **First time enabling USB debugging?**  
 > Go to **Settings → About Phone**, tap **Build Number** 7 times to unlock Developer Options, then enable **USB Debugging** inside Developer Options.
