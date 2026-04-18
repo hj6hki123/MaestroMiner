@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/core/log"
 )
 
 // serverConfig holds the per-game-server configuration loaded from

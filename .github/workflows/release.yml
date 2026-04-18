@@ -40,7 +40,7 @@ jobs:
 
       - name: Build Frontend
         run: |
-          cd gui/frontend
+          cd ui/gui/frontend
           npm install
           npm run build
 
@@ -102,7 +102,7 @@ jobs:
 
       - name: Build Frontend
         run: |
-          cd gui/frontend
+          cd ui/gui/frontend
           npm install
           npm run build
 
@@ -161,7 +161,7 @@ jobs:
       - name: Build Frontend
         shell: pwsh
         run: |
-          cd gui/frontend
+          cd ui/gui/frontend
           npm install
           npm run build
 
@@ -252,7 +252,7 @@ jobs:
 
       - name: Build Frontend
         run: |
-          cd gui/frontend
+          cd ui/gui/frontend
           npm install
           npm run build
 
@@ -314,7 +314,7 @@ jobs:
 
       - name: Build Frontend
         run: |
-          cd gui/frontend
+          cd ui/gui/frontend
           npm install
           npm run build
 

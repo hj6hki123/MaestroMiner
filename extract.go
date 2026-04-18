@@ -15,10 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kvarenzn/ssm/k"
-	"github.com/kvarenzn/ssm/log"
-	"github.com/kvarenzn/ssm/term"
-	"github.com/kvarenzn/ssm/uni"
+	"github.com/kvarenzn/ssm/format/assetcrypt"
+	"github.com/kvarenzn/ssm/core/log"
+	"github.com/kvarenzn/ssm/ui/term"
+	"github.com/kvarenzn/ssm/format/uni"
 )
 
 type AssetFileMeta struct {
@@ -113,7 +113,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 
 		input = f
 		if pjsk {
-			input, err = k.NewSekaiAssetFile(input)
+			input, err = assetcrypt.NewSekaiAssetFile(input)
 			if err != nil {
 				db[bundle] = &AssetFileMeta{
 					Hash:  "?",

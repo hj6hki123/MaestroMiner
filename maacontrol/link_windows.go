@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/core/log"
 )
 
 // tryLinkDir attempts to create a directory junction (no privileges required on

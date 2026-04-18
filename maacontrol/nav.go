@@ -28,9 +28,9 @@ import (
 	maa "github.com/MaaXYZ/maa-framework-go/v4"
 	"github.com/MaaXYZ/maa-framework-go/v4/controller/adb"
 
-	ssmadb "github.com/kvarenzn/ssm/adb"
-	"github.com/kvarenzn/ssm/log"
-	"github.com/kvarenzn/ssm/songdetect"
+	ssmadb "github.com/kvarenzn/ssm/device/adb"
+	"github.com/kvarenzn/ssm/core/log"
+	"github.com/kvarenzn/ssm/game/songdetect"
 )
 
 // ─────────────────────────────────────────────

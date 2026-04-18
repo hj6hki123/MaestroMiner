@@ -1,0 +1,86 @@
+// Copyright (C) 2024, 2025 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package astc
+
+import (
+	"encoding/binary"
+	"fmt"
+	"image"
+
+	"github.com/kvarenzn/ssm/format/decoders"
+)
+
+func decodeBlock(data []byte, blockWidth, blockHeight int, buffer []byte) {
+	if data[0] == 0xfc && data[1]&1 == 1 {
+		var r, g, b, a byte
+		if data[1]&2 != 0 {
+			r = f32ToU8(u16ToF32(binary.LittleEndian.Uint16(data[8:])))
+			g = f32ToU8(u16ToF32(binary.LittleEndian.Uint16(data[10:])))
+			b = f32ToU8(u16ToF32(binary.LittleEndian.Uint16(data[12:])))
+			a = f32ToU8(u16ToF32(binary.LittleEndian.Uint16(data[14:])))
+		} else {
+			r = data[9]
+			g = data[11]
+			b = data[13]
+			a = data[15]
+		}
+
+		for i := range blockWidth * blockHeight {
+			buffer[i*4+0] = r
+			buffer[i*4+1] = g
+			buffer[i*4+2] = b
+			buffer[i*4+3] = a
+		}
+	} else if data[0]&0xc3 == 0xc0 && data[1]&1 == 1 || data[0]&0xf == 0 {
+		for i := range blockWidth * blockHeight {
+			buffer[i*4+0] = 0xff
+			buffer[i*4+1] = 0x00
+			buffer[i*4+2] = 0xff
+			buffer[i*4+3] = 0xff
+		}
+	} else {
+		blockData := BlockData{
+			BlockWidth:  blockWidth,
+			BlockHeight: blockHeight,
+		}
+		blockData.DecodeBlockParams(data)
+		blockData.DecodeEndpoints(data)
+		blockData.DecodeWeights(data)
+		if blockData.PartCount > 1 {
+			blockData.SelectPartition(data)
+		}
+		blockData.ApplicateColor(buffer)
+	}
+}
+
+func Decode(data []byte, width, height, blockWidth, blockHeight int) (*image.NRGBA, error) {
+	const blockSize = 16
+
+	xBlocks := (width + blockWidth - 1) / blockWidth
+	yBlocks := (height + blockHeight - 1) / blockHeight
+
+	expectedSize := blockSize * yBlocks * xBlocks
+
+	if len(data) < expectedSize {
+		return nil, fmt.Errorf("Failed to decode ASTC image asset. Expected %d bytes, but got %d bytes.", expectedSize, len(data))
+	}
+
+	// buffer := make([]byte, blockWidth*blockHeight*4)
+	buffer := make([]byte, 144*4)
+	result := make([]byte, width*height*4)
+	ptr := 0
+	for blockY := range yBlocks {
+		for blockX := range xBlocks {
+			decodeBlock(data[ptr:], blockWidth, blockHeight, buffer)
+			decoders.CopyBlockBuffer(blockX, blockY, width, height, blockWidth, blockHeight, buffer, result)
+			ptr += blockSize
+		}
+	}
+
+	return &image.NRGBA{
+		Pix:    result,
+		Stride: 4 * width,
+		Rect:   image.Rect(0, 0, width, height),
+	}, nil
+}

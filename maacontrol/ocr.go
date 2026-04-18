@@ -17,7 +17,7 @@ import (
 
 	maa "github.com/MaaXYZ/maa-framework-go/v4"
 
-	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/core/log"
 )
 
 // ─── Public OCR facade ────────────────────────────────────────────────────────

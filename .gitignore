@@ -1,18 +1,19 @@
 *.json
-!gui/frontend/public/locales/*.json
-!gui/frontend/package.json
-!gui/frontend/package-lock.json
+!ui/gui/frontend/public/locales/*.json
+!ui/gui/frontend/package.json
+!ui/gui/frontend/package-lock.json
 !maacontrol/resource/pipeline/*.json
 !maacontrol/resource/servers/*.json
-gui/frontend/node_modules/
-gui/frontend/dist/
+ui/gui/frontend/node_modules/
+ui/gui/frontend/dist/
 
 /ssm
 /ssm.exe
 /ssm-gui.exe
 
 /*.svg
-/assets/
+/assets/star/
+/assets/sekai/
 /data/
 /ssm
 /ssm.exe
