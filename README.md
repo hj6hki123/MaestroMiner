@@ -1,4 +1,8 @@
 <p align="center">
+    <img src="imgs/page.png" alt="MaestroMiner Banner" width="100%">
+</p>
+
+<p align="center">
     <strong>A Web-based GUI for automated mobile rhythm game playback and chart parsing, powered by MAA.</strong>
 </p>
 
