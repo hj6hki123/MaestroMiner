@@ -21,8 +21,7 @@ gui/frontend/dist/
 /*.dll
 
 # binary template images (distributed via release, not tracked in git)
-*.png
-maacontrol/resource/image/
+# *.png and maacontrol/resource/image/ are now tracked in git
 
 # personal notes / diagrams
 *.mmd
