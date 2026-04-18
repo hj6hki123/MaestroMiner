@@ -262,9 +262,9 @@ func runGUI(conf *config.Config) {
 					return
 				}
 
-				// Reuse existing scrcpy connection if same device; reconnect only if device changed.
+				// Reuse existing scrcpy connection if same device and still alive; reconnect otherwise.
 				scrcpyPersistMu.Lock()
-				if scrcpyPersist != nil && scrcpyPersistSerial == adbDevice.Serial() {
+				if scrcpyPersist != nil && scrcpyPersistSerial == adbDevice.Serial() && scrcpyPersist.IsAlive() {
 					scrcpyCtrl = scrcpyPersist
 					scrcpyPersistMu.Unlock()
 				} else {
@@ -564,6 +564,57 @@ func runGUI(conf *config.Config) {
 
 	srv.OnRunRequest = func(req gui.RunRequest) {
 		runOnce(req)
+	}
+
+	// OnPreviewRequest starts a minimal scrcpy connection for the calibration
+	// modal. Reuses scrcpyPersist if the same device is already connected.
+	srv.OnPreviewRequest = func(serial string) error {
+		if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
+			return fmt.Errorf("ADB server: %w", err)
+		}
+		client := adb.NewDefaultClient()
+		devices, err := client.Devices()
+		if err != nil || len(devices) == 0 {
+			return fmt.Errorf("no ADB devices found")
+		}
+		var dev *adb.Device
+		if serial == "" {
+			dev = adb.FirstAuthorizedDevice(devices)
+		} else {
+			for _, d := range devices {
+				if d.Serial() == serial {
+					dev = d
+					break
+				}
+			}
+		}
+		if dev == nil {
+			return fmt.Errorf("device not found")
+		}
+
+		scrcpyPersistMu.Lock()
+		defer scrcpyPersistMu.Unlock()
+		if scrcpyPersist != nil && scrcpyPersistSerial == dev.Serial() && scrcpyPersist.IsAlive() {
+			// already connected and healthy — just expose it
+			srv.SetPreviewController(scrcpyPersist)
+			return nil
+		}
+		if scrcpyPersist != nil {
+			scrcpyPersist.Close()
+			scrcpyPersist = nil
+		}
+		ok, err := hasValidScrcpyServer()
+		if err != nil || !ok {
+			return fmt.Errorf("scrcpy-server not ready")
+		}
+		newCtrl := controllers.NewScrcpyController(dev)
+		if err := newCtrl.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
+			return fmt.Errorf("connect scrcpy: %w", err)
+		}
+		scrcpyPersist = newCtrl
+		scrcpyPersistSerial = dev.Serial()
+		srv.SetPreviewController(newCtrl)
+		return nil
 	}
 
 	srv.OnStop = func() {

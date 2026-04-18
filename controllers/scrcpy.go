@@ -452,3 +452,10 @@ func (c *ScrcpyController) ResetTouch() {
 		c.controlSocket.Write(data)
 	}
 }
+
+// IsAlive reports whether both the video and control goroutines are still running.
+// A false return means the underlying sockets have been lost and the controller
+// must be closed and replaced before reuse.
+func (c *ScrcpyController) IsAlive() bool {
+	return c.vRunning && c.cRunning
+}

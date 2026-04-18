@@ -2721,13 +2721,72 @@ kbd {
   color: var(--color-ssm-text);
 }
 /* ── AutoTrigger ─────────────────────────────────────── */
-.autotrigger-preview-wrap {
+/* outer wrapper: carries the glow — NO mask here so shadow isn't clipped */
+.autotrigger-glow-wrap {
   position: relative;
   width: 100%;
   margin-top: 8px;
-  border-radius: 6px;
+  border-radius: 10px;
+
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--jacket-color, #3b82f6) 35%, transparent),
+    0 0 16px 5px color-mix(in srgb, var(--jacket-color, #3b82f6) 22%, transparent);
+  transition: box-shadow 0.5s ease;
+}
+
+.autotrigger-glow-wrap.at-active {
+  animation: at-glow-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes at-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--jacket-color, #3b82f6) 60%, transparent),
+      0 0 24px 7px color-mix(in srgb, var(--jacket-color, #3b82f6) 40%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--jacket-color, #3b82f6) 90%, transparent),
+      0 0 40px 14px color-mix(in srgb, var(--jacket-color, #3b82f6) 28%, transparent);
+  }
+}
+
+/* inner wrapper: mask-fade only — overflow:hidden clips img/canvas */
+.autotrigger-preview-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
   overflow: hidden;
-  background: #0a0a0a;
+  background: #000;
+  -webkit-mask-image:
+    linear-gradient(to right,  transparent 0%, black 8%, black 92%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 5%, black 86%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right,  transparent 0%, black 8%, black 92%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 5%, black 86%, transparent 100%);
+  mask-composite: intersect;
+}
+
+/* Stronger pulsing glow while detection is active */
+.autotrigger-preview-wrap.at-active {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--jacket-color, #3b82f6) 55%, transparent),
+    0 0 22px 5px color-mix(in srgb, var(--jacket-color, #3b82f6) 35%, transparent);
+  animation: at-glow-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes at-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--jacket-color, #3b82f6) 55%, transparent),
+      0 0 22px 5px color-mix(in srgb, var(--jacket-color, #3b82f6) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--jacket-color, #3b82f6) 80%, transparent),
+      0 0 36px 10px color-mix(in srgb, var(--jacket-color, #3b82f6) 22%, transparent);
+  }
 }
 
 .autotrigger-badge {
@@ -2765,11 +2824,32 @@ kbd {
 }
 .autotrigger-refresh-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
+.autotrigger-toggle-btn {
+  font-size: 16px;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.07);
+  color: var(--color-ssm-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.25s ease;
+}
+.autotrigger-toggle-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.autotrigger-toggle-btn.open { transform: rotate(45deg); color: var(--jacket-color, #3b82f6); }
+
 .autotrigger-sliders {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow: hidden;
+  animation: at-slide-down 0.22s ease;
+}
+
+@keyframes at-slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .autotrigger-row {
@@ -2815,3 +2895,174 @@ kbd {
 }
 .autotrigger-btn-stop:hover:not(:disabled) { background: rgba(239,68,68,0.28); }
 .autotrigger-btn-stop:disabled { opacity: 0.4; cursor: default; }
+
+/* ── AutoTrigger Calibration button ─────────────────── */
+.at-calib-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 5px 13px;
+  border-radius: 7px;
+  border: 1px solid rgba(99,152,255,0.55);
+  background: rgba(59,130,246,0.16);
+  color: #a8c8ff;
+  cursor: pointer;
+  margin-left: auto;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.at-calib-btn:hover {
+  background: rgba(59,130,246,0.30);
+  border-color: rgba(99,152,255,0.80);
+  color: #d4e8ff;
+  box-shadow: 0 0 14px 3px rgba(59,130,246,0.30);
+}
+html[data-theme='light'] .at-calib-btn {
+  border-color: rgba(37,99,235,0.50);
+  background: rgba(37,99,235,0.10);
+  color: #2563eb;
+}
+html[data-theme='light'] .at-calib-btn:hover {
+  background: rgba(37,99,235,0.20);
+  border-color: rgba(37,99,235,0.70);
+  color: #1d4ed8;
+  box-shadow: 0 0 14px 3px rgba(37,99,235,0.25);
+}
+
+/* ── AutoTrigger Calibration Modal ───────────────────── */
+.at-calib-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.at-calib-dialog {
+  background: var(--ui-card-bg, #1a1a1e);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 16px;
+  width: min(540px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+}
+
+.at-calib-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.at-calib-close {
+  font-size: 16px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255,255,255,0.07);
+  color: var(--color-ssm-muted);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.at-calib-close:hover { background: rgba(239,68,68,0.25); color: #f87171; }
+
+/* glow wrapper for calibration preview */
+.at-calib-glow-wrap {
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--jacket-color, #3b82f6) 40%, transparent),
+    0 0 20px 6px color-mix(in srgb, var(--jacket-color, #3b82f6) 25%, transparent);
+  transition: box-shadow 0.5s ease;
+}
+
+.at-calib-preview {
+  position: relative;
+  width: 100%;
+  min-height: 200px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  -webkit-mask-image:
+    linear-gradient(to right,  transparent 0%, black 5%, black 95%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 4%, black 90%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right,  transparent 0%, black 5%, black 95%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black 4%, black 90%, transparent 100%);
+  mask-composite: intersect;
+}
+
+.at-calib-nosignal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(10,10,14,0.92);
+  color: var(--color-ssm-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 20px;
+  pointer-events: none;
+  min-height: 120px;
+}
+.at-calib-nosignal span:first-child { font-size: 32px; }
+
+.at-calib-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid rgba(255,255,255,0.10);
+  border-top-color: color-mix(in srgb, var(--jacket-color, #3b82f6) 80%, white);
+  border-radius: 50%;
+  animation: at-calib-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes at-calib-spin { to { transform: rotate(360deg); } }
+
+
+.at-calib-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.at-calib-hint {
+  font-size: 12px;
+  color: var(--color-ssm-muted);
+  line-height: 1.6;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.at-calib-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.at-calib-apply {
+  padding: 8px 22px;
+  border-radius: 8px;
+  border: none;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.at-calib-apply:hover { background: #2563eb; }

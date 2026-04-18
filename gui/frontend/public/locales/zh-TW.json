@@ -133,11 +133,16 @@
   "extra.buymusic.running": "執行中…",
   "extra.buymusic.stopped": "已停止",
 
-  "autoTrigger.title":     "7 軌道視覺偵測",
-  "autoTrigger.idle":      "待機",
+  "autoTrigger.title":     "視覺偵測",
+  "autoTrigger.calib":     "校準",
+  "autoTrigger.calib.title": "視覺偵測校準",
+  "autoTrigger.calib.hint": "調整 Y 使偵測線落在判定區上方。調整間距直到 7 個方框對齊各判定格。靈敏度太低時調高；若誤觸則調低。",
+  "autoTrigger.calib.apply": "套用並關閉",
+  "autoTrigger.calib.nosignal": "無畫面 — 請先連接裝置並啟動 scrcpy",
+  "autoTrigger.calib.connecting": "連線裝置中…",
+  "autoTrigger.calib.firstuse": "第一次使用？請開啟校準，將偵測框對齊裝置畫面。",
   "autoTrigger.detecting": "偵測中…",
   "autoTrigger.triggered": "已偵測到開局音符，自動開始！",
-  "autoTrigger.refresh":   "↻ 重新整理",
   "autoTrigger.y":         "偵測 Y",
   "autoTrigger.x":         "中心 X",
   "autoTrigger.gap":       "點間距",
@@ -146,6 +151,7 @@
   "autoTrigger.start":     "▶ 開始偵測",
   "autoTrigger.stop":      "■ 停止偵測",
   "autoTrigger.waiting":   "⏳ 等待音符偵測中…",
+  "autoMode.detecting":    "偵測歌曲中…",
   "song.autotrigger":      "自動觸發",
-  "song.autotrigger.hint": "視覺偵測音符排列後自動開始打擊"
+  "song.autotrigger.hint": "視覺偵測音符排列後自動開始打擊（首次使用請先校準）"
 }

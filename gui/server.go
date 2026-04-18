@@ -74,7 +74,7 @@ type RunRequest struct {
 	GameServer     string  `json:"gameServer"`     // "jp", "tw", "en", "cn", "kr"
 
 	// Auto Trigger (autoTrigger): wait for note pattern detection before starting
-	AutoTrigger  bool    `json:"autoTrigger"`
+	AutoTrigger      bool    `json:"autoTrigger"`
 	AutoTriggerY     float64 `json:"autoTriggerY"`
 	AutoTriggerX     float64 `json:"autoTriggerX"`
 	AutoTriggerGap   float64 `json:"autoTriggerGap"`
@@ -96,7 +96,6 @@ type ROI struct {
 	X2 int `json:"x2"`
 	Y2 int `json:"y2"`
 }
-
 
 type Server struct {
 	port int
@@ -143,6 +142,16 @@ type Server struct {
 	// OCRProbe takes an ADB screencap and runs OCR on the given percent ROI.
 	// x1,y1,x2,y2 are 0-100 percent values. Returns OCR texts and song match info as JSON bytes.
 	OCRProbe func(mode string, x1, y1, x2, y2 int) ([]byte, error)
+
+	// OnPreviewRequest is called by POST /api/screen/start to open a lightweight
+	// scrcpy preview connection (calibration mode). The serial may be empty to
+	// use the first available device. Implementations should call SetPreviewController.
+	OnPreviewRequest func(serial string) error
+
+	// previewCtrl is used exclusively by /api/screen when s.controller has no
+	// scrcpy connection (i.e. before any run has been submitted).
+	previewCtrl   *controllers.ScrcpyController
+	previewCtrlMu sync.Mutex
 }
 
 func NewServer(port int, conf *config.Config) *Server {
@@ -186,12 +195,12 @@ func (s *Server) broadcast(msg string) {
 func (s *Server) broadcastState() {
 	s.mu.Lock()
 	data := map[string]any{
-		"state":            int(s.state),
-		"offset":           s.offset,
-		"error":            s.errMsg,
-		"nowPlaying":       s.nowPlaying,
-		"greatReq":         s.greatReq,
-		"greatApply":       s.greatApply,
+		"state":      int(s.state),
+		"offset":     s.offset,
+		"error":      s.errMsg,
+		"nowPlaying": s.nowPlaying,
+		"greatReq":   s.greatReq,
+		"greatApply": s.greatApply,
 	}
 	s.mu.Unlock()
 	s.atMu.Lock()
@@ -234,12 +243,12 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	data := map[string]any{
-		"state":            int(s.state),
-		"offset":           s.offset,
-		"error":            s.errMsg,
-		"nowPlaying":       s.nowPlaying,
-		"greatReq":         s.greatReq,
-		"greatApply":       s.greatApply,
+		"state":      int(s.state),
+		"offset":     s.offset,
+		"error":      s.errMsg,
+		"nowPlaying": s.nowPlaying,
+		"greatReq":   s.greatReq,
+		"greatApply": s.greatApply,
 	}
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
@@ -559,7 +568,6 @@ func (s *Server) SetGreatStats(requested, applied int64) {
 	s.broadcastState()
 }
 
-
 func (s *Server) WaitForStart(ctx context.Context) bool {
 	s.mu.Lock()
 	startCh := s.startCh
@@ -771,7 +779,6 @@ func (s *Server) handleDetectAdb(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 func (s *Server) handleOCRProbe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -904,12 +911,19 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 	}
 
 	getFrame := func() (*image.Gray, bool) {
+		// prefer active game controller
 		s.mu.Lock()
 		ctrl := s.controller
 		s.mu.Unlock()
 		sc, ok := ctrl.(*controllers.ScrcpyController)
 		if !ok || sc == nil {
-			return nil, false
+			// fall back to preview controller (calibration mode)
+			s.previewCtrlMu.Lock()
+			sc = s.previewCtrl
+			s.previewCtrlMu.Unlock()
+			if sc == nil {
+				return nil, false
+			}
 		}
 		frame, ok := sc.LatestFrame()
 		if !ok || frame.Width <= 0 || frame.Height <= 0 || len(frame.Plane0) < frame.Width*frame.Height {
@@ -969,6 +983,39 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// SetPreviewController registers a scrcpy controller used exclusively by
+// /api/screen when no active game run is in progress (calibration preview).
+func (s *Server) SetPreviewController(sc *controllers.ScrcpyController) {
+	s.previewCtrlMu.Lock()
+	s.previewCtrl = sc
+	s.previewCtrlMu.Unlock()
+}
+
+// POST /api/screen/start — opens a lightweight scrcpy preview connection so
+// that /api/screen works before any song run has been submitted.
+func (s *Server) handleScreenStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		DeviceSerial string `json:"deviceSerial"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if s.OnPreviewRequest == nil {
+		http.Error(w, "preview not configured", http.StatusNotImplemented)
+		return
+	}
+	if err := s.OnPreviewRequest(body.DeviceSerial); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // ─── 7-Lane Vision Detection ─────────────────────
 
 // StartAutoTrigger starts the autoTrigger detection goroutine with the given parameters.
@@ -984,7 +1031,10 @@ func (s *Server) StartAutoTrigger(y, x, gap, sens float64, delay int) {
 	s.atMu.Unlock()
 	s.broadcastState()
 
-	type atParams struct{ Y, X, Gap, Sens float64; Delay int }
+	type atParams struct {
+		Y, X, Gap, Sens float64
+		Delay           int
+	}
 	params := atParams{Y: y, X: x, Gap: gap, Sens: sens, Delay: delay}
 	go func() {
 		defer func() {
@@ -1012,6 +1062,11 @@ func (s *Server) StartAutoTrigger(y, x, gap, sens float64, delay int) {
 			ctrl := s.controller
 			s.mu.Unlock()
 			if curState != StateReady {
+				// Song already started via another path (manual click, autoMode pipeline, etc.)
+				// — our job is done, exit so defer can zero atLevels/atRunning.
+				if curState == StatePlaying || curState == StateDone || curState == StateError {
+					return
+				}
 				continue
 			}
 			sc, ok := ctrl.(*controllers.ScrcpyController)
@@ -1120,7 +1175,6 @@ func (s *Server) handleAutoTriggerStart(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-
 func (s *Server) handleAutoTriggerStop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1164,6 +1218,7 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/ocr-probe", s.handleOCRProbe)
 	mux.HandleFunc("/api/frame.png", s.handleFrame)
 	mux.HandleFunc("/api/screen", s.handleScreen)
+	mux.HandleFunc("/api/screen/start", s.handleScreenStart)
 	mux.HandleFunc("/api/autoTrigger/start", s.handleAutoTriggerStart)
 	mux.HandleFunc("/api/autoTrigger/stop", s.handleAutoTriggerStop)
 

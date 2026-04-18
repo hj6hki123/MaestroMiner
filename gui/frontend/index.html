@@ -197,6 +197,7 @@
                 <div class="amb-label" data-i18n="song.autotrigger">Auto Trigger</div>
                 <div class="amb-desc" data-i18n="song.autotrigger.hint">Vision detects note pattern &amp; auto-starts</div>
               </div>
+              <button class="at-calib-btn" onclick="openAtCalib()" data-i18n="autoTrigger.calib" data-i18n-title="autoTrigger.calib.firstuse">Calibrate</button>
             </div>
           </div>
 
@@ -356,12 +357,12 @@
         <div class="pg-title" data-i18n="nav.play">Play Control</div>
 
         <div class="player-deck">
-          <div class="pd-none" id="pn-none">
+          <div class="pd-none" id="pn-none" style="display:none">
             <div class="text-4xl mb-3 opacity-30">♪</div>
             <div data-i18n="play.none">No song loaded.</div>
           </div>
 
-          <div id="pn-loaded" style="display:none">
+          <div id="pn-loaded">
 
             <div class="pd-info">
               <div class="pd-jacket-wrap" id="pn-jacket-wrap">
@@ -399,6 +400,52 @@
               </div>
             </div>
 
+            <div id="autotrigger-section" style="display:none">
+              <div class="pd-offset-sec">
+                <div class="pd-offset-container">
+                  <div class="pd-offset-header">
+                    <div class="flex items-center gap-2">
+                      <span data-i18n="autoTrigger.title">7-Lane Vision</span>
+                    </div>
+                    <button class="autotrigger-toggle-btn" id="autotrigger-toggle" onclick="toggleAutoTriggerSliders()" title="Settings">⚙</button>
+                  </div>
+                  <div class="autotrigger-glow-wrap">
+                    <div class="autotrigger-preview-wrap">
+                      <img id="autotrigger-img" alt="screen" style="display:block;width:100%;min-height:120px;" />
+                      <canvas id="autotrigger-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+                    </div>
+                  </div>
+                  <div class="autotrigger-sliders" id="autotrigger-sliders" style="display:none">
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.y">Detect Y</span>
+                      <input type="range" id="at-y" min="0" max="100" step="0.5" value="77.5" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-y-val">77.5%</span>
+                    </div>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.x">Center X</span>
+                      <input type="range" id="at-x" min="0" max="100" step="0.5" value="50" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-x-val">50%</span>
+                    </div>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.gap">Spacing</span>
+                      <input type="range" id="at-gap" min="1" max="25" step="0.1" value="9.5" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-gap-val">9.5%</span>
+                    </div>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.sens">Sensitivity</span>
+                      <input type="range" id="at-sens" min="0.05" max="1" step="0.05" value="0.20" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-sens-val">20%</span>
+                    </div>
+                    <div class="autotrigger-row">
+                      <span data-i18n="autoTrigger.delay">Delay Start</span>
+                      <input type="range" id="at-delay" min="0" max="500" step="10" value="0" oninput="onAutoTriggerChange()">
+                      <span class="jitter-val" id="at-delay-val">0 ms</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="pd-offset-sec">
               <div class="pd-offset-container">
                 <div class="pd-offset-header">
@@ -428,51 +475,6 @@
                   </div>
                   <span><kbd class="!bg-transparent !shadow-none">Shift</kbd> ±50ms</span>
                   <span><kbd class="!bg-transparent !shadow-none">Ctrl</kbd> ±100ms</span>
-                </div>
-              </div>
-            </div>
-
-            <div id="autotrigger-section" style="display:none">
-              <div class="pd-offset-sec">
-                <div class="pd-offset-container">
-                  <div class="pd-offset-header">
-                    <div class="flex items-center gap-2">
-                      <span data-i18n="autoTrigger.title">7-Lane Vision</span>
-                      <span class="autotrigger-badge" id="autotrigger-badge" data-i18n="autoTrigger.idle">Idle</span>
-                    </div>
-                    <button class="autotrigger-refresh-btn" onclick="autoTriggerRefreshFrame()" data-i18n="autoTrigger.refresh">↻ Refresh</button>
-                  </div>
-                  <div class="autotrigger-preview-wrap" style="position:relative;width:100%;background:#0a0a0a;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.10);">
-                    <img id="autotrigger-img" alt="screen" style="display:block;width:100%;min-height:120px;" />
-                    <canvas id="autotrigger-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
-                  </div>
-                  <div class="autotrigger-sliders">
-                    <div class="autotrigger-row">
-                      <span data-i18n="autoTrigger.y">Detect Y</span>
-                      <input type="range" id="at-y" min="0" max="100" step="0.5" value="77.5" oninput="onAutoTriggerChange()">
-                      <span class="jitter-val" id="at-y-val">77.5%</span>
-                    </div>
-                    <div class="autotrigger-row">
-                      <span data-i18n="autoTrigger.x">Center X</span>
-                      <input type="range" id="at-x" min="0" max="100" step="0.5" value="50" oninput="onAutoTriggerChange()">
-                      <span class="jitter-val" id="at-x-val">50%</span>
-                    </div>
-                    <div class="autotrigger-row">
-                      <span data-i18n="autoTrigger.gap">Spacing</span>
-                      <input type="range" id="at-gap" min="1" max="25" step="0.1" value="9.5" oninput="onAutoTriggerChange()">
-                      <span class="jitter-val" id="at-gap-val">9.5%</span>
-                    </div>
-                    <div class="autotrigger-row">
-                      <span data-i18n="autoTrigger.sens">Sensitivity</span>
-                      <input type="range" id="at-sens" min="0.05" max="1" step="0.05" value="0.20" oninput="onAutoTriggerChange()">
-                      <span class="jitter-val" id="at-sens-val">20%</span>
-                    </div>
-                    <div class="autotrigger-row">
-                      <span data-i18n="autoTrigger.delay">Delay Start</span>
-                      <input type="range" id="at-delay" min="0" max="500" step="10" value="0" oninput="onAutoTriggerChange()">
-                      <span class="jitter-val" id="at-delay-val">0 ms</span>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -531,6 +533,59 @@
     </div>
   </div>
   <script type="module" src="src/main.js"></script>
-</body>
+
+  <!-- AutoTrigger Calibration Modal -->
+  <div id="at-calib-modal" class="at-calib-overlay" style="display:none" onclick="closeAtCalibOnBackdrop(event)">
+    <div class="at-calib-dialog">
+      <div class="at-calib-header">
+        <span data-i18n="autoTrigger.calib.title">Vision Detection Calibration</span>
+        <button class="at-calib-close" onclick="closeAtCalib()">✕</button>
+      </div>
+
+      <div class="at-calib-glow-wrap" id="at-calib-glow">
+        <div class="at-calib-preview">
+          <img id="at-calib-img" alt="screen" style="display:none;width:100%;" />
+          <canvas id="at-calib-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+          <div id="at-calib-nosignal" class="at-calib-nosignal">
+            <div class="at-calib-spinner"></div>
+            <span data-i18n="autoTrigger.calib.connecting">Connecting to device…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="at-calib-sliders">
+        <div class="autotrigger-row">
+          <span data-i18n="autoTrigger.y">Detect Y</span>
+          <input type="range" id="at-calib-y" min="0" max="100" step="0.5" value="77.5" oninput="onAtCalibChange()">
+          <span class="jitter-val" id="at-calib-y-val">77.5%</span>
+        </div>
+        <div class="autotrigger-row">
+          <span data-i18n="autoTrigger.x">Center X</span>
+          <input type="range" id="at-calib-x" min="0" max="100" step="0.5" value="50" oninput="onAtCalibChange()">
+          <span class="jitter-val" id="at-calib-x-val">50%</span>
+        </div>
+        <div class="autotrigger-row">
+          <span data-i18n="autoTrigger.gap">Spacing</span>
+          <input type="range" id="at-calib-gap" min="1" max="25" step="0.1" value="9.5" oninput="onAtCalibChange()">
+          <span class="jitter-val" id="at-calib-gap-val">9.5%</span>
+        </div>
+        <div class="autotrigger-row">
+          <span data-i18n="autoTrigger.sens">Sensitivity</span>
+          <input type="range" id="at-calib-sens" min="0.05" max="1" step="0.05" value="0.20" oninput="onAtCalibChange()">
+          <span class="jitter-val" id="at-calib-sens-val">20%</span>
+        </div>
+      </div>
+
+      <div class="at-calib-hint" data-i18n="autoTrigger.calib.hint">
+        💡 Adjust <strong>Y</strong> so the yellow line sits on the lane just before the judgement line.
+        Tune <strong>Spacing</strong> until all 7 boxes align with each lane.
+        Raise <strong>Sensitivity</strong> if detection is slow; lower it to avoid false triggers.
+      </div>
+
+      <div class="at-calib-footer">
+        <button class="at-calib-apply" onclick="applyAtCalib()" data-i18n="autoTrigger.calib.apply">Apply &amp; Close</button>
+      </div>
+    </div>
+  </div>
 
 </html>

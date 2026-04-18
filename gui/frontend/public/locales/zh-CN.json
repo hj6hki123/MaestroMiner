@@ -130,11 +130,16 @@
   "extra.buymusic.running": "运行中…",
   "extra.buymusic.stopped": "已停止",
 
-  "autoTrigger.title":     "7 轨道视觉检测",
-  "autoTrigger.idle":      "待机",
+  "autoTrigger.title":     "视觉检测",
+  "autoTrigger.calib":     "校准",
+  "autoTrigger.calib.title": "视觉检测校准",
+  "autoTrigger.calib.hint": "调整 Y 使检测线落在判定区上方。调整间距直到 7 个方框对齐各判定格。灵敏度过低时调高；若误触則调低。",
+  "autoTrigger.calib.apply": "应用并关闭",
+  "autoTrigger.calib.nosignal": "无画面 — 请先连接设备并启动 scrcpy",
+  "autoTrigger.calib.connecting": "正在连接设备…",
+  "autoTrigger.calib.firstuse": "第一次使用？请开启校准，将检测框对齐设备画面。",
   "autoTrigger.detecting": "检测中…",
   "autoTrigger.triggered": "已检测到开局音符，自动开始！",
-  "autoTrigger.refresh":   "↻ 刷新",
   "autoTrigger.y":         "检测 Y",
   "autoTrigger.x":         "中心 X",
   "autoTrigger.gap":       "间距",
@@ -143,6 +148,7 @@
   "autoTrigger.start":     "▶ 开始检测",
   "autoTrigger.stop":      "■ 停止检测",
   "autoTrigger.waiting":   "⏳ 等待音符检测中…",
+  "autoMode.detecting":    "检测歌曲中…",
   "song.autotrigger":      "自动触发",
-  "song.autotrigger.hint": "视觉检测音符排列后自动开始"
+  "song.autotrigger.hint": "视觉检测音符排列后自动开始（首次使用请先校准）"
 }

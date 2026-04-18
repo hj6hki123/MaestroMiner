@@ -30,11 +30,11 @@
   "song.automode.hint":      "OCR で楽曲を自動認識・ナビゲート(ADB のみ)",
 
   "song.server":             "ゲームサーバー",
-  "song.server.jp":          "日本",
-  "song.server.tw":          "台湾",
-  "song.server.en":          "グローバル / EN",
-  "song.server.cn":          "中国（Bilibili）",
-  "song.server.kr":          "韓国",
+  "song.server.jp":          "日サーバー",
+  "song.server.tw":          "台湾サーバー",
+  "song.server.en":          "グローバルサーバー / EN",
+  "song.server.cn":          "Bサーバー（Bilibili）",
+  "song.server.kr":          "韓国サーバー",
 
   "jitter.title":   "人間らしいジッター設定",
   "jitter.timing":  "タイミング ±ms",
@@ -133,11 +133,16 @@
   "extra.buymusic.running": "実行中…",
   "extra.buymusic.stopped": "停止",
 
-  "autoTrigger.title":     "7レーン視覚検出",
-  "autoTrigger.idle":      "待機中",
+  "autoTrigger.title":     "視覚検出",
+  "autoTrigger.calib":     "キャリブ",
+  "autoTrigger.calib.title": "視覚検出 キャリブレーション",
+  "autoTrigger.calib.hint": "Y を調整して検出ラインを判定ゾーンに合わせます。間隔を調整して7つのボックスを各レーンに揃えます。検出が遅い場合は感度を上げ、誤検出の場合は下げてください。",
+  "autoTrigger.calib.apply": "適用して閉じる",
+  "autoTrigger.calib.nosignal": "画面なし — デバイスを接続し scrcpy を起動してください",
+  "autoTrigger.calib.connecting": "デバイスに接続中…",
+  "autoTrigger.calib.firstuse": "初回ですか？キャリブレーションを開いて、検出ボックスを画面に合わせてください。",
   "autoTrigger.detecting": "検出中…",
   "autoTrigger.triggered": "開始音符を検出、自動スタート！",
-  "autoTrigger.refresh":   "↻ 更新",
   "autoTrigger.y":         "検出 Y",
   "autoTrigger.x":         "中心 X",
   "autoTrigger.gap":       "間隔",
@@ -146,6 +151,7 @@
   "autoTrigger.start":     "▶ 検出開始",
   "autoTrigger.stop":      "■ 検出停止",
   "autoTrigger.waiting":   "⏳ 音符検出待機中…",
+  "autoMode.detecting":    "楽曲検出中…",
   "song.autotrigger":      "自動トリガー",
-  "song.autotrigger.hint": "視覚検出でノートパターンを検知して自動開始"
+  "song.autotrigger.hint": "視覚検出でノートパターンを検知して自動開始（初回はキャリブレーション推奨）"
 }

@@ -8,13 +8,13 @@ This is a personal fork of [hj6hki123/ssm-gui](https://github.com/hj6hki123/ssm-
 
 The upstream main branch is now feature-frozen. This branch adds a **fully unattended / hands-off play mode** by integrating [MaaFramework](https://github.com/MaaXYZ/MaaFramework) for in-game navigation and [juluobaka/ssm_GUI_plus](https://github.com/juluobaka/ssm_GUI_plus)'s calibrated touch method.
 
-**Support: BanG Dream! Girls Band Party · Project Sekai: Colorful Stage**
+**Support: BanG Dream! Girls Band Party · Project Sekai: Colorful Stage (full-auto not yet supported)**
 
 ---
 
 ## What's new compared to upstream
 
-### 🤖 MAA Full-Auto Navigation
+###  MAA Full-Auto Navigation
 
 Integrates [MaaFramework](https://github.com/MaaXYZ/MaaFramework) (v5.10.0) to drive the **entire pre-game flow** over ADB without any human input:
 
@@ -29,7 +29,7 @@ Enable via the **Auto Navigation** toggle in the Play Control panel (ADB backend
 
 ---
 
-### 🎯 Auto-Trigger
+###  Auto-Trigger
 
 Integrates the scrcpy touch-coordinate method contributed by [juluobaka/ssm_GUI_plus](https://github.com/juluobaka/ssm_GUI_plus).
 
@@ -41,7 +41,7 @@ Enable via the **Auto Trigger** toggle; the configuration panel expands/collapse
 
 ---
 
-###  AP-Avoidance (Great Offset)
+###  AP-Avoidance 
 
 Forces a specific number of tap notes to land as **Great** (slightly early/late) rather than Perfect, so the score does not register as an All-Perfect.
 
@@ -52,25 +52,6 @@ Forces a specific number of tap notes to land as **Great** (slightly early/late)
 
 The first tap note is always left as Perfect. Remaining targets are chosen randomly from eligible taps so the selection is unpredictable each run.
 
----
-
-### 🎲 Humanisation Jitter
-
-Three independent noise axes applied during touch-event generation to make playback less detectable:
-
-| Slider | Effect |
-|--------|--------|
-| **Timing Jitter** | Uniform random ±N ms shift per note |
-| **Position Jitter** | Random lateral drift within the lane (±% of lane width) |
-| **Tap Duration Jitter** | Random variation of the hold time for each tap |
-
-All three default to **0** (disabled). Adjust via sliders in the Play Control panel.
-
----
-
-
-
-**Fix:** The stop job is now explicitly waited on (`stopJob.Wait()`) before `Destroy()` is called.
 
 ---
 
@@ -139,15 +120,3 @@ All features from [hj6hki123/ssm-gui](https://github.com/hj6hki123/ssm-gui) main
 
 ### Demonstration
 https://github.com/user-attachments/assets/09c6585a-64fb-44ad-af82-6239ee994b1b
-
-
-## Disclaimer
-> [!IMPORTANT]
-> This version is a **development build** and is not recommended for general users. If you wish to use it, you must **compile it yourself**.
-
-
-## 📜 License & Credits
-
-* **Core Play Logic & Chart Parsing**: Credited to the original author [kvarenzn](https://github.com/kvarenzn/ssm).
-* **Web GUI Implementation**: Custom integrated control panel developed specifically for this branch.
-* This project is licensed under the **GPL-3.0-or-later** license.

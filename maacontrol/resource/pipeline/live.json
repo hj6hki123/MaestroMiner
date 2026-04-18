@@ -149,7 +149,6 @@
     "disable_liveplay": {
         "recognition": "TemplateMatch",
         "template": "live/button/liveplay_off.png",
-        "on_error": ["live_home_button"],
         "next": [
             "startlive"
         ],

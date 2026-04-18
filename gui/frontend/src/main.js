@@ -40,6 +40,9 @@ var I18n = (function () {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
       el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
     });
+    document.querySelectorAll('[data-i18n-title]').forEach(function (el) {
+      el.title = t(el.getAttribute('data-i18n-title'));
+    });
     var d = langs[id] || {};
     var meta = langMeta.filter(function (m) { return m.id === id; })[0] || langMeta[0];
     document.getElementById('lb-name').textContent = meta.shortName;
@@ -692,7 +695,24 @@ function log(boxId, msg, type) {
 
 // ══ SSE ════════════════════════════════════════════════════
 var es = new EventSource('/api/events');
-es.onmessage = function (e) { var d = JSON.parse(e.data); S.state = d.state; S.offset = d.offset || 0; if (d.atLevels) S.atLevels = d.atLevels; updateUI(d); };
+es.onmessage = function (e) {
+  var d = JSON.parse(e.data);
+  S.state = d.state;
+  S.offset = d.offset || 0;
+  if (d.atLevels) {
+    S.atLevels = d.atLevels;
+    // snapshot whichever lanes were above threshold at trigger moment
+    if (d.atRunning) {
+      var sens = autoTriggerGetParams().sens;
+      if (d.atLevels.some(function(lv) { return lv > sens; })) {
+        S._atSnapshot = d.atLevels.reduce(function(mi, lv, i) { return lv > d.atLevels[mi] ? i : mi; }, 0);
+      }
+    }
+  }
+  // clear snapshot when back to idle/ready
+  if (d.state === 0 || d.state === 1) S._atSnapshot = null;
+  updateUI(d);
+};
 
 function updateUI(d) {
   var st = d.state, dotCls = DOT_CLS[st] || '';
@@ -775,16 +795,8 @@ function updateUI(d) {
   // autoTrigger running state
   var atRunning = !!(d && d.atRunning);
   S.atRunning = atRunning;
-  var atBadge = document.getElementById('autotrigger-badge');
-  if (atBadge) {
-    if (atRunning) {
-      atBadge.textContent = t('autoTrigger.detecting');
-      atBadge.classList.add('autotrigger-badge-active');
-    } else {
-      atBadge.textContent = t('autoTrigger.idle');
-      atBadge.classList.remove('autotrigger-badge-active');
-    }
-  }
+  var atWrap = document.querySelector('.autotrigger-glow-wrap');
+  if (atWrap) atWrap.classList.toggle('at-active', atRunning);
 
 }
 
@@ -848,7 +860,6 @@ function applyJacketColor(themeColor) {
 }
 
 function updatePlayCard(np) {
-  document.getElementById('pn-none').style.display = 'none'; document.getElementById('pn-loaded').style.display = 'block';
   var pimg = document.getElementById('pn-img');
   if (np.jacketUrl) {
     setImageWithFallback(pimg, np.jacketUrls && np.jacketUrls.length ? np.jacketUrls : [np.jacketUrl]);
@@ -1215,21 +1226,21 @@ var AUTOTRIGGER_STORE_KEY = 'ssm-autotrigger';
 
 function autoTriggerGetParams() {
   return {
-    y:     parseFloat(document.getElementById('v7-y').value)     || 77.5,
-    x:     parseFloat(document.getElementById('v7-x').value)     || 50,
-    gap:   parseFloat(document.getElementById('v7-gap').value)   || 9.5,
-    sens:  parseFloat(document.getElementById('v7-sens').value)  || 0.20,
-    delay: parseInt(document.getElementById('v7-delay').value)   || 0,
+    y:     parseFloat(document.getElementById('at-y').value)     || 77.5,
+    x:     parseFloat(document.getElementById('at-x').value)     || 50,
+    gap:   parseFloat(document.getElementById('at-gap').value)   || 9.5,
+    sens:  parseFloat(document.getElementById('at-sens').value)  || 0.20,
+    delay: parseInt(document.getElementById('at-delay').value)   || 0,
   };
 }
 
 function onAutoTriggerChange() {
   var p = autoTriggerGetParams();
-  var yv = document.getElementById('v7-y-val');     if (yv) yv.textContent = p.y.toFixed(1) + '%';
-  var xv = document.getElementById('v7-x-val');     if (xv) xv.textContent = p.x.toFixed(1) + '%';
-  var gv = document.getElementById('v7-gap-val');   if (gv) gv.textContent = p.gap.toFixed(1) + '%';
-  var sv = document.getElementById('v7-sens-val');  if (sv) sv.textContent = (p.sens * 100).toFixed(0) + '%';
-  var dv = document.getElementById('v7-delay-val'); if (dv) dv.textContent = p.delay + ' ms';
+  var yv = document.getElementById('at-y-val');     if (yv) yv.textContent = p.y.toFixed(1) + '%';
+  var xv = document.getElementById('at-x-val');     if (xv) xv.textContent = p.x.toFixed(1) + '%';
+  var gv = document.getElementById('at-gap-val');   if (gv) gv.textContent = p.gap.toFixed(1) + '%';
+  var sv = document.getElementById('at-sens-val');  if (sv) sv.textContent = (p.sens * 100).toFixed(0) + '%';
+  var dv = document.getElementById('at-delay-val'); if (dv) dv.textContent = p.delay + ' ms';
   autoTriggerDrawCanvas();
   autoTriggerSaveSettings();
 }
@@ -1259,19 +1270,21 @@ function autoTriggerDrawCanvas() {
   ctx.setLineDash([]);
   // 7 lane boxes — juluobaka style
   var levels = S.atLevels || [];
+  var snapIdx = S._atSnapshot; // index of the brightest lane at trigger moment
   var active = !!(S.atRunning);
+  var playing = S.state === 2;
   var sens = p.sens || 0.15;
   for (var i = 0; i < 7; i++) {
     var lx = cx + (i - 3) * gap;
     var sx = lx - 9, sy = cy - 9;
     var lv = active ? (levels[i] || 0) : 0;
-    var triggered = active && lv > sens;
+    var triggered = (playing && i === snapIdx) || (active && lv > sens);
     // border shadow
     ctx.setLineDash([]);
     ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-    ctx.lineWidth = active ? (triggered ? 3 : 2) : 3;
+    ctx.lineWidth = triggered ? 3 : (active ? 2 : 3);
     ctx.strokeRect(sx, sy, 18, 18);
-    // colored border: idle=yellow solid, detecting=white dashed, triggered=green solid
+    // colored border: idle=yellow, detecting=white dashed, triggered/playing=green
     ctx.setLineDash(active && !triggered ? [4, 3] : []);
     ctx.lineWidth = 2;
     ctx.strokeStyle = triggered ? '#4ade80' : (active ? 'rgba(255,255,255,0.7)' : 'rgba(250,204,21,0.95)');
@@ -1279,12 +1292,12 @@ function autoTriggerDrawCanvas() {
     ctx.setLineDash([]);
     // center dot
     ctx.beginPath();
-    ctx.arc(lx, cy, active ? (triggered ? 2.2 : 1.8) : 2.2, 0, Math.PI * 2);
+    ctx.arc(lx, cy, triggered ? 2.2 : (active ? 1.8 : 2.2), 0, Math.PI * 2);
     ctx.fillStyle = triggered ? '#4ade80' : (active ? 'rgba(255,255,255,0.85)' : 'rgba(250,204,21,0.95)');
     ctx.fill();
-    // % text above box when active
-    if (active) {
-      ctx.fillStyle = triggered ? '#4ade80' : '#888888';
+    // % text above box when detecting
+    if (active && !playing) {
+      ctx.fillStyle = (lv > sens) ? '#4ade80' : '#888888';
       ctx.font = '8px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(Math.round(lv * 100) + '%', lx, sy - 2);
@@ -1315,12 +1328,135 @@ function autoTriggerStopStream() {
   }
 }
 
-function autoTriggerRefreshFrame() {
-  // Restart the MJPEG stream (e.g. if it stalled)
-  var img = document.getElementById('autotrigger-img');
-  if (!img) return;
-  img.removeAttribute('src');
-  setTimeout(function() { img.src = '/api/screen'; }, 50);
+function toggleAutoTriggerSliders() {
+  var el = document.getElementById('autotrigger-sliders');
+  var btn = document.getElementById('autotrigger-toggle');
+  if (!el) return;
+  var open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'flex';
+  if (btn) btn.classList.toggle('open', !open);
+}
+
+// ── AutoTrigger Calibration Modal ─────────────────────
+var _calibTimer = null;
+
+function openAtCalib() {
+  var modal = document.getElementById('at-calib-modal');
+  if (!modal) return;
+  // sync sliders from main panel
+  ['y','x','gap','sens'].forEach(function(k) {
+    var src = document.getElementById('at-' + k);
+    var dst = document.getElementById('at-calib-' + k);
+    if (src && dst) dst.value = src.value;
+  });
+  onAtCalibChange();
+  _calibTimer = setInterval(drawAtCalibCanvas, 100);
+  modal.style.display = 'flex';
+
+  // Ask backend to open (or reuse) scrcpy connection, then stream
+  var img = document.getElementById('at-calib-img');
+  var nosignal = document.getElementById('at-calib-nosignal');
+  // Reset to spinner state every open
+  if (img) { img.onload = null; img.onerror = null; img.style.display = 'none'; img.src = ''; }
+  if (nosignal) {
+    nosignal.style.display = 'flex';
+    nosignal.innerHTML = '<div class="at-calib-spinner"></div><span>' + t('autoTrigger.calib.connecting') + '</span>';
+  }
+  var ds = (document.getElementById('dev-serial') || {}).value || '';
+  fetch('/api/screen/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceSerial: ds })
+  }).then(function(r) {
+    if (!r.ok) return Promise.reject();
+    if (img) {
+      img.onerror = function() {
+        if (img) img.style.display = 'none';
+        if (nosignal) {
+          nosignal.innerHTML = '<span style="font-size:24px">📵</span><span>' + t('autoTrigger.calib.nosignal') + '</span>';
+          nosignal.style.display = 'flex';
+        }
+      };
+      img.onload = function() {
+        if (img) img.style.display = 'block';
+        if (nosignal) nosignal.style.display = 'none';
+      };
+      img.src = '/api/screen';
+    }
+  }).catch(function() {
+    if (nosignal) {
+      nosignal.innerHTML = '<span style="font-size:24px">📵</span><span>' + t('autoTrigger.calib.nosignal') + '</span>';
+      nosignal.style.display = 'flex';
+    }
+  });
+}
+
+function closeAtCalib() {
+  var modal = document.getElementById('at-calib-modal');
+  if (modal) modal.style.display = 'none';
+  if (_calibTimer) { clearInterval(_calibTimer); _calibTimer = null; }
+  // stop MJPEG stream — clearing src disconnects the browser, ending the server goroutine
+  var img = document.getElementById('at-calib-img');
+  if (img) { img.onload = null; img.onerror = null; img.src = ''; img.style.display = 'none'; }
+}
+
+function closeAtCalibOnBackdrop(e) {
+  if (e.target === document.getElementById('at-calib-modal')) closeAtCalib();
+}
+
+function applyAtCalib() {
+  ['y','x','gap','sens'].forEach(function(k) {
+    var src = document.getElementById('at-calib-' + k);
+    var dst = document.getElementById('at-' + k);
+    if (src && dst) { dst.value = src.value; }
+  });
+  onAutoTriggerChange();
+  closeAtCalib();
+}
+
+function onAtCalibChange() {
+  var fields = [
+    { id: 'y',   val: 'at-calib-y-val',    fmt: function(v) { return v.toFixed(1) + '%'; } },
+    { id: 'x',   val: 'at-calib-x-val',    fmt: function(v) { return v.toFixed(1) + '%'; } },
+    { id: 'gap', val: 'at-calib-gap-val',  fmt: function(v) { return v.toFixed(1) + '%'; } },
+    { id: 'sens',val: 'at-calib-sens-val', fmt: function(v) { return (v * 100).toFixed(0) + '%'; } },
+  ];
+  fields.forEach(function(f) {
+    var inp = document.getElementById('at-calib-' + f.id);
+    var lbl = document.getElementById(f.val);
+    if (inp && lbl) lbl.textContent = f.fmt(parseFloat(inp.value));
+  });
+}
+
+function drawAtCalibCanvas() {
+  var img = document.getElementById('at-calib-img');
+  var canvas = document.getElementById('at-calib-canvas');
+  if (!canvas || !img) return;
+  var w = canvas.clientWidth, h = canvas.clientHeight;
+  if (w <= 0 || h <= 0) return;
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  var y    = (parseFloat((document.getElementById('at-calib-y')   || {}).value) || 77.5) / 100 * h;
+  var cx   = (parseFloat((document.getElementById('at-calib-x')   || {}).value) || 50)   / 100 * w;
+  var gap  = (parseFloat((document.getElementById('at-calib-gap') || {}).value) || 9.5)  / 100 * w;
+  // guide line
+  ctx.strokeStyle = 'rgba(250,204,21,0.75)';
+  ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  ctx.setLineDash([]);
+  // 7 lane boxes
+  for (var i = 0; i < 7; i++) {
+    var lx = cx + (i - 3) * gap;
+    var sx = lx - 9, sy = y - 9;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
+    ctx.strokeRect(sx, sy, 18, 18);
+    ctx.strokeStyle = 'rgba(250,204,21,0.95)'; ctx.lineWidth = 2;
+    ctx.strokeRect(sx, sy, 18, 18);
+    ctx.beginPath(); ctx.arc(lx, y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(250,204,21,0.95)'; ctx.fill();
+  }
 }
 
 function autoTriggerSaveSettings() {
@@ -1419,11 +1555,16 @@ Object.assign(window, {
   selSong,
   toggleBuyMusic,
   onAutoTriggerChange,
-  autoTriggerRefreshFrame,
   autoTriggerStartStream,
   autoTriggerStopStream,
+  toggleAutoTriggerSliders,
   startAutoTrigger,
   stopAutoTrigger,
+  openAtCalib,
+  closeAtCalib,
+  closeAtCalibOnBackdrop,
+  applyAtCalib,
+  onAtCalibChange,
 });
 
 
