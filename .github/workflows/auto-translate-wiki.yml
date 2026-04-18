@@ -1,0 +1,76 @@
+name: Translate README to Multi-Language Wiki
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'README.md' # Trigger only when the README.md in the root directory is modified
+
+permissions:
+  contents: write # Allow pushing to the wiki repository
+  models: read    # Allow using GitHub's built-in AI models for translation
+
+jobs:
+  translate_and_publish:
+    runs-on: ubuntu-latest
+    
+    # Use matrix strategy to run translations in parallel
+    strategy:
+      matrix:
+        include:
+          - lang: "English"
+            file: "Home.md"           # English is usually the default Home page
+          - lang: "Traditional Chinese"
+            file: "Home-zh-TW.md"
+          - lang: "Japanese"
+            file: "Home-ja.md"
+
+    steps:
+      # 1. Checkout the main repository to get the README.md
+      - name: Checkout Main Repo
+        uses: actions/checkout@v4
+        with:
+          path: main-repo
+
+      # 2. Checkout the Wiki repository
+      # GitHub allows cloning the wiki directly using the .wiki suffix
+      - name: Checkout Wiki Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki-repo
+
+      # 3. Perform AI Translation
+      - name: Translate README
+        uses: FidelusAleksander/ai-translate-action@v1
+        id: translate
+        with:
+          text-file: "main-repo/README.md"
+          target-language: ${{ matrix.lang }}
+          # Custom instructions to ensure technical terms and code blocks remain intact
+          custom-instructions: "Keep technical terms in English. Don't translate code blocks. Output ONLY the translated markdown content."
+
+      # 4. Save the translated text to the corresponding file in the wiki directory
+      - name: Save Translation to Wiki
+        env:
+          TRANSLATED_TEXT: ${{ steps.translate.outputs.translated-text }}
+        run: |
+          echo "$TRANSLATED_TEXT" > wiki-repo/${{ matrix.file }}
+
+      # 5. Push the changes to the Wiki repository
+      - name: Push to Wiki
+        run: |
+          cd wiki-repo
+          # Configure Git identity for the bot
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add ${{ matrix.file }}
+          
+          # Check for actual changes before committing and pushing
+          if git diff --staged --quiet; then
+            echo "No changes in translation, skipping commit."
+          else
+            git commit -m "docs: auto-translate README to ${{ matrix.lang }}"
+            git push origin HEAD:main
+          fi
