@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="imgs/page.png" alt="MaestroMiner Banner" width="100%">
+    <img src="imgs/page.png" alt="MaestroMiner" width="100%">
 </p>
 
 <p align="center">
