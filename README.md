@@ -9,7 +9,7 @@ This project is an advanced evolution of [hj6hki123/ssm-gui](https://github.com/
  **MaestroMiner** transforms the core playback engine into a **fully unattended, hands-off experience**. By orchestrating [MaaFramework](https://github.com/MaaXYZ/MaaFramework) for in-game navigation and integrating [juluobaka/ssm_GUI_plus](https://github.com/juluobaka/ssm_GUI_plus)'s calibrated touch methods, it conducts your gameplay seamlessly from the start screen to the final score.
 
 **Support: BanG Dream! Girls Band Party · Project Sekai: Colorful Stage (full-auto not yet supported)**
-Full automation only supports the JP&TW version.
+Full automation only supports the JP&TW version.Expanding multilingual support
 ---
 
 ##  What's New in MaestroMiner
