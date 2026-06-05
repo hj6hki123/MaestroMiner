@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> **Development is currently paused.**
+> The automation has a strict resolution requirement of **`2316 × 1080`**. Because the game uses different hitboxes at different screen resolutions, supporting multiple resolutions is difficult to implement reliably — so active development is on hold for now.
+
 <p align="center">
     <img src="imgs/page.png" alt="MaestroMiner" width="100%">
 </p>
